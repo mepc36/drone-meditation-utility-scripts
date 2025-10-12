@@ -23,3 +23,126 @@ Each tone is exported as an individual `.wav` file inside an `/output` folder.
 ---
 
 ## 🧱 Project Structure
+```
+.
+├── generate_chromatic_sines_two_octaves_output.py
+├── requirements.txt
+├── .gitignore
+├── README.md
+└── output/
+    ├── sine__4000.00Hz_B7.wav
+    ├── sine__4244.92Hz_C8.wav
+    ├── ...
+    └── sine__16000.00Hz_B9.wav
+```
+
+---
+
+## ⚙️ Installation
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/yourusername/chromatic-waveform-generator.git
+cd chromatic-waveform-generator
+```
+
+### 2. Create and activate a virtual environment
+**macOS / Linux**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+**Windows (Command Prompt)**
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+```
+**Windows (PowerShell)**
+```powershell
+python -m venv venv
+venv\Scripts\Activate.ps1
+```
+
+### 3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## 🎚️ Usage
+
+Run the script to generate waveforms:
+
+```bash
+python generate_chromatic_sines_two_octaves_output.py
+```
+
+All output `.wav` files will appear in the `/output` folder.
+
+---
+
+## 🎛️ Configuration
+
+Inside `generate_chromatic_sines_two_octaves_output.py`, you can adjust:
+
+| Variable | Description | Default |
+|-----------|--------------|----------|
+| `root_frequency_hz` | Starting frequency (root note) | `8000.0` |
+| `include_octave_below` | Include octave below (4 kHz → 8 kHz) | `True` |
+| `include_root_octave` | Include octave above (8 kHz → 16 kHz) | `True` |
+| `duration_seconds` | Duration of each tone | `0.5` |
+| `fade_time_seconds` | Fade-in/out length | `0.01` |
+| `waveform_type` | `"sine"`, `"square"`, `"triangle"`, or `"saw"` | `"sine"` |
+| `square_duty_cycle` | Duty cycle for square/pulse wave | `0.5` |
+| `sample_rate_hz` | Sampling rate | `96000` |
+
+---
+
+## 📁 Output Example
+
+```
+output/
+├── sine__4000.00Hz_B7.wav
+├── sine__4244.92Hz_C8.wav
+├── sine__4500.83Hz_C#8.wav
+├── ...
+├── sine__8000.00Hz_B8.wav
+├── ...
+└── sine__16000.00Hz_B9.wav
+```
+
+Each file name includes:
+- Waveform type
+- Exact frequency in Hz
+- Musical note + octave
+- Cent deviation (if any)
+
+---
+
+## 🧠 Notes
+- 8 kHz corresponds to **B8 (+21 cents)** — slightly sharp relative to equal-tempered B8.
+- A sample rate of **96 kHz** is recommended to prevent aliasing.
+- For non-sine shapes, expect strong harmonics approaching the Nyquist limit (48 kHz).
+
+---
+
+## 🧰 Optional Development Tools
+If you plan to extend this project:
+```bash
+pip install black flake8 pytest
+```
+
+---
+
+## 📄 License
+MIT License © 2025 Your Name  
+You are free to modify, distribute, and use this project for any purpose.
+
+---
+
+## 💡 Future Ideas
+- Generate multi-octave sweeps or arpeggios
+- Band-limit non-sine waves to reduce aliasing
+- Export combined chromatic scales as single continuous `.wav`
+- Add MIDI integration or Logic Pro sampler mapping automation
