@@ -12,6 +12,7 @@ fade_time_seconds = 0.01
 sample_rate_hz = 96000
 waveform_type = "sine"                # "sine", "square", "triangle", "saw"
 square_duty_cycle = 0.5
+output_level_db = -30.0               # Output level in decibels (0 dB = full scale, negative = quieter)
 
 # === CONSTANTS ===
 concert_a_ref_hz = 440.0
@@ -79,10 +80,13 @@ def create_waveform(frequency_hz,
         waveform[:fade_samples] *= fade_in_curve
         waveform[-fade_samples:] *= fade_out_curve
 
-    # normalize
+    # normalize and apply amplitude scaling
     peak = np.max(np.abs(waveform))
     if peak > 0:
         waveform /= peak
+    # Convert dB to linear amplitude: amplitude = 10^(dB/20)
+    output_amplitude = 10.0 ** (output_level_db / 20.0)
+    waveform *= output_amplitude
     return waveform
 
 # === SEMITONE OFFSETS (one octave below and root) ===
