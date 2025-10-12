@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+*.log
+
+# --- Virtual Environments ---
+venv/
+.env/
+.env.bak/
+.venv/
+
+# --- Audio Outputs ---
+*.wav
+*.aiff
+*.aif
+*.flac
+*.mp3
+*.ogg
+
+# --- Notebooks / Data Dumps ---
+*.ipynb_checkpoints
+*.csv
+*.npy
+*.npz
+
+# --- OS / Editor Junk ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Build / Distribution ---
+build/
+dist/
+*.egg
+MANIFEST
+
+# --- Temporary Files ---
+*.tmp
+*.bak
+*.old
