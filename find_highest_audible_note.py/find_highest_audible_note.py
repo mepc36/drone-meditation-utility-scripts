@@ -89,6 +89,29 @@ def prompt_user(prompt: str) -> str:
         print("Please type y (heard), n (not heard), r (replay), or q (quit).")
 
 
+def frequency_to_pitch(frequency_hz: float, concert_a_hz: float = 440.0) -> tuple[str, int, float]:
+    """
+    Convert frequency to 12-tone equal temperament pitch.
+    Returns (note_name, octave, cents_deviation)
+    """
+    note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    
+    # Calculate semitones from A4 (440 Hz)
+    semitones_from_a4 = 12 * math.log2(frequency_hz / concert_a_hz)
+    
+    # A4 is MIDI note 69, which is octave 4, note index 9 (A)
+    midi_note_exact = 69 + semitones_from_a4
+    midi_note_rounded = round(midi_note_exact)
+    cents_deviation = (midi_note_exact - midi_note_rounded) * 100
+    
+    # Convert MIDI note to note name and octave
+    note_index = midi_note_rounded % 12
+    octave = (midi_note_rounded // 12) - 1
+    note_name = note_names[note_index]
+    
+    return note_name, octave, cents_deviation
+
+
 def main():
     cfg = Config()
 
@@ -113,7 +136,7 @@ def main():
 
         # Random pre-delay before playback to reduce anticipation bias
         pre_delay = random.uniform(0.0, cfg.pre_play_delay_max_s)
-        print(f"\nPreparing {f:.0f} Hz ... (random delay {pre_delay:.2f}s)")
+        print(f"\nPreparing {f:.0f} Hz & inserting random delay")
         play_tone_mac(tmp_path, pre_delay)
 
         ans = prompt_user("Heard it? [y/n] (r=replay, q=quit): ")
@@ -139,12 +162,32 @@ def main():
     except OSError:
         pass
 
+    midpoint_hz = 0.5 * (lo + hi)
+    
     if hi - lo <= cfg.resolution_hz:
-        print(f"\nEstimated highest audible frequency ≈ {lo:.1f}–{hi:.1f} Hz (midpoint {0.5*(lo+hi):.1f} Hz).")
+        print(f"\nEstimated highest audible frequency ≈ {lo:.1f}–{hi:.1f} Hz (midpoint {midpoint_hz:.1f} Hz).")
     else:
-        print(f"\nStopped early. Current bounds: {lo:.1f}–{hi:.1f} Hz (midpoint {0.5*(lo+hi):.1f} Hz).")
+        print(f"\nStopped early. Current bounds: {lo:.1f}–{hi:.1f} Hz (midpoint {midpoint_hz:.1f} Hz).")
 
-    print("Tip: test each ear separately; you can increase duration_seconds if you need more time to detect the tone.")
+    # Pitch analysis
+    print("\n🎵 Musical Pitch Analysis:")
+    note_name, octave, cents = frequency_to_pitch(midpoint_hz)
+    
+    cents_str = ""
+    if abs(cents) >= 1.0:
+        cents_sign = "+" if cents >= 0 else ""
+        cents_str = f" ({cents_sign}{cents:.0f} cents)"
+    
+    print(f"   Closest pitch: {note_name}{octave}{cents_str}")
+    print(f"   ({midpoint_hz:.1f} Hz ≈ {note_name}{octave} in 12-tone equal temperament)")
+    
+    # Calculate the exact frequency of the closest pitch for comparison
+    # A4 = 440 Hz = MIDI 69
+    midi_note_exact = (octave + 1) * 12 + ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].index(note_name)
+    exact_pitch_freq = 440.0 * (2.0 ** ((midi_note_exact - 69) / 12.0))
+    print(f"   Exact {note_name}{octave} frequency: {exact_pitch_freq:.1f} Hz")
+
+    print("\nTip: test each ear separately; you can increase duration_seconds if you need more time to detect the tone.")
 
 
 if __name__ == "__main__":
