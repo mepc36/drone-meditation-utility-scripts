@@ -1,2 +1,7 @@
-numpy>=1.19.5,<1.24.0
+# Core dependencies for audio generation and processing
+numpy>=1.19.5,<3.0.0
 soundfile>=0.12.1
+
+# Optional: uncomment if you want to pin to tested versions
+# numpy==1.23.5
+# soundfile==0.13.1
