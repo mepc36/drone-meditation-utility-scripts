@@ -40,33 +40,36 @@ Each tone is exported as an individual `.wav` file inside an `/output` folder.
 
 ## ⚙️ Installation
 
-### 1. Clone the repository
+### 1. System Requirements
+**macOS (Homebrew required):**
 ```bash
-git clone https://github.com/yourusername/chromatic-waveform-generator.git
-cd chromatic-waveform-generator
+brew install libsndfile
 ```
 
-### 2. Create and activate a virtual environment
-**macOS / Linux**
+**Linux (Ubuntu/Debian):**
 ```bash
+sudo apt-get install libsndfile1
+```
+
+**Windows:**
+- libsndfile is bundled with the Python soundfile package
+
+### 2. Python Setup
+```bash
+# Clone or download this repository
+cd generate-chromatic-sine-waves
+
+# Create a virtual environment (recommended)
 python3 -m venv venv
-source venv/bin/activate
-```
-**Windows (Command Prompt)**
-```cmd
-python -m venv venv
-venv\Scripts\activate.bat
-```
-**Windows (PowerShell)**
-```powershell
-python -m venv venv
-venv\Scripts\Activate.ps1
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-### 3. Install dependencies
+### 3. Install Python Dependencies
 ```bash
 pip install -r requirements.txt
 ```
+
+**Note:** If you get numpy dependency conflicts with existing packages (torch, scipy, etc.), the requirements.txt uses compatible versions that should work with most setups. If issues persist, try installing in a fresh virtual environment.
 
 ---
 
