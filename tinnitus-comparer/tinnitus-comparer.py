@@ -26,7 +26,7 @@ Platform:
 """
 
 # VOLUME WARNING - This script generates audio that can damage hearing
-print("⚠️  WARNING: This script generates high-frequency tones that can cause hearing damage.")
+print("⚠️ WARNING: This script generates high-frequency tones that can cause hearing damage.")
 print("   Loud volumes may cause permanent hearing loss, tinnitus, or ear pain.")
 print("   Turn your volume DOWN to the lowest audible level before continuing.")
 input("   Press Enter when volume is set safely low...")
@@ -119,9 +119,9 @@ def prompt_choice(prompt_text: str, choices: set, default: str) -> str:
 # ---------------- Core compare loop ----------------
 def main():
     print("\n=== Tinnitus Frequency Matcher (A8 → C9) ===")
-    print("🎯 Uses adaptive narrowing: each choice focuses the search range")
-    print("🔊 Sequence per trial: Noise → Tone A → Noise → Tone B")  
-    print("🎧 Noise & tones share the SAME pan side. Sample rate and fade are fixed.\n")
+    print("Uses adaptive narrowing: each choice focuses the search range")
+    print("Sequence per trial: Noise → Tone A → Noise → Tone B")  
+    print("Noise & tones share the SAME pan side. Sample rate and fade are fixed.\n")
 
     # Runtime config (kept minimal but useful)
     tone_duration = prompt_float("Tone duration (seconds)", 1.5)
@@ -156,11 +156,25 @@ def main():
         play_np_audio(pan_stereo(generate_sine(fB, tone_duration, tone_amp), pan_side))
 
     # Main interactive loop
+    first_round = True
     while True:
-        fA, fB = best_freq, challenger_freq
-        range_width = current_high - current_low
-        print(f"\n🎯 Search range: {current_low:.1f} - {current_high:.1f} Hz (±{range_width/2:.1f} Hz)")
-        print(f"Pair: 1) {fA:.1f} Hz   vs   2) {fB:.1f} Hz")
+        # Randomize which tone (best or challenger) plays first
+        if random.choice([True, False]):
+            fA, fB = best_freq, challenger_freq
+            best_is_first = True
+        else:
+            fA, fB = challenger_freq, best_freq
+            best_is_first = False
+        
+        # Only show search range on first iteration
+        if first_round:
+            range_width = current_high - current_low
+            print(f"\nSearch range: {current_low:.1f} - {current_high:.1f} Hz (±{range_width/2:.1f} Hz)")
+            first_round = False
+        else:
+            print("\n" + "=" * 50)
+        
+        print('Playing 2 tones...')
         play_pair(fA, fB)
 
         ans = input("Closer to your tinnitus? [1/2, r=replay, s=skip, m=mark final, q=quit]: ").strip().lower()
@@ -188,21 +202,33 @@ def main():
             print("\n=== FINAL MATCH ===")
             print(f"Frequency: {final_freq:.2f} Hz")
             print(f"Nearest note: {note}{octv} (exact {exact:.2f} Hz, {cents:+.0f} cents)")
-            print(f"💾 Saved 3s tone: {final_path}")
-            print(f"📝 Summary: {summary_path}\n")
+            print(f"Saved 3s tone: {final_path}")
+            print(f"Summary: {summary_path}\n")
             return
         if ans not in {"1","2"}:
             print("Please type 1, 2, r, s, m, or q.")
             continue
 
+        # Show the frequencies that were just compared
+        print(f"Tone 1 -- {fA:.1f} Hz")
+        print(f"Tone 2 -- {fB:.1f} Hz")
+        
         # Winner update + save 2s breadcrumb of chosen
-        winner_freq = fA if ans == "1" else fB
+        chosen_freq = fA if ans == "1" else fB
+        
+        # Determine if the chosen frequency is the best_freq or challenger_freq
+        if (best_is_first and ans == "1") or (not best_is_first and ans == "2"):
+            # User chose the best_freq (no change needed)
+            winner_freq = best_freq
+        else:
+            # User chose the challenger_freq (update best_freq)
+            winner_freq = chosen_freq
         note, octv, _, _ = freq_to_note(winner_freq)
         breadcrumb = pan_stereo(generate_sine(winner_freq, 2.0, tone_amp), pan_side)
         safe_note = note.replace("#", "sharp")
         outpath = os.path.join(OUTPUT_DIR, f"choice_{safe_note}{octv}_{winner_freq:.1f}Hz.wav")
         sf.write(outpath, breadcrumb, SAMPLE_RATE_HZ)
-        print(f"💾 Saved 2s snippet of your choice to: {outpath}")
+        print(f"Saved 2s snippet of your choice to: {outpath}")
 
         # Narrow the band around the winner and pick a new challenger
         best_freq = winner_freq
@@ -213,7 +239,7 @@ def main():
         current_high = min(UPPER_HZ, best_freq + new_half_band)
         new_range = current_high - current_low
         
-        print(f"🔍 Narrowing search around {winner_freq:.1f} Hz (range: {old_range:.1f} → {new_range:.1f} Hz)")
+        print(f"Narrowing search around {winner_freq:.1f} Hz (range: {old_range:.1f} → {new_range:.1f} Hz)")
 
         if (current_high - current_low) <= min_band_hz:
             # Auto mark final if band is already very tight
@@ -230,11 +256,14 @@ def main():
             print("\n=== FINAL MATCH (auto-stop: tight band) ===")
             print(f"Frequency: {final_freq:.2f} Hz")
             print(f"Nearest note: {note}{octv} (exact {exact:.2f} Hz, {cents:+.0f} cents)")
-            print(f"💾 Saved 3s tone: {final_path}")
-            print(f"📝 Summary: {summary_path}\n")
+            print(f"Saved 3s tone: {final_path}")
+            print(f"Summary: {summary_path}\n")
             return
 
         challenger_freq = random.uniform(current_low, current_high)
+        
+        # Wait for user before starting next round
+        input("\nPress Enter to continue to next round...")
 
 if __name__ == "__main__":
     try:
