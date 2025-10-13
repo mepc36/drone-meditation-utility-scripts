@@ -2,13 +2,14 @@
 """
 Configurable Pink-Noise + Tone Looper
 (single pan for both layers + numbered tweak menu + JSON persistence)
+Saves ONLY the combined render to ./output (no stems).
 
 Persistence:
 - Reads ./input/last_params.json at startup (if available) to restore your last settings.
 - Writes ./input/last_params.json after each render/tweak so you can resume later.
 
 Controls:
-- Renders and plays combined audio (also saves stems) to ./output
+- Renders and plays combined audio (saves only *_combined.wav) to ./output
 - After each render/play:
     - Press Enter to repeat with the same settings
     - Type a number (1..11) to change that single parameter
@@ -174,9 +175,9 @@ def apply_amplitude_modulation(
     return (signal.astype(np.float64) * mod_gain).astype(np.float32)
 
 # ---------------- Render / Save / Play ----------------
-def render_layers(params: Dict[str, Any]):
+def render_combined_only(params: Dict[str, Any]) -> np.ndarray:
     """
-    Returns (stereo_combined, stereo_pink, stereo_tone)
+    Build pink + tone (both panned by the same pan_side) and return the stereo mix only.
     """
     duration_s = float(params["duration_seconds"])
 
@@ -212,18 +213,14 @@ def render_layers(params: Dict[str, Any]):
     peak = float(np.max(np.abs(mix))) if mix.size else 1.0
     if peak > 0.99:
         mix *= (0.99 / peak)
-    return mix.astype(np.float32), pink_stereo.astype(np.float32), tone_stereo.astype(np.float32)
+    return mix.astype(np.float32)
 
-def save_wavs(stereo_combined: np.ndarray, stereo_pink: np.ndarray, stereo_tone: np.ndarray, base_label: str):
+def save_combined_wav(stereo_combined: np.ndarray, base_label: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = f"{base_label}_{timestamp}"
     combined_path = os.path.join(OUTPUT_DIR, f"{base}_combined.wav")
-    pink_path     = os.path.join(OUTPUT_DIR, f"{base}_pink.wav")
-    tone_path     = os.path.join(OUTPUT_DIR, f"{base}_tone.wav")
     sf.write(combined_path, stereo_combined, SAMPLE_RATE_HZ)
-    sf.write(pink_path,     stereo_pink,     SAMPLE_RATE_HZ)
-    sf.write(tone_path,     stereo_tone,     SAMPLE_RATE_HZ)
-    return combined_path, pink_path, tone_path
+    return combined_path
 
 def play_wav(path: str):
     print("▶️ Playing combined render...")
@@ -244,7 +241,7 @@ def param_schema() -> Dict[str, Dict[str, Any]]:
         "tone_level_db":           {"type": float, "min": -120.0,"max": 0.0,          "hint": "dBFS"},
         "modulation_period_s":     {"type": float, "min": 0.05, "max": 30.0,          "hint": "seconds"},
         "modulation_depth_0_to_1": {"type": float, "min": 0.0,  "max": 1.0,           "hint": "0..1"},
-        "modulation_shape_id":     {"type": int,   "choices": {1,2,3},                "hint": "1=sine,2=square,3=triangle"},
+        "modulation_shape_id":     {"type": int,   "choices": {1,2,3},                "hint": "1=sine, 2=square, 3=triangle"},
         "duration_seconds":        {"type": float, "min": 0.1,  "max": 120.0,         "hint": "seconds"},
     }
 
@@ -273,9 +270,6 @@ def defaults_params() -> Dict[str, Any]:
     }
 
 def ordered_param_list() -> List[Tuple[int, str]]:
-    """
-    Returns a numbered list of (menu_number, param_name) in the order we present.
-    """
     names = [
         "pan_side",                   # 1
         "pink_center_frequency_hz",   # 2
@@ -333,17 +327,14 @@ def load_params_from_json(path: str, schema: Dict[str, Any], defaults: Dict[str,
         return params
 
     # Validate and merge
-    for key, spec in schema.items():
+    for key in schema.keys():
         if key in data:
             try:
-                # Coerce then check ranges/choices
                 val = coerce_and_validate(key, str(data[key]), schema)
                 params[key] = val
             except Exception:
                 print(f"Warning: invalid value for '{key}' in JSON; using default {defaults[key]}")
-        else:
-            # Missing key -> keep default
-            pass
+        # else: keep default
 
     return params
 
@@ -400,7 +391,7 @@ def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
 
 # ---------------- Main ----------------
 def main():
-    print("\n=== Configurable Pink Noise + Tone Looper (with resumeable JSON settings) ===")
+    print("\n=== Configurable Pink Noise + Tone Looper (combined-only + resumeable JSON settings) ===")
     print("Headphones recommended. Keep volume LOW.\n")
 
     schema   = param_schema()
@@ -414,11 +405,11 @@ def main():
             print(f"  {key:>26} = {params[key]}")
         print()
 
-        stereo_combined, stereo_pink, stereo_tone = render_layers(params)
+        stereo_combined = render_combined_only(params)
 
         label = f"take{render_index:02d}"
-        combined_path, pink_path, tone_path = save_wavs(stereo_combined, stereo_pink, stereo_tone, label)
-        print(f"💾 Saved:\n  - {combined_path}\n  - {pink_path}\n  - {tone_path}\n")
+        combined_path = save_combined_wav(stereo_combined, label)
+        print(f"💾 Saved: {combined_path}\n")
 
         # Persist params after each render (so even if you quit right now, it's saved)
         save_params_to_json(PARAMS_JSON_PATH, params)
