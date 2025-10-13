@@ -1,5 +1,10 @@
 # Drone Meditation Utility Scripts
 
+## ⚠️ VOLUME WARNING
+**All scripts in this collection generate high-frequency audio that can cause permanent hearing damage.** Loud volumes may cause hearing loss, tinnitus, or ear pain. **Always turn your volume DOWN to the lowest audible level before running any script.**
+
+---
+
 These scripts were created to aid in the composition of "XVII - Drone/Meditation", by Martin "Maestro" Connor.
 
 1. **Chromatic Waveform Generator** - Generates chromatic scales of high-frequency waveforms (sine, square, triangle, or saw) at precise equal-tempered pitches for digital synthesis, sound design, or testing high-frequency playback systems.

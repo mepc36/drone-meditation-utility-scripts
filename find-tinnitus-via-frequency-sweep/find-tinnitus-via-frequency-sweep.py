@@ -16,6 +16,13 @@ Requirements: pip install numpy soundfile
 Platform: macOS (uses 'afplay' to play audio)
 """
 
+# VOLUME WARNING - This script generates audio that can damage hearing
+print("⚠️  WARNING: This script generates high-frequency tones that can cause hearing damage.")
+print("   Loud volumes may cause permanent hearing loss, tinnitus, or ear pain.")
+print("   Turn your volume DOWN to the lowest audible level before continuing.")
+input("   Press Enter when volume is set safely low...")
+print()
+
 import os, math, time, tty, sys, termios, select, tempfile, subprocess, random
 import numpy as np
 import soundfile as sf
