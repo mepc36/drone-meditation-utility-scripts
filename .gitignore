@@ -45,3 +45,6 @@ MANIFEST
 *.tmp
 *.bak
 *.old
+
+input
+output

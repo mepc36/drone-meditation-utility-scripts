@@ -1,30 +1,16 @@
 #!/usr/bin/env python3
 """
-Configurable Pink-Noise + Tone Looper (single pan for both layers + numbered tweak menu)
-----------------------------------------------------------------------------------------
-- Band-limited pink noise with adjustable:
-    2) pink_center_frequency_hz  (Hz)
-    3) pink_bandwidth_hz         (Hz)
-    4) pink_level_db             (dBFS)
+Configurable Pink-Noise + Tone Looper
+(single pan for both layers + numbered tweak menu + JSON persistence)
 
-- Tone oscillator with adjustable:
-    5) tone_waveform_id          (1=sine, 2=saw, 3=square, 4=triangle)
-    6) tone_frequency_hz         (Hz)
-    7) tone_level_db             (dBFS)
+Persistence:
+- Reads ./input/last_params.json at startup (if available) to restore your last settings.
+- Writes ./input/last_params.json after each render/tweak so you can resume later.
 
-- Pulse (amplitude modulation) on the tone:
-    8)  modulation_period_s      (seconds)
-    9)  modulation_depth_0_to_1  (0..1)
-    10) modulation_shape_id      (1=sine, 2=square, 3=triangle)
-
-- Shared settings:
-    1) pan_side                  ('l' or 'r')  ← applies to BOTH pink noise and tone
-    11) duration_seconds         (seconds)
-
-Loop behavior:
+Controls:
 - Renders and plays combined audio (also saves stems) to ./output
-- After each render/play, a **numbered menu** appears:
-    - Press Enter to repeat with same settings
+- After each render/play:
+    - Press Enter to repeat with the same settings
     - Type a number (1..11) to change that single parameter
     - Type 'q' to quit
 
@@ -35,6 +21,7 @@ Platform:
 """
 
 import os
+import json
 import math
 import tempfile
 import subprocess
@@ -44,11 +31,16 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import soundfile as sf
 
-# ---------------- Fixed engine settings ----------------
+# ---------------- Fixed engine settings & paths ----------------
 SAMPLE_RATE_HZ = 48000
 FADE_TIME_S = 0.02
+
 OUTPUT_DIR = "./output"
+INPUT_DIR  = "./input"
+PARAMS_JSON_PATH = os.path.join(INPUT_DIR, "last_params.json")
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(INPUT_DIR,  exist_ok=True)
 
 # ---------------- Utilities ----------------
 def db_to_linear(db_value: float) -> float:
@@ -238,7 +230,7 @@ def play_wav(path: str):
     play_with_afplay(path)
     print("Done.\n")
 
-# ---------------- Numbered-menu helpers ----------------
+# ---------------- Numbered-menu + validation schema ----------------
 def param_schema() -> Dict[str, Dict[str, Any]]:
     """Validation schema: type, min/max/choices, human hint."""
     nyq = SAMPLE_RATE_HZ / 2.0
@@ -254,6 +246,30 @@ def param_schema() -> Dict[str, Dict[str, Any]]:
         "modulation_depth_0_to_1": {"type": float, "min": 0.0,  "max": 1.0,           "hint": "0..1"},
         "modulation_shape_id":     {"type": int,   "choices": {1,2,3},                "hint": "1=sine,2=square,3=triangle"},
         "duration_seconds":        {"type": float, "min": 0.1,  "max": 120.0,         "hint": "seconds"},
+    }
+
+def defaults_params() -> Dict[str, Any]:
+    return {
+        # Shared pan (applies to BOTH layers)
+        "pan_side": "l",                 # 'l' or 'r'
+
+        # Pink noise
+        "pink_center_frequency_hz": 8000.0,
+        "pink_bandwidth_hz":        1000.0,
+        "pink_level_db":            -40.0,
+
+        # Tone
+        "tone_waveform_id":         1,        # 1=sine, 2=saw, 3=square, 4=triangle
+        "tone_frequency_hz":        8000.0,   # defaults to pink center; tweak as needed
+        "tone_level_db":            -30.0,
+
+        # Pulse (AM)
+        "modulation_period_s":      0.8,
+        "modulation_depth_0_to_1":  0.5,
+        "modulation_shape_id":      1,        # 1=sine, 2=square, 3=triangle
+
+        # Shared duration
+        "duration_seconds":         3.0,
     }
 
 def ordered_param_list() -> List[Tuple[int, str]]:
@@ -296,6 +312,49 @@ def coerce_and_validate(name: str, value_str: str, schema: Dict[str, Any]):
         raise ValueError(f"choices {sorted(list(spec['choices']))}")
     return val
 
+# ---------------- Persistence helpers ----------------
+def load_params_from_json(path: str, schema: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Load parameters from JSON if it exists; validate each field against the schema.
+    Any missing or invalid values fall back to defaults.
+    """
+    params = defaults.copy()
+    if not os.path.exists(path):
+        return params
+
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            print("Warning: params JSON is not a dict; using defaults.")
+            return params
+    except Exception as e:
+        print(f"Warning: failed to read {path}: {e}; using defaults.")
+        return params
+
+    # Validate and merge
+    for key, spec in schema.items():
+        if key in data:
+            try:
+                # Coerce then check ranges/choices
+                val = coerce_and_validate(key, str(data[key]), schema)
+                params[key] = val
+            except Exception:
+                print(f"Warning: invalid value for '{key}' in JSON; using default {defaults[key]}")
+        else:
+            # Missing key -> keep default
+            pass
+
+    return params
+
+def save_params_to_json(path: str, params: Dict[str, Any]) -> None:
+    try:
+        with open(path, "w") as f:
+            json.dump(params, f, indent=2)
+    except Exception as e:
+        print(f"Warning: failed to write params JSON: {e}")
+
+# ---------------- Interactive tweak ----------------
 def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
     """
     Shows the numbered menu and lets the user tweak exactly one parameter.
@@ -341,32 +400,12 @@ def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
 
 # ---------------- Main ----------------
 def main():
-    print("\n=== Configurable Pink Noise + Tone Looper (single pan for both) ===")
+    print("\n=== Configurable Pink Noise + Tone Looper (with resumeable JSON settings) ===")
     print("Headphones recommended. Keep volume LOW.\n")
 
-    # Default parameters (change any via the numbered menu)
-    params: Dict[str, Any] = {
-        # Shared pan (applies to BOTH layers)
-        "pan_side": "l",                 # 'l' or 'r'
-
-        # Pink noise
-        "pink_center_frequency_hz": 8165.0,
-        "pink_bandwidth_hz":        1000.0,
-        "pink_level_db":            -20.0,
-
-        # Tone
-        "tone_waveform_id":         1,        # 1=sine, 2=saw, 3=square, 4=triangle
-        "tone_frequency_hz":        8165.0,   # defaults to pink center; tweak as needed
-        "tone_level_db":            -30.0,
-
-        # Pulse (AM)
-        "modulation_period_s":      0.8,
-        "modulation_depth_0_to_1":  0.5,
-        "modulation_shape_id":      1,        # 1=sine, 2=square, 3=triangle
-
-        # Shared duration
-        "duration_seconds":         3.0,
-    }
+    schema   = param_schema()
+    defaults = defaults_params()
+    params   = load_params_from_json(PARAMS_JSON_PATH, schema, defaults)
 
     render_index = 1
     while True:
@@ -381,10 +420,16 @@ def main():
         combined_path, pink_path, tone_path = save_wavs(stereo_combined, stereo_pink, stereo_tone, label)
         print(f"💾 Saved:\n  - {combined_path}\n  - {pink_path}\n  - {tone_path}\n")
 
+        # Persist params after each render (so even if you quit right now, it's saved)
+        save_params_to_json(PARAMS_JSON_PATH, params)
+
         play_wav(combined_path)
 
         # Numbered one-parameter tweak / continue / quit
-        if not tweak_one_parameter_interactively(params):
+        keep_going = tweak_one_parameter_interactively(params)
+        # Persist immediately after a tweak decision
+        save_params_to_json(PARAMS_JSON_PATH, params)
+        if not keep_going:
             break
 
         render_index += 1
