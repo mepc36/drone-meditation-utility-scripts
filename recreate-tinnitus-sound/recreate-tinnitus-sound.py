@@ -429,7 +429,9 @@ def main():
 
 if __name__ == "__main__":
     # Safety reminder
-    print("⚠️ WARNING: Audio playback can be loud. Keep volume low.")
+    print("⚠️ WARNING: Audio playback can be loud.")
+    print("Please turn down your volume to its lowest possible, non-muted setting.")
+    input("Then press Enter to continue...")
     try:
         main()
     except KeyboardInterrupt:
