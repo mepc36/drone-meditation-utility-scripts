@@ -69,13 +69,13 @@ def normalize_peak_inplace(signal: np.ndarray, peak_target: float = 1.0) -> None
         signal *= (peak_target / peak)
 
 def hard_pan_mono_to_stereo(mono: np.ndarray, side: str) -> np.ndarray:
-    """Hard-pan mono signal left or right; any other value defaults to center."""
+    """Hard-pan mono signal left, right, or center."""
     side = side.lower()
     if side.startswith('l'):
         return np.column_stack([mono, np.zeros_like(mono)])
     elif side.startswith('r'):
         return np.column_stack([np.zeros_like(mono), mono])
-    else:
+    else:  # center or any other value
         return np.column_stack([mono, mono])
 
 def play_with_afplay(path: str, duration_seconds: float = None) -> None:
@@ -293,7 +293,7 @@ def save_all_wavs(combined: np.ndarray, noise: np.ndarray, tone: np.ndarray,
 
     # Generate descriptive filenames with numbered prefixes
     combined_filename = "1-" + generate_filename_from_params(params, "combined")
-    tone_filename = "2-" + generate_filename_from_params(params, "tinnitus_only")
+    tone_filename = "2-" + generate_filename_from_params(params, "tone_only")
     noise_filename = "3-" + generate_filename_from_params(params, "noise_only")
 
     combined_path = os.path.join(session_dir, combined_filename)
@@ -349,7 +349,7 @@ def param_schema() -> Dict[str, Dict[str, Any]]:
     """Validation schema: type, min/max/choices, human hint."""
     nyq = SAMPLE_RATE_HZ / 2.0
     return {
-        "pan_side":                 {"type": str,   "choices": {"l","r"},             "hint": "'l' or 'r'"},
+        "pan_side":                 {"type": str,   "choices": {"l","r","c"},         "hint": "'l', 'r', or 'c' (center)"},
         "noise_center_frequency_hz":{"type": float, "min": 20.0, "max": nyq - 100.0,  "hint": "Hz"},
         "noise_bandwidth_hz":      {"type": float, "min": 10.0,  "max": nyq - 10.0,   "hint": "Hz"},
         "noise_spectral_slope":             {"type": float, "min": 0.0,  "max": 1.5,           "hint": "0.0=white, 0.5=pink, 1.0=brown"},
