@@ -2,14 +2,20 @@
 """
 Configurable Pink-Noise + Tone Looper
 (single pan for both layers + numbered tweak menu + JSON persistence)
-Saves ONLY the combined render to ./output (no stems).
+Saves three files per render: combined, pink-only, and tinnitus-only.
+
+Each render session creates a uniquely named directory in ./output containing:
+- Combined audio (pink noise + tinnitus tone)
+- Pink noise only 
+- Tinnitus tone only
+Files are named with descriptive parameters for easy identification.
 
 Persistence:
 - Reads ./input/last_params.json at startup (if available) to restore your last settings.
 - Writes ./input/last_params.json after each render/tweak so you can resume later.
 
 Controls:
-- Renders and plays combined audio (saves only *_combined.wav) to ./output
+- Renders and plays combined audio, saves all three variants to ./output
 - After each render/play:
     - Press Enter to repeat with the same settings
     - Type a number (1..11) to change that single parameter
@@ -71,9 +77,15 @@ def hard_pan_mono_to_stereo(mono: np.ndarray, side: str) -> np.ndarray:
     else:
         return np.column_stack([mono, mono])
 
-def play_with_afplay(path: str) -> None:
+def play_with_afplay(path: str, duration_seconds: float = None) -> None:
     try:
-        subprocess.run(["afplay", path], check=True)
+        if duration_seconds is not None and duration_seconds > 0:
+            # Use timeout to limit playback duration
+            subprocess.run(["afplay", path], check=True, timeout=duration_seconds)
+        else:
+            subprocess.run(["afplay", path], check=True)
+    except subprocess.TimeoutExpired:
+        print(f"(Playback stopped after {duration_seconds} seconds)")
     except Exception as e:
         print(f"(Playback warning) {e}")
 
@@ -175,9 +187,10 @@ def apply_amplitude_modulation(
     return (signal.astype(np.float64) * mod_gain).astype(np.float32)
 
 # ---------------- Render / Save / Play ----------------
-def render_combined_only(params: Dict[str, Any]) -> np.ndarray:
+def render_all_components(params: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Build pink + tone (both panned by the same pan_side) and return the stereo mix only.
+    Build pink + tone (both panned by the same pan_side) and return:
+    (stereo_combined, stereo_pink_only, stereo_tone_only)
     """
     duration_s = float(params["duration_seconds"])
 
@@ -208,23 +221,99 @@ def render_combined_only(params: Dict[str, Any]) -> np.ndarray:
     tone_mono = (db_to_linear(float(params["tone_level_db"])) * tone_mono).astype(np.float32)
     tone_stereo = hard_pan_mono_to_stereo(tone_mono, str(params["pan_side"]))
 
-    # Mix safely
+    # Mix safely for combined
     mix = (pink_stereo.astype(np.float64) + tone_stereo.astype(np.float64))
     peak = float(np.max(np.abs(mix))) if mix.size else 1.0
     if peak > 0.99:
         mix *= (0.99 / peak)
-    return mix.astype(np.float32)
+    combined = mix.astype(np.float32)
 
-def save_combined_wav(stereo_combined: np.ndarray, base_label: str) -> str:
+    return combined, pink_stereo, tone_stereo
+
+def generate_filename_from_params(params: Dict[str, Any], file_type: str) -> str:
+    """Generate descriptive filename based on parameters."""
+    waveform_names = {1: "sine", 2: "saw", 3: "square", 4: "triangle"}
+    modulation_names = {1: "sine", 2: "square", 3: "triangle"}
+    
+    waveform = waveform_names.get(int(params["tone_waveform_id"]), "unknown")
+    mod_shape = modulation_names.get(int(params["modulation_shape_id"]), "unknown")
+    
+    # Format frequencies without decimals if they're whole numbers
+    pink_freq = params["pink_center_frequency_hz"]
+    tone_freq = params["tone_frequency_hz"]
+    pink_freq_str = f"{int(pink_freq)}" if pink_freq == int(pink_freq) else f"{pink_freq:.1f}"
+    tone_freq_str = f"{int(tone_freq)}" if tone_freq == int(tone_freq) else f"{tone_freq:.1f}"
+    
+    filename_parts = [
+        f"pink{pink_freq_str}hz",
+        f"bw{int(params['pink_bandwidth_hz'])}hz",
+        f"{int(params['pink_level_db'])}db",
+        f"tone{tone_freq_str}hz",
+        waveform,
+        f"{int(params['tone_level_db'])}db",
+        f"mod{params['modulation_period_s']:.1f}s",
+        f"depth{params['modulation_depth_0_to_1']:.1f}",
+        mod_shape,
+        f"pan{params['pan_side']}",
+        f"{params['duration_seconds']:.1f}s",
+        file_type
+    ]
+    
+    return "_".join(filename_parts) + ".wav"
+
+def save_all_wavs(combined: np.ndarray, pink: np.ndarray, tone: np.ndarray, 
+                  params: Dict[str, Any], base_label: str) -> Tuple[str, str, str, str]:
+    """
+    Save all three audio files in a uniquely named directory.
+    Returns (session_dir, combined_path, pink_path, tone_path)
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = f"{base_label}_{timestamp}"
-    combined_path = os.path.join(OUTPUT_DIR, f"{base}_combined.wav")
-    sf.write(combined_path, stereo_combined, SAMPLE_RATE_HZ)
-    return combined_path
+    session_dir = os.path.join(OUTPUT_DIR, f"{base_label}_{timestamp}")
+    os.makedirs(session_dir, exist_ok=True)
+    
+    # Generate descriptive filenames with numbered prefixes
+    combined_filename = "1-" + generate_filename_from_params(params, "combined")
+    tone_filename = "2-" + generate_filename_from_params(params, "tinnitus_only")
+    pink_filename = "3-" + generate_filename_from_params(params, "pink_only")
+    
+    combined_path = os.path.join(session_dir, combined_filename)
+    pink_path = os.path.join(session_dir, pink_filename)
+    tone_path = os.path.join(session_dir, tone_filename)
+    
+    # Save all files
+    sf.write(combined_path, combined, SAMPLE_RATE_HZ)
+    sf.write(pink_path, pink, SAMPLE_RATE_HZ)
+    sf.write(tone_path, tone, SAMPLE_RATE_HZ)
+    
+    return session_dir, combined_path, pink_path, tone_path
 
 def play_wav(path: str):
-    print("▶️ Playing combined render...")
-    play_with_afplay(path)
+    # Ask user how many seconds they want to play
+    while True:
+        try:
+            duration_input = input("How many seconds to play? (Enter for full length, 0 to skip): ").strip()
+            if duration_input == "":
+                duration = None
+                break
+            elif duration_input == "0":
+                print("Skipping playback.\n")
+                return
+            else:
+                duration = float(duration_input)
+                if duration < 0:
+                    print("Please enter a positive number or 0 to skip.")
+                    continue
+                break
+        except ValueError:
+            print("Please enter a valid number.")
+            continue
+    
+    if duration is None:
+        print("▶️ Playing full combined render...")
+    else:
+        print(f"▶️ Playing {duration} seconds of combined render...")
+    
+    play_with_afplay(path, duration)
     print("Done.\n")
 
 # ---------------- Numbered-menu + validation schema ----------------
@@ -242,7 +331,7 @@ def param_schema() -> Dict[str, Dict[str, Any]]:
         "modulation_period_s":     {"type": float, "min": 0.05, "max": 30.0,          "hint": "seconds"},
         "modulation_depth_0_to_1": {"type": float, "min": 0.0,  "max": 1.0,           "hint": "0..1"},
         "modulation_shape_id":     {"type": int,   "choices": {1,2,3},                "hint": "1=sine, 2=square, 3=triangle"},
-        "duration_seconds":        {"type": float, "min": 0.1,  "max": 120.0,         "hint": "seconds"},
+        "duration_seconds":        {"type": float, "min": 0.1,  "max": 240.0,         "hint": "seconds"},
     }
 
 def defaults_params() -> Dict[str, Any]:
@@ -405,11 +494,15 @@ def main():
             print(f"  {key:>26} = {params[key]}")
         print()
 
-        stereo_combined = render_combined_only(params)
+        combined, pink, tone = render_all_components(params)
 
         label = f"take{render_index:02d}"
-        combined_path = save_combined_wav(stereo_combined, label)
-        print(f"💾 Saved: {combined_path}\n")
+        session_dir, combined_path, pink_path, tone_path = save_all_wavs(combined, pink, tone, params, label)
+        
+        print(f"💾 Saved session to: {session_dir}")
+        print(f"   📁 Combined: {os.path.basename(combined_path)}")
+        print(f"   📁 Pink only: {os.path.basename(pink_path)}")
+        print(f"   📁 Tinnitus only: {os.path.basename(tone_path)}\n")
 
         # Persist params after each render (so even if you quit right now, it's saved)
         save_params_to_json(PARAMS_JSON_PATH, params)
