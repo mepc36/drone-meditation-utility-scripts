@@ -187,7 +187,7 @@ def apply_amplitude_modulation(
     return (signal.astype(np.float64) * mod_gain).astype(np.float32)
 
 # ---------------- Render / Save / Play ----------------
-def render_all_components(params: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def create_tinnitus_sounds(params: Dict[str, Any]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Build pink + tone (both panned by the same pan_side) and return:
     (stereo_combined, stereo_pink_only, stereo_tone_only)
@@ -427,7 +427,7 @@ def load_params_from_json(path: str, schema: Dict[str, Any], defaults: Dict[str,
 
     return params
 
-def save_params_to_json(path: str, params: Dict[str, Any]) -> None:
+def save_config_to_json(path: str, params: Dict[str, Any]) -> None:
     try:
         with open(path, "w") as f:
             json.dump(params, f, indent=2)
@@ -435,7 +435,7 @@ def save_params_to_json(path: str, params: Dict[str, Any]) -> None:
         print(f"Warning: failed to write params JSON: {e}")
 
 # ---------------- Interactive tweak ----------------
-def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
+def tweak_parameter(params: Dict[str, Any]) -> bool:
     """
     Shows the numbered menu and lets the user tweak exactly one parameter.
     Returns False to quit, True to continue rendering.
@@ -456,13 +456,13 @@ def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
         idx = int(choice)
         if idx not in mapping:
             print("Invalid number. Try again.")
-            return tweak_one_parameter_interactively(params)
+            return tweak_parameter(params)
         name = mapping[idx]
     else:
         name = choice
         if name not in schema:
             print("Unknown parameter name. Try again.")
-            return tweak_one_parameter_interactively(params)
+            return tweak_parameter(params)
 
     current_val = params[name]
     hint = schema[name].get("hint", "")
@@ -472,7 +472,7 @@ def tweak_one_parameter_interactively(params: Dict[str, Any]) -> bool:
         new_val = coerce_and_validate(name, new_val_str, schema)
     except ValueError as e:
         print(f"Invalid value: {e}")
-        return tweak_one_parameter_interactively(params)
+        return tweak_parameter(params)
 
     params[name] = new_val
     print(f"{name} updated to {new_val}\n")
@@ -494,7 +494,7 @@ def main():
             print(f"  {key:>26} = {params[key]}")
         print()
 
-        combined, pink, tone = render_all_components(params)
+        combined, pink, tone = create_tinnitus_sounds(params)
 
         label = f"take{render_index:02d}"
         session_dir, combined_path, pink_path, tone_path = save_all_wavs(combined, pink, tone, params, label)
@@ -505,14 +505,14 @@ def main():
         print(f"   📁 Tinnitus only: {os.path.basename(tone_path)}\n")
 
         # Persist params after each render (so even if you quit right now, it's saved)
-        save_params_to_json(PARAMS_JSON_PATH, params)
+        save_config_to_json(PARAMS_JSON_PATH, params)
 
         play_wav(combined_path)
 
         # Numbered one-parameter tweak / continue / quit
-        keep_going = tweak_one_parameter_interactively(params)
+        keep_going = tweak_parameter(params)
         # Persist immediately after a tweak decision
-        save_params_to_json(PARAMS_JSON_PATH, params)
+        save_config_to_json(PARAMS_JSON_PATH, params)
         if not keep_going:
             break
 
