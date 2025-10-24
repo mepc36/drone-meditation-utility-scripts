@@ -304,6 +304,14 @@ def save_all_wavs(combined: np.ndarray, noise: np.ndarray, tone: np.ndarray,
     sf.write(combined_path, combined, SAMPLE_RATE_HZ)
     sf.write(noise_path, noise, SAMPLE_RATE_HZ)
     sf.write(tone_path, tone, SAMPLE_RATE_HZ)
+    
+    # Save configuration file in the same directory
+    config_path = os.path.join(session_dir, "config.json")
+    try:
+        with open(config_path, "w") as f:
+            json.dump(params, f, indent=2)
+    except Exception as e:
+        print(f"Warning: failed to save config.json in session directory: {e}")
 
     return session_dir, combined_path, noise_path, tone_path
 
