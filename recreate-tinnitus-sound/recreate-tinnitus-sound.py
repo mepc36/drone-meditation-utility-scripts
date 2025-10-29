@@ -34,6 +34,7 @@ import json
 import subprocess
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
+from scipy.signal import butter, sosfiltfilt
 
 import numpy as np
 import soundfile as sf
@@ -91,41 +92,42 @@ def play_with_afplay(path: str, duration_seconds: float = None) -> None:
 
 # ---------------- Colored noise (band-limited by center/bandwidth) ----------------
 def generate_band_limited_colored_noise(
-    duration_s: float,
-    sample_rate_hz: int,
-    center_frequency_hz: float,
-    bandwidth_hz: float,
-    alpha: float,
-) -> np.ndarray:
-    """
-    General colored noise via frequency-domain shaping:
-      amplitude |X(f)| ∝ 1 / f^alpha
-        alpha = 0.0  -> white (flat amplitude; flat power per Hz)
-        alpha = 0.5  -> pink  (≈ -3 dB/oct power)
-        alpha = 1.0  -> brown (≈ -6 dB/oct power)
+    duration_s, sample_rate_hz, center_frequency_hz, bandwidth_hz, alpha
+):
+    n = int(duration_s * sample_rate_hz)
 
-    Then apply a rectangular band-pass around center ± bandwidth/2.
-    """
-    n_samples = int(duration_s * sample_rate_hz)
-    white = np.random.normal(0.0, 1.0, n_samples).astype(np.float64)
-    spectrum = np.fft.rfft(white)
-    freqs = np.fft.rfftfreq(n_samples, d=1.0 / sample_rate_hz)
+    # 1) start with white noise
+    x = np.random.normal(0.0, 1.0, n).astype(np.float64)
 
-    eps = 1.0  # avoid f=0 blowup and overweighting ultra-low bins in short renders
-    amplitude_shaper = 1.0 / np.power(np.maximum(freqs, eps), float(alpha))
+    # 2) approximate 1/f^alpha tilt in time-domain (gentle low-shelf)
+    #    simple one-pole lowpass blend -> darker as alpha→1
+    a = np.clip(alpha, 0.0, 1.0)
+    lp_fc = 1000.0                      # shelf knee ~1 kHz
+    lp_w  = lp_fc / (sample_rate_hz/2)
+    sos_lp = butter(1, lp_w, btype="low", output="sos")
+    tilt   = sosfiltfilt(sos_lp, x)
+    x = (1.0 - a) * x + a * tilt
 
-    half_bw = max(1.0, bandwidth_hz * 0.5)
-    lower_cut = max(0.0, center_frequency_hz - half_bw)
-    upper_cut = min(sample_rate_hz / 2.0, center_frequency_hz + half_bw)
-    band_mask = (freqs >= lower_cut) & (freqs <= upper_cut)
+    # 3) smooth band-pass around center±bw/2  (no hard FFT window)
+    f0 = max(10.0, center_frequency_hz)
+    bw = max(5.0, bandwidth_hz)
+    low = max(5.0, f0 - bw/2)
+    high = min(sample_rate_hz/2 - 200.0, f0 + bw/2)  # leave headroom from Nyquist
+    sos_bp = butter(4, [low/(sample_rate_hz/2), high/(sample_rate_hz/2)], btype="band", output="sos")
+    y = sosfiltfilt(sos_bp, x)
 
-    shaped = spectrum * amplitude_shaper
-    shaped *= band_mask.astype(np.float64)
+    # 4) tame level (avoid boosting rare spikes)
+    rms = np.sqrt(np.mean(y*y)) + 1e-12
+    y *= (0.2 / rms)  # target RMS ≈ -14 dBFS
 
-    noise = np.fft.irfft(shaped, n=n_samples)
-    normalize_peak_inplace(noise, 1.0)
-    apply_fades_inplace(noise, FADE_TIME_S, sample_rate_hz)
-    return noise.astype(np.float32)
+    # 5) soft fades
+    fade = int(0.05 * sample_rate_hz)
+    if fade > 0:
+        ramp = np.linspace(0,1,fade)
+        y[:fade]  *= ramp
+        y[-fade:] *= ramp[::-1]
+
+    return y.astype(np.float32)
 
 # ---------------- Oscillators ----------------
 def osc_sine(phase: np.ndarray) -> np.ndarray:
