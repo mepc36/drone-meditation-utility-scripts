@@ -42,8 +42,8 @@ sudo apt-get install libsndfile1
 cd drone-meditation-utility-scripts
 
 # Create a virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install Python Dependencies
 pip install -r requirements.txt

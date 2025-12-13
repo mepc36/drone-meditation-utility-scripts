@@ -11,7 +11,7 @@ import os
 import math
 
 # === CONFIGURATION ===
-root_frequency_hz = 8000.0            # treat as "B" root
+root_frequency_hz = 8165.0            # treat as "B" root
 include_octave_below = True           # add 4 kHz → 8 kHz chromatic
 include_root_octave = True            # keep 8 kHz → 16 kHz chromatic
 duration_seconds = 0.5
