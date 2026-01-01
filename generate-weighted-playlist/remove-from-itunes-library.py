@@ -119,6 +119,36 @@ end tell
     return "deleted" in result.lower()
 
 
+def remove_tracks_batch(track_names: list[str]) -> int:
+    """Remove multiple tracks in a single AppleScript call. Returns count of successful deletions."""
+    # Build a list of track names for AppleScript
+    names_list = '", "'.join(track_names)
+    
+    script = f'''
+tell application "Music"
+    set trackNames to {{"{names_list}"}}
+    set deleteCount to 0
+    
+    repeat with trackName in trackNames
+        try
+            set trackList to (every file track whose name is trackName)
+            repeat with aTrack in trackList
+                delete aTrack
+                set deleteCount to deleteCount + 1
+            end repeat
+        end try
+    end repeat
+    
+    return deleteCount
+end tell
+'''
+    result = run_applescript(script)
+    try:
+        return int(result)
+    except:
+        return 0
+
+
 # -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
@@ -165,19 +195,23 @@ def main() -> None:
     print("\n" + "-"*60)
     print("STEP 2: Removing tracks from iTunes/Music library...")
     print("-"*60)
-    print("This may take a few minutes...\n")
+    print("Processing in batches for faster deletion...\n")
     
     removed_count = 0
-    failed_count = 0
+    batch_size = 50  # Process 50 tracks at a time
+    total_batches = (len(tracks_to_remove) + batch_size - 1) // batch_size
     
-    for i, track_name in enumerate(tracks_to_remove, 1):
-        if i % 50 == 0:
-            print(f"  Progress: {i}/{len(tracks_to_remove)}...")
+    for batch_num in range(total_batches):
+        start_idx = batch_num * batch_size
+        end_idx = min(start_idx + batch_size, len(tracks_to_remove))
+        batch = tracks_to_remove[start_idx:end_idx]
         
-        if remove_track_by_name(track_name):
-            removed_count += 1
-        else:
-            failed_count += 1
+        print(f"  Processing batch {batch_num + 1}/{total_batches} ({len(batch)} tracks)...", end=" ", flush=True)
+        count = remove_tracks_batch(batch)
+        removed_count += count
+        print(f"✓ ({count} removed)")
+    
+    failed_count = len(tracks_to_remove) - removed_count
     
     # Final report
     print("\n" + "="*60)

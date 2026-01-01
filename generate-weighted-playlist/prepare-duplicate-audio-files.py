@@ -2,14 +2,14 @@
 """
 prepare-duplicate-audio-files.py
 
-Prep step: Creates 100 copies of each canonical audio file.
-These copies can then be imported into iTunes/Apple Music.
+Prep step: Creates 100 copies of each canonical audio file and imports them into iTunes/Music.
 
 IMPORTANT: Living.wav is only copied once (no duplicates).
 Living represents the end/completion state and should be rare in the playlist.
 """
 
 import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -103,6 +103,83 @@ def copy_single_file(src: Path) -> Path:
 
 
 # -------------------------------------------------------------------
+# iTunes Import Functions
+# -------------------------------------------------------------------
+def prompt_int(prompt: str, default: int, min_val: int = 1) -> int:
+    """Prompt user for an integer value with a default."""
+    raw = input(f"{prompt} [{default}]: ").strip()
+    if raw == "":
+        return default
+    try:
+        n = int(raw)
+        if n < min_val:
+            raise ValueError(f"Must be at least {min_val}.")
+        return n
+    except ValueError as e:
+        print(f"Invalid input: {e}")
+        return default
+
+
+def run_applescript(script: str) -> str:
+    """Execute an AppleScript and return the output."""
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
+
+
+def import_files_to_itunes(file_paths: list[Path], batch_size: int = 50) -> int:
+    """Import files to iTunes/Music in batches. Returns count of imported files."""
+    print("\nImporting files to iTunes/Music...")
+    print(f"Using batch size: {batch_size}")
+    print("This may take a few minutes...\n")
+    
+    total_batches = (len(file_paths) + batch_size - 1) // batch_size
+    imported_count = 0
+    
+    for batch_num in range(total_batches):
+        start_idx = batch_num * batch_size
+        end_idx = min(start_idx + batch_size, len(file_paths))
+        batch = file_paths[start_idx:end_idx]
+        
+        print(f"  Importing batch {batch_num + 1}/{total_batches} ({len(batch)} files)...", end=" ", flush=True)
+        
+        # Build POSIX file paths for AppleScript
+        posix_paths = '", "'.join(str(p.resolve()) for p in batch)
+        
+        script = f'''
+tell application "Music"
+    set filePaths to {{"{posix_paths}"}}
+    set importCount to 0
+    
+    repeat with filePath in filePaths
+        try
+            add (POSIX file filePath)
+            set importCount to importCount + 1
+        end try
+    end repeat
+    
+    return importCount
+end tell
+'''
+        result = run_applescript(script)
+        try:
+            count = int(result)
+            imported_count += count
+            print(f"✓ ({count} imported)")
+        except:
+            print("✗ (error)")
+    
+    return imported_count
+
+
+# -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
 def main() -> None:
@@ -116,14 +193,21 @@ def main() -> None:
     print(f"Plus 1 copy of {LIVING_FILE} (no duplicates - represents end state)")
     print(f"Total files to create: {COPIES_PER_FILE * len(CANONICAL_FILES) + 1}\n")
     
+    # Ask for batch size before starting
+    print("iTunes Import Configuration:")
+    batch_size = prompt_int("Batch size for iTunes import (files per batch)", default=50, min_val=1)
+    print()
+    
     reset_output_dir()
     
     total_created = 0
+    all_files = []
     
     # Create 100 copies of each standard file
     for filename in CANONICAL_FILES:
         src = SOURCE_DIR / filename
         copies = make_copies(src, COPIES_PER_FILE)
+        all_files.extend(copies)
         total_created += len(copies)
     
     # Copy Living.wav exactly once (no duplicates)
@@ -131,15 +215,23 @@ def main() -> None:
     print(f"\n  Note: {LIVING_FILE} is copied only once.")
     print(f"  This file represents the end state and should only appear rarely in playlists.\n")
     living_path = copy_single_file(SOURCE_DIR / LIVING_FILE)
+    all_files.append(living_path)
     total_created += 1
     
-    print(f"\nDone! Created {total_created} files.")
+    print(f"\nCreation complete! Created {total_created} files.")
     print(f"  - {len(CANONICAL_FILES)} files × {COPIES_PER_FILE} copies = {COPIES_PER_FILE * len(CANONICAL_FILES)} files")
     print(f"  - {LIVING_FILE} × 1 copy = 1 file")
     print(f"Output directory: {AUDIO_OUTPUT_DIR.resolve()}\n")
-    print("Next steps:")
-    print("  1) Import all files from the weighted_audio folder into iTunes/Apple Music")
-    print("  2) Run generate-weighted-playlist.py to create the playlist\n")
+    
+    # Import to iTunes
+    print("="*60)
+    imported_count = import_files_to_itunes(all_files, batch_size)
+    
+    print(f"\nImport complete!")
+    print(f"  Files imported to iTunes/Music: {imported_count}/{total_created}")
+    print(f"\nNext steps:")
+    print(f"  1) Files are now in your iTunes/Music library")
+    print(f"  2) Run generate-weighted-playlist.py to create playlists\n")
 
 
 if __name__ == "__main__":
