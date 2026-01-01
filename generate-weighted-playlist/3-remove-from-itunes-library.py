@@ -24,8 +24,9 @@ CANONICAL_STEMS = config["canonical_files"]
 LIVING_FILE = config["living_file"]
 COPIES_PER_FILE = config["copies_per_file"]
 
-# Playlist location
+# Playlist location and name
 PLAYLIST_PATH = Path("./output/playlists/Maestro — The Playlist.m3u")
+PLAYLIST_NAME = "Maestro — The Playlist"
 
 # -------------------------------------------------------------------
 # File Deletion Functions
@@ -153,7 +154,8 @@ def main() -> None:
     print("This script will:")
     print("  1. Delete physical .wav files from disk")
     print("  2. Remove iTunes/Music library database entries")
-    print("  3. Delete generated playlist file\n")
+    print("  3. Delete playlist from iTunes/Music library")
+    print("  4. Delete generated playlist file\n")
     
     # Build list of all track names
     tracks_to_remove = []
@@ -207,9 +209,33 @@ def main() -> None:
     
     failed_count = len(tracks_to_remove) - removed_count
     
-    # Step 3: Delete playlist file
+    # Step 3: Delete playlist from iTunes/Music library
     print("\n" + "-"*60)
-    print("STEP 3: Deleting playlist file...")
+    print("STEP 3: Deleting playlist from iTunes/Music library...")
+    print("-"*60)
+    
+    playlist_removed_from_itunes = False
+    script = f'''
+tell application "Music"
+    try
+        set targetPlaylist to user playlist "{PLAYLIST_NAME}"
+        delete targetPlaylist
+        return "deleted"
+    on error
+        return "not_found"
+    end try
+end tell
+'''
+    result = run_applescript(script)
+    if "deleted" in result:
+        playlist_removed_from_itunes = True
+        print(f"Removed playlist from iTunes/Music library: {PLAYLIST_NAME}")
+    else:
+        print(f"Playlist not found in iTunes/Music library (or already deleted)")
+    
+    # Step 4: Delete playlist file from disk
+    print("\n" + "-"*60)
+    print("STEP 4: Deleting playlist file from disk...")
     print("-"*60)
     
     playlist_deleted = False
@@ -217,9 +243,9 @@ def main() -> None:
         try:
             PLAYLIST_PATH.unlink()
             playlist_deleted = True
-            print(f"Deleted playlist: {PLAYLIST_PATH}")
+            print(f"Deleted playlist file: {PLAYLIST_PATH}")
         except Exception as e:
-            print(f"Could not delete playlist: {e}")
+            print(f"Could not delete playlist file: {e}")
     else:
         print("Playlist file not found (already deleted or never created)")
     
@@ -229,7 +255,8 @@ def main() -> None:
     print("="*60)
     print(f"Physical files deleted: {deleted_count}")
     print(f"Library entries removed: {removed_count}")
-    print(f"Playlist deleted: {'Yes' if playlist_deleted else 'No'}")
+    print(f"Playlist removed from iTunes: {'Yes' if playlist_removed_from_itunes else 'No'}")
+    print(f"Playlist file deleted: {'Yes' if playlist_deleted else 'No'}")
     if failed_count > 0:
         print(f"Failed or not found: {failed_count}")
     print()
