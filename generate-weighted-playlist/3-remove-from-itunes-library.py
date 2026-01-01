@@ -7,34 +7,25 @@ Complete cleanup script for duplicate audio files:
 2. Removes database entries from iTunes/Music library using AppleScript
 """
 
+import json
 import subprocess
 from pathlib import Path
 
 
 # -------------------------------------------------------------------
-# CONFIG
+# CONFIG: Load from input/config.json
 # -------------------------------------------------------------------
-# iTunes import location for unknown artist/album
-ITUNES_DIR = Path(
-    "/Users/martinconnor/Music/Music/Media.localized/Music/Unknown Artist/Unknown Album"
-)
+CONFIG_PATH = Path("./input/config.json")
+with open(CONFIG_PATH, 'r') as f:
+    config = json.load(f)
 
-# File stems that were duplicated (100 copies each)
-CANONICAL_STEMS = [
-    "Breathing",
-    "Being",
-    "Feeling",
-    "Thinking",
-    "Listening",
-    "Faking",
-    "Waiting"
-]
+ITUNES_DIR = Path(config["itunes_dir"])
+CANONICAL_STEMS = config["canonical_files"]
+LIVING_FILE = config["living_file"]
+COPIES_PER_FILE = config["copies_per_file"]
 
-# Single file (not duplicated)
-LIVING_FILE = "Living"
-
-# Number of copies created per file
-COPIES_PER_FILE = 100
+# Playlist location
+PLAYLIST_PATH = Path("./output/playlists/Maestro — The Playlist.m3u")
 
 # -------------------------------------------------------------------
 # File Deletion Functions
@@ -161,7 +152,8 @@ def main() -> None:
     
     print("This script will:")
     print("  1. Delete physical .wav files from disk")
-    print("  2. Remove iTunes/Music library database entries\n")
+    print("  2. Remove iTunes/Music library database entries")
+    print("  3. Delete generated playlist file\n")
     
     # Build list of all track names
     tracks_to_remove = []
@@ -215,12 +207,29 @@ def main() -> None:
     
     failed_count = len(tracks_to_remove) - removed_count
     
+    # Step 3: Delete playlist file
+    print("\n" + "-"*60)
+    print("STEP 3: Deleting playlist file...")
+    print("-"*60)
+    
+    playlist_deleted = False
+    if PLAYLIST_PATH.exists():
+        try:
+            PLAYLIST_PATH.unlink()
+            playlist_deleted = True
+            print(f"Deleted playlist: {PLAYLIST_PATH}")
+        except Exception as e:
+            print(f"Could not delete playlist: {e}")
+    else:
+        print("Playlist file not found (already deleted or never created)")
+    
     # Final report
     print("\n" + "="*60)
     print("CLEANUP COMPLETE")
     print("="*60)
     print(f"Physical files deleted: {deleted_count}")
     print(f"Library entries removed: {removed_count}")
+    print(f"Playlist deleted: {'Yes' if playlist_deleted else 'No'}")
     if failed_count > 0:
         print(f"Failed or not found: {failed_count}")
     print()

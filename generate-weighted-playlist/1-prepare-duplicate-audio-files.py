@@ -8,39 +8,32 @@ IMPORTANT: Living.wav is only copied once (no duplicates).
 Living represents the end/completion state and should be rare in the playlist.
 """
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
 
 
 # -------------------------------------------------------------------
-# CONFIG: Source folder that contains the 8 canonical archetype WAVs
+# CONFIG: Load from input/config.json
 # -------------------------------------------------------------------
-SOURCE_DIR = Path(
-    "/Users/martinconnor/Music/Music/Media.localized/Music/Maestro/Maestro — The Playlist"
-)
+CONFIG_PATH = Path("./input/config.json")
+with open(CONFIG_PATH, 'r') as f:
+    config = json.load(f)
+
+SOURCE_DIR = Path(config["source_dir"])
+COPIES_PER_FILE = config["copies_per_file"]
 
 # Canonical file names (must match exactly)
 # Note: Living.wav is handled separately - only 1 copy, not 100
-CANONICAL_FILES = [
-    "Breathing.wav",
-    "Being.wav",
-    "Feeling.wav",
-    "Thinking.wav",
-    "Listening.wav",
-    "Faking.wav",
-    "Waiting.wav"
-]
+CANONICAL_FILES = [f"{name}.wav" for name in config["canonical_files"]]
 
 # Living.wav - the end state, should only exist once
-LIVING_FILE = "Living.wav"
+LIVING_FILE = f"{config['living_file']}.wav"
 
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
 AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio"
-
-# Number of copies to create per file
-COPIES_PER_FILE = 50
 
 
 # -------------------------------------------------------------------

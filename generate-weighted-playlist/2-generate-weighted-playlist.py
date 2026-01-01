@@ -11,24 +11,23 @@ Two modes:
 """
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import random
+import subprocess
 
 
 # -------------------------------------------------------------------
-# CONFIG
+# CONFIG: Load from input/config.json
 # -------------------------------------------------------------------
+CONFIG_PATH = Path("./input/config.json")
+with open(CONFIG_PATH, 'r') as f:
+    config = json.load(f)
+
 # Canonical file names (must match the stems used in prepare-copies.py)
-BREATHING = "Breathing"
-LIVING = "Living"
-OTHERS = [
-    "Being",
-    "Feeling",
-    "Thinking",
-    "Listening",
-    "Faking",
-    "Waiting",
-]
+BREATHING = config["canonical_files"][0]  # "Breathing"
+LIVING = config["living_file"]  # "Living"
+OTHERS = config["canonical_files"][1:]  # All except Breathing
 
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
@@ -36,10 +35,10 @@ WEIGHTED_DIR = OUTPUT_DIR / "weighted_audio"
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "Maestro — The Playlist.m3u"
 
 # Number of copies available per file (created by prepare-copies.py)
-COPIES_AVAILABLE = 100
+COPIES_AVAILABLE = config["copies_per_file"]
 
 # Default ratio
-DEFAULT_RATIO = "8:4:1"  # Breathing : Each-Other : Living
+DEFAULT_RATIO = config["default_ratio"]  # Breathing : Each-Other : Living
 
 
 # -------------------------------------------------------------------
@@ -176,17 +175,20 @@ def main() -> None:
         selected_tracks.extend(select_copies(name, plan[name]))
     selected_tracks.extend(select_copies(LIVING, plan[LIVING]))
 
-    # Shuffle the entire playlist for varied playback
-    random.shuffle(selected_tracks)
-
+    # Keep tracks grouped by type (no shuffle)
     write_m3u(selected_tracks)
 
     print("Done.")
     print(f"  Playlist written to: {PLAYLIST_PATH.resolve()}\n")
-    print("Next:")
-    print("  1) Double-click the .m3u to open in Apple Music")
-    print("  2) The playlist will use your pre-imported copies")
-    print("  3) Turn Shuffle ON for varied playback")
+    
+    # Auto-open playlist in Music
+    print("Opening playlist in Music...")
+    subprocess.run(['open', str(PLAYLIST_PATH.resolve())], check=False)
+    
+    print("\nNext:")
+    print("  1) Playlist opened in Apple Music")
+    print("  2) Tracks are grouped by type (Breathing, then others, then Living)")
+    print("  3) Turn Shuffle ON if you want varied playback")
     print("  4) Turn Repeat (All) ON for infinite looping\n")
 
 
