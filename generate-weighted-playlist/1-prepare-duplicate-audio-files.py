@@ -127,43 +127,14 @@ def run_applescript(script: str) -> str:
         return f"Error: {e.stderr}"
 
 
-def import_files_to_itunes(file_paths: list[Path], batch_size: int = 50) -> int:
-    """Import files to iTunes/Music in batches. Returns count of imported files."""
-    print("\nImporting files to iTunes/Music...")
-    print("This may take a few minutes...\n")
-    
-    imported_count = 0
-    total = len(file_paths)
-    total_batches = (total + batch_size - 1) // batch_size
-    
-    for batch_num in range(total_batches):
-        start_idx = batch_num * batch_size
-        end_idx = min(start_idx + batch_size, total)
-        batch = file_paths[start_idx:end_idx]
-        
-        print(f"  Batch {batch_num + 1}/{total_batches}: Importing {len(batch)} files...", end=" ", flush=True)
-        
-        # Build a single AppleScript that adds all files in the batch
-        add_commands = "\n    ".join([f'add POSIX file "{p.resolve()}"' for p in batch])
-        script = f'''
+def import_folder_to_music(folder: Path) -> str:
+    """Import entire folder to iTunes/Music in one operation."""
+    script = f'''
 tell application "Music"
-    {add_commands}
+    add (POSIX file "{folder.resolve()}/")
 end tell
 '''
-        try:
-            subprocess.run(
-                ['osascript', '-e', script],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=30
-            )
-            imported_count += len(batch)
-            print(f"✓")
-        except:
-            print(f"✗")
-    
-    return imported_count
+    return run_applescript(script)
 
 
 # -------------------------------------------------------------------
@@ -207,10 +178,14 @@ def main() -> None:
     
     # Import to iTunes
     print("="*60)
-    imported_count = import_files_to_itunes(all_files)
+    print("Importing entire folder to iTunes/Music...")
+    print("This may take a moment...\n")
+    
+    result = import_folder_to_music(AUDIO_OUTPUT_DIR)
     
     print(f"\nImport complete!")
-    print(f"  Files imported to iTunes/Music: {imported_count}/{total_created}")
+    print(f"  Imported folder: {AUDIO_OUTPUT_DIR.resolve()}")
+    print(f"  Total files: {total_created}")
     print(f"\nNext steps:")
     print(f"  1) Files are now in your iTunes/Music library")
     print(f"  2) Run generate-weighted-playlist.py to create playlists\n")
