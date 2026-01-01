@@ -25,8 +25,8 @@ LIVING_FILE = config["living_file"]
 COPIES_PER_FILE = config["copies_per_file"]
 
 # Playlist location and name
-PLAYLIST_PATH = Path("./output/playlists/Maestro — The Playlist.m3u")
-PLAYLIST_NAME = "Maestro — The Playlist"
+PLAYLIST_NAME = config["playlist_name"]
+PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
 
 # -------------------------------------------------------------------
 # File Deletion Functions

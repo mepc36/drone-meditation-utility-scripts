@@ -34,7 +34,8 @@ ITUNES_DIR = Path(config["itunes_dir"])
 
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
-PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "Maestro — The Playlist.m3u"
+PLAYLIST_NAME = config["playlist_name"]
+PLAYLIST_PATH = OUTPUT_DIR / "playlists" / f"{PLAYLIST_NAME}.m3u"
 
 # Number of copies available per file (created by prepare-copies.py)
 COPIES_AVAILABLE = config["copies_per_file"]
@@ -46,6 +47,20 @@ DEFAULT_RATIO = config["default_ratio"]  # Breathing : Each-Other : Living
 # -------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------
+def run_applescript(script: str) -> str:
+    """Execute an AppleScript and return the output."""
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
+
+
 @dataclass(frozen=True)
 class Ratio:
     breathing: int
@@ -140,6 +155,32 @@ def write_m3u(tracks: list[Path]) -> None:
     PLAYLIST_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 
+def reset_playlist_folder() -> None:
+    """Remove and recreate the playlist folder."""
+    playlist_folder = PLAYLIST_PATH.parent
+    if playlist_folder.exists():
+        import shutil
+        shutil.rmtree(playlist_folder)
+    playlist_folder.mkdir(parents=True, exist_ok=True)
+
+
+def delete_playlist_from_itunes() -> bool:
+    """Delete the playlist from iTunes/Music library if it exists."""
+    script = f'''
+tell application "Music"
+    try
+        set targetPlaylist to user playlist "{PLAYLIST_NAME}"
+        delete targetPlaylist
+        return "deleted"
+    on error
+        return "not_found"
+    end try
+end tell
+'''
+    result = run_applescript(script)
+    return "deleted" in result
+
+
 # -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
@@ -147,6 +188,17 @@ def main() -> None:
     print("\nWeighted Playlist Builder\n")
     print("This script creates a playlist from pre-existing file copies.")
     print("Make sure you've run prepare-copies.py first!\n")
+
+    # Clean playlist folder at start
+    reset_playlist_folder()
+    
+    # Delete existing playlist from iTunes
+    print("Checking for existing playlist in iTunes/Music...")
+    if delete_playlist_from_itunes():
+        print("  Removed existing playlist from iTunes/Music library")
+    else:
+        print("  No existing playlist found")
+    print()
 
     ensure_weighted_files_exist()
 
