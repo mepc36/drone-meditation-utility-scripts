@@ -137,44 +137,38 @@ def run_applescript(script: str) -> str:
 def import_files_to_itunes(file_paths: list[Path], batch_size: int = 50) -> int:
     """Import files to iTunes/Music in batches. Returns count of imported files."""
     print("\nImporting files to iTunes/Music...")
-    print(f"Using batch size: {batch_size}")
     print("This may take a few minutes...\n")
     
-    total_batches = (len(file_paths) + batch_size - 1) // batch_size
     imported_count = 0
+    total = len(file_paths)
+    total_batches = (total + batch_size - 1) // batch_size
     
     for batch_num in range(total_batches):
         start_idx = batch_num * batch_size
-        end_idx = min(start_idx + batch_size, len(file_paths))
+        end_idx = min(start_idx + batch_size, total)
         batch = file_paths[start_idx:end_idx]
         
-        print(f"  Importing batch {batch_num + 1}/{total_batches} ({len(batch)} files)...", end=" ", flush=True)
+        print(f"  Batch {batch_num + 1}/{total_batches}: Importing {len(batch)} files...", end=" ", flush=True)
         
-        # Build POSIX file paths for AppleScript
-        posix_paths = '", "'.join(str(p.resolve()) for p in batch)
-        
+        # Build a single AppleScript that adds all files in the batch
+        add_commands = "\n    ".join([f'add POSIX file "{p.resolve()}"' for p in batch])
         script = f'''
 tell application "Music"
-    set filePaths to {{"{posix_paths}"}}
-    set importCount to 0
-    
-    repeat with filePath in filePaths
-        try
-            add (POSIX file filePath)
-            set importCount to importCount + 1
-        end try
-    end repeat
-    
-    return importCount
+    {add_commands}
 end tell
 '''
-        result = run_applescript(script)
         try:
-            count = int(result)
-            imported_count += count
-            print(f"✓ ({count} imported)")
+            subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30
+            )
+            imported_count += len(batch)
+            print(f"✓")
         except:
-            print("✗ (error)")
+            print(f"✗")
     
     return imported_count
 
@@ -192,11 +186,6 @@ def main() -> None:
     print(f"Creating {COPIES_PER_FILE} copies of each file ({len(CANONICAL_FILES)} files total)...")
     print(f"Plus 1 copy of {LIVING_FILE} (no duplicates - represents end state)")
     print(f"Total files to create: {COPIES_PER_FILE * len(CANONICAL_FILES) + 1}\n")
-    
-    # Ask for batch size before starting
-    print("iTunes Import Configuration:")
-    batch_size = prompt_int("Batch size for iTunes import (files per batch)", default=50, min_val=1)
-    print()
     
     reset_output_dir()
     
@@ -225,7 +214,7 @@ def main() -> None:
     
     # Import to iTunes
     print("="*60)
-    imported_count = import_files_to_itunes(all_files, batch_size)
+    imported_count = import_files_to_itunes(all_files)
     
     print(f"\nImport complete!")
     print(f"  Files imported to iTunes/Music: {imported_count}/{total_created}")
