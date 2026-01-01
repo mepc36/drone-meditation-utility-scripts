@@ -29,9 +29,11 @@ BREATHING = config["canonical_files"][0]  # "Breathing"
 LIVING = config["living_file"]  # "Living"
 OTHERS = config["canonical_files"][1:]  # All except Breathing
 
+# iTunes import location where files actually are
+ITUNES_DIR = Path(config["itunes_dir"])
+
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
-WEIGHTED_DIR = OUTPUT_DIR / "weighted_audio"
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "Maestro — The Playlist.m3u"
 
 # Number of copies available per file (created by prepare-copies.py)
@@ -62,19 +64,19 @@ class Ratio:
 
 
 def ensure_weighted_files_exist() -> None:
-    """Verify the weighted_audio directory exists with copies."""
-    if not WEIGHTED_DIR.exists():
+    """Verify the iTunes directory exists with imported files."""
+    if not ITUNES_DIR.exists():
         raise FileNotFoundError(
-            f"Weighted audio directory not found: {WEIGHTED_DIR}\n"
-            "Please run prepare-copies.py first to create the file copies."
+            f"iTunes directory not found: {ITUNES_DIR}\n"
+            "Please run prepare-copies.py first to import files into iTunes."
         )
     
     # Check if we have any files
-    files = list(WEIGHTED_DIR.glob("*.wav"))
+    files = list(ITUNES_DIR.glob("*.wav"))
     if not files:
         raise FileNotFoundError(
-            f"No audio files found in: {WEIGHTED_DIR}\n"
-            "Please run prepare-copies.py first to create the file copies."
+            f"No audio files found in: {ITUNES_DIR}\n"
+            "Please run prepare-copies.py first to import files into iTunes."
         )
 
 
@@ -82,9 +84,18 @@ def get_available_copies(stem: str) -> list[Path]:
     """
     Get all available copies for a given file stem (e.g., "Breathing").
     Returns list of Paths matching the pattern stem_NNN.wav
+    Special case: Living.wav exists as a single file without numbering.
     """
+    # Living is stored as a single file without numbering
+    if stem == LIVING:
+        living_path = ITUNES_DIR / f"{stem}.wav"
+        if not living_path.exists():
+            raise FileNotFoundError(f"Living file not found: {living_path}")
+        return [living_path]
+    
+    # All other files have numbered copies
     pattern = f"{stem}_*.wav"
-    copies = sorted(WEIGHTED_DIR.glob(pattern))
+    copies = sorted(ITUNES_DIR.glob(pattern))
     if not copies:
         raise FileNotFoundError(f"No copies found for {stem} (pattern: {pattern})")
     return copies
@@ -124,7 +135,7 @@ def build_plan(ratio: Ratio) -> dict[str, int]:
 
 def write_m3u(tracks: list[Path]) -> None:
     """Write playlist file pointing to selected tracks."""
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    PLAYLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
     lines = ["#EXTM3U", *[str(p) for p in tracks], ""]
     PLAYLIST_PATH.write_text("\n".join(lines), encoding="utf-8")
 
