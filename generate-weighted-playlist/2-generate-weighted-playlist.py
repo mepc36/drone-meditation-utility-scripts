@@ -40,8 +40,8 @@ PLAYLIST_PATH = OUTPUT_DIR / "playlists" / f"{PLAYLIST_NAME}.m3u"
 # Number of copies available per file (created by prepare-copies.py)
 COPIES_AVAILABLE = config["copies_per_file"]
 
-# Default ratio
-DEFAULT_RATIO = config["default_ratio"]  # Breathing : Each-Other : Living
+# Samples ratio
+SAMPLES_RATIO = config["samples_ratio"]  # Breathing : Each-Other : Living
 
 
 # -------------------------------------------------------------------
@@ -118,19 +118,20 @@ def get_available_copies(stem: str) -> list[Path]:
 
 def select_copies(stem: str, count: int) -> list[Path]:
     """
-    Randomly select 'count' copies from the available copies of a file.
-    If count > available, uses all available and wraps around with replacement.
+    Select 'count' copies from the available copies, always using the lowest numbered files.
+    If count > available, uses all available and wraps around from the beginning.
     """
     available = get_available_copies(stem)
     
     if count <= len(available):
-        # Select without replacement
-        return random.sample(available, count)
+        # Select the first 'count' files (lowest numbered)
+        return available[:count]
     else:
-        # Need more than available - use all and then sample with replacement
+        # Need more than available - use all and then repeat from the beginning
         selected = available.copy()
         remaining = count - len(available)
-        selected.extend(random.choices(available, k=remaining))
+        # Repeat from the beginning to fill the remaining slots
+        selected.extend(available[:remaining])
         return selected
 
 
@@ -202,20 +203,9 @@ def main() -> None:
 
     ensure_weighted_files_exist()
 
-    print("Choose mode:")
-    print("  1) Use default weights from code")
-    print("  2) Enter weights interactively (ratio like 8:4:1)")
-    mode = input("Enter 1 or 2 [1]: ").strip() or "1"
-    if mode not in ("1", "2"):
-        raise ValueError("Mode must be 1 or 2.")
-
-    if mode == "1":
-        ratio = Ratio.parse(DEFAULT_RATIO)
-        print(f"\nUsing default ratio: {DEFAULT_RATIO}\n")
-    else:
-        ratio_str = input("\nEnter ratio Breathing:Each-Other:Living (e.g. 8:4:1): ").strip()
-        ratio = Ratio.parse(ratio_str)
-        print(f"\nUsing ratio: {ratio.breathing}:{ratio.each_other}:{ratio.living}\n")
+    # Use ratio from config
+    ratio = Ratio.parse(SAMPLES_RATIO)
+    print(f"Using ratio from config: {SAMPLES_RATIO}\n")
 
     plan = build_plan(ratio)
 
@@ -228,8 +218,8 @@ def main() -> None:
     print(f"  {LIVING}: {plan[LIVING]}")
     print(f"\nTotal tracks in playlist: {total}\n")
 
-    # Select copies randomly according to the plan
-    print("Building playlist with random selection...")
+    # Select copies (using lowest numbered files)
+    print("Building playlist (selecting lowest numbered files)...")
     selected_tracks: list[Path] = []
 
     # Select in order: Breathing, Others, Living (grouped blocks)
