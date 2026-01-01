@@ -40,7 +40,7 @@ OUTPUT_DIR = Path("./output")
 AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio"
 
 # Number of copies to create per file
-COPIES_PER_FILE = 100
+COPIES_PER_FILE = 50
 
 
 # -------------------------------------------------------------------
