@@ -22,7 +22,18 @@ with open(CONFIG_PATH, 'r') as f:
 ITUNES_DIR = Path(config["itunes_dir"])
 CANONICAL_STEMS = config["canonical_files"]
 LIVING_FILE = config["living_file"]
+SILENCE_FILE = "Silence"
 COPIES_PER_FILE = config["copies_per_file"]
+
+# Parse samples_ratio to get actual copy counts
+ratio_parts = [int(x) for x in config["samples_ratio"].split(":")]
+BREATHING_COPIES = ratio_parts[0]  # First number for Breathing
+OTHER_COPIES = ratio_parts[1]  # Second number for other 6 activities
+LIVING_COPIES = ratio_parts[2]  # Third number for Living
+SILENCE_COPIES = ratio_parts[3] if len(ratio_parts) > 3 else 0  # Fourth number for Silence
+
+BREATHING_STEM = CANONICAL_STEMS[0]  # "Breathing"
+OTHER_STEMS = CANONICAL_STEMS[1:]  # All except Breathing
 
 # Playlist location and name
 PLAYLIST_NAME = config["playlist_name"]
@@ -33,7 +44,7 @@ PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
 # -------------------------------------------------------------------
 def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:
     """
-    Delete physical .wav files from iTunes directory.
+    Delete physical .wav files from iTunes directory based on samples_ratio.
     Returns (deleted_count, errors_list).
     """
     if not ITUNES_DIR.exists():
@@ -42,18 +53,40 @@ def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:
     
     files_to_delete = []
     
-    # Find all numbered copies
-    for stem in CANONICAL_STEMS:
-        for i in range(1, COPIES_PER_FILE + 1):
+    # Find Breathing copies (first ratio number)
+    for i in range(1, BREATHING_COPIES + 1):
+        filename = f"{BREATHING_STEM}_{i:03d}.wav"
+        filepath = ITUNES_DIR / filename
+        if filepath.exists():
+            files_to_delete.append(filepath)
+    
+    # Find other canonical files copies (second ratio number)
+    for stem in OTHER_STEMS:
+        for i in range(1, OTHER_COPIES + 1):
             filename = f"{stem}_{i:03d}.wav"
             filepath = ITUNES_DIR / filename
             if filepath.exists():
                 files_to_delete.append(filepath)
     
-    # Find Living.wav
-    living_path = ITUNES_DIR / f"{LIVING_FILE}.wav"
-    if living_path.exists():
-        files_to_delete.append(living_path)
+    # Find Living files (third ratio number)
+    if LIVING_COPIES == 1:
+        living_path = ITUNES_DIR / f"{LIVING_FILE}.wav"
+        if living_path.exists():
+            files_to_delete.append(living_path)
+    else:
+        for i in range(1, LIVING_COPIES + 1):
+            filename = f"{LIVING_FILE}_{i:03d}.wav"
+            filepath = ITUNES_DIR / filename
+            if filepath.exists():
+                files_to_delete.append(filepath)
+    
+    # Find Silence files (fourth ratio number)
+    if SILENCE_COPIES > 0:
+        for i in range(1, SILENCE_COPIES + 1):
+            filename = f"{SILENCE_FILE}_{i:03d}.wav"
+            filepath = ITUNES_DIR / filename
+            if filepath.exists():
+                files_to_delete.append(filepath)
     
     if not files_to_delete:
         print("No physical files found to delete.")
@@ -157,13 +190,29 @@ def main() -> None:
     print("  3. Delete playlist from iTunes/Music library")
     print("  4. Delete generated playlist file\n")
     
-    # Build list of all track names
+    # Build list of all track names based on samples_ratio
     tracks_to_remove = []
-    for stem in CANONICAL_STEMS:
-        for i in range(1, COPIES_PER_FILE + 1):
-            track_name = f"{stem}_{i:03d}"
-            tracks_to_remove.append(track_name)
-    tracks_to_remove.append(LIVING_FILE)
+    
+    # Add Breathing tracks (first ratio number)
+    for i in range(1, BREATHING_COPIES + 1):
+        tracks_to_remove.append(f"{BREATHING_STEM}_{i:03d}")
+    
+    # Add other canonical tracks (second ratio number)
+    for stem in OTHER_STEMS:
+        for i in range(1, OTHER_COPIES + 1):
+            tracks_to_remove.append(f"{stem}_{i:03d}")
+    
+    # Add Living tracks (third ratio number)
+    if LIVING_COPIES == 1:
+        tracks_to_remove.append(LIVING_FILE)
+    else:
+        for i in range(1, LIVING_COPIES + 1):
+            tracks_to_remove.append(f"{LIVING_FILE}_{i:03d}")
+    
+    # Add Silence tracks (fourth ratio number)
+    if SILENCE_COPIES > 0:
+        for i in range(1, SILENCE_COPIES + 1):
+            tracks_to_remove.append(f"{SILENCE_FILE}_{i:03d}")
     
     print(f"Total items to process: {len(tracks_to_remove)}\n")
     
