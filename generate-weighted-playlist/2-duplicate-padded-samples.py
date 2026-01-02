@@ -25,19 +25,25 @@ CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
-SOURCE_DIR = Path(config["source_dir"])
-COPIES_PER_FILE = config["copies_per_file"]
+# Read from padded samples output directory
+SOURCE_DIR = Path("./output/audio/padded-audio-samples")
 
-# Canonical file names (must match exactly)
-# Note: Living.wav is handled separately - only 1 copy, not 100
-CANONICAL_FILES = [f"{name}.wav" for name in config["canonical_files"]]
+# Parse samples_ratio (e.g., "8:4:1:4" means 8:4:1:4)
+ratio_parts = [int(x) for x in config["samples_ratio"].split(":")]
+BREATHING_COPIES = ratio_parts[0]  # First number for Breathing
+OTHER_CANONICAL_COPIES = ratio_parts[1]  # Second number for other 6 activities
+LIVING_COPIES = ratio_parts[2]  # Third number for Living
+SILENCE_COPIES = ratio_parts[3] if len(ratio_parts) > 3 else 0  # Fourth number for Silence
 
-# Living.wav - the end state, should only exist once
+# Canonical file names
+BREATHING_FILE = "Breathing.wav"
+OTHER_CANONICAL_FILES = [f"{name}.wav" for name in config["canonical_files"][1:]]  # Skip Breathing
 LIVING_FILE = f"{config['living_file']}.wav"
+SILENCE_FILE = "Silence.wav"
 
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
-AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio"
+AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio" / "duplicated-padded-samples"
 
 
 # -------------------------------------------------------------------
@@ -45,25 +51,34 @@ AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio"
 # -------------------------------------------------------------------
 def ensure_source_files_exist() -> None:
     """Verify all canonical source files exist."""
+    if not SOURCE_DIR.exists():
+        raise FileNotFoundError(
+            f"Padded samples directory not found: {SOURCE_DIR}\n"
+            "Please run 1-pad-samples-with-silence.py first."
+        )
+    
     missing = []
-    for name in CANONICAL_FILES:
+    # Check Breathing
+    if not (SOURCE_DIR / BREATHING_FILE).exists():
+        missing.append(str(SOURCE_DIR / BREATHING_FILE))
+    # Check other canonical files
+    for name in OTHER_CANONICAL_FILES:
         if not (SOURCE_DIR / name).exists():
             missing.append(str(SOURCE_DIR / name))
-    # Also check for Living.wav
+    # Check Living
     if not (SOURCE_DIR / LIVING_FILE).exists():
         missing.append(str(SOURCE_DIR / LIVING_FILE))
+    # Check Silence
+    if not (SOURCE_DIR / SILENCE_FILE).exists():
+        missing.append(str(SOURCE_DIR / SILENCE_FILE))
+    
     if missing:
         raise FileNotFoundError("Missing expected source file(s):\n" + "\n".join(missing))
 
 
 def reset_output_dir() -> None:
-    """Clear and recreate the output directory."""
-    # Remove entire output/audio directory if it exists
-    audio_dir = OUTPUT_DIR / "audio"
-    if audio_dir.exists():
-        shutil.rmtree(audio_dir)
-    
-    # Recreate the weighted_audio directory
+    """Clear and recreate the output directory for duplicates only (don't touch padded-audio-samples)."""
+    # Only remove the AUDIO_OUTPUT_DIR (duplicates), not the entire audio directory
     if AUDIO_OUTPUT_DIR.exists():
         shutil.rmtree(AUDIO_OUTPUT_DIR)
     AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -151,33 +166,54 @@ def main() -> None:
     
     ensure_source_files_exist()
     
-    print(f"Creating {COPIES_PER_FILE} copies of each file ({len(CANONICAL_FILES)} files total)...")
-    print(f"Plus 1 copy of {LIVING_FILE} (no duplicates - represents end state)")
-    print(f"Total files to create: {COPIES_PER_FILE * len(CANONICAL_FILES) + 1}\n")
+    print(f"Creating copies based on ratio {config['samples_ratio']}:")
+    print(f"  - {BREATHING_FILE}: {BREATHING_COPIES} copies")
+    print(f"  - Other activities (6 files): {OTHER_CANONICAL_COPIES} copies each")
+    print(f"  - {LIVING_FILE}: {LIVING_COPIES} copy")
+    print(f"  - {SILENCE_FILE}: {SILENCE_COPIES} copies")
+    total_to_create = BREATHING_COPIES + (OTHER_CANONICAL_COPIES * len(OTHER_CANONICAL_FILES)) + LIVING_COPIES + SILENCE_COPIES
+    print(f"Total files to create: {total_to_create}\n")
     
     reset_output_dir()
     
     total_created = 0
     all_files = []
     
-    # Create 100 copies of each standard file
-    for filename in CANONICAL_FILES:
+    # Create copies of Breathing (first ratio number)
+    src = SOURCE_DIR / BREATHING_FILE
+    copies = make_copies(src, BREATHING_COPIES)
+    all_files.extend(copies)
+    total_created += len(copies)
+    
+    # Create copies of other canonical files (second ratio number)
+    for filename in OTHER_CANONICAL_FILES:
         src = SOURCE_DIR / filename
-        copies = make_copies(src, COPIES_PER_FILE)
+        copies = make_copies(src, OTHER_CANONICAL_COPIES)
         all_files.extend(copies)
         total_created += len(copies)
     
-    # Copy Living.wav exactly once (no duplicates)
-    # Living represents the end/completion state and should be rare
-    print(f"\n  Note: {LIVING_FILE} is copied only once.")
-    print(f"  This file represents the end state and should only appear rarely in playlists.\n")
-    living_path = copy_single_file(SOURCE_DIR / LIVING_FILE)
-    all_files.append(living_path)
-    total_created += 1
+    # Create copies of Living (third ratio number)
+    src = SOURCE_DIR / LIVING_FILE
+    if LIVING_COPIES == 1:
+        living_path = copy_single_file(src)
+        all_files.append(living_path)
+        total_created += 1
+    else:
+        copies = make_copies(src, LIVING_COPIES)
+        all_files.extend(copies)
+        total_created += len(copies)
+    
+    # Create copies of Silence (fourth ratio number)
+    src = SOURCE_DIR / SILENCE_FILE
+    copies = make_copies(src, SILENCE_COPIES)
+    all_files.extend(copies)
+    total_created += len(copies)
     
     print(f"\nCreation complete! Created {total_created} files.")
-    print(f"  - {len(CANONICAL_FILES)} files × {COPIES_PER_FILE} copies = {COPIES_PER_FILE * len(CANONICAL_FILES)} files")
-    print(f"  - {LIVING_FILE} × 1 copy = 1 file")
+    print(f"  - {BREATHING_FILE} × {BREATHING_COPIES} = {BREATHING_COPIES} files")
+    print(f"  - Other activities × {OTHER_CANONICAL_COPIES} = {OTHER_CANONICAL_COPIES * len(OTHER_CANONICAL_FILES)} files")
+    print(f"  - {LIVING_FILE} × {LIVING_COPIES} = {LIVING_COPIES} file")
+    print(f"  - {SILENCE_FILE} × {SILENCE_COPIES} = {SILENCE_COPIES} files")
     print(f"Output directory: {AUDIO_OUTPUT_DIR.resolve()}\n")
     
     # Import to iTunes
