@@ -27,6 +27,7 @@ with open(CONFIG_PATH, 'r') as f:
 # Canonical file names (must match the stems used in prepare-copies.py)
 BREATHING = config["canonical_files"][0]  # "Breathing"
 LIVING = config["living_file"]  # "Living"
+SILENCE = "Silence"  # Silence file
 OTHERS = config["canonical_files"][1:]  # All except Breathing
 
 # iTunes import location where files actually are
@@ -66,16 +67,17 @@ class Ratio:
     breathing: int
     each_other: int
     living: int
+    silence: int
 
     @staticmethod
     def parse(s: str) -> "Ratio":
         parts = s.strip().split(":")
-        if len(parts) != 3:
-            raise ValueError("Ratio must look like '8:4:1' (Breathing:Each-Other:Living).")
-        b, o, l = (int(p.strip()) for p in parts)
-        if b <= 0 or o <= 0 or l <= 0:
-            raise ValueError("All ratio parts must be positive integers.")
-        return Ratio(breathing=b, each_other=o, living=l)
+        if len(parts) != 4:
+            raise ValueError("Ratio must look like '8:4:1:4' (Breathing:Each-Other:Living:Silence).")
+        b, o, l, si = (int(p.strip()) for p in parts)
+        if b <= 0 or o <= 0 or l <= 0 or si < 0:
+            raise ValueError("All ratio parts must be positive integers (silence can be 0).")
+        return Ratio(breathing=b, each_other=o, living=l, silence=si)
 
 
 def ensure_weighted_files_exist() -> None:
@@ -99,20 +101,19 @@ def get_available_copies(stem: str) -> list[Path]:
     """
     Get all available copies for a given file stem (e.g., "Breathing").
     Returns list of Paths matching the pattern stem_NNN.wav
-    Special case: Living.wav exists as a single file without numbering.
+    Special cases: Living.wav and Silence.wav may have numbered copies.
     """
-    # Living is stored as a single file without numbering
-    if stem == LIVING:
-        living_path = ITUNES_DIR / f"{stem}.wav"
-        if not living_path.exists():
-            raise FileNotFoundError(f"Living file not found: {living_path}")
-        return [living_path]
-    
-    # All other files have numbered copies
+    # Check for both numbered copies and single file
     pattern = f"{stem}_*.wav"
     copies = sorted(ITUNES_DIR.glob(pattern))
+    
+    # If no numbered copies found, check for single file (Living or Silence might be single)
     if not copies:
-        raise FileNotFoundError(f"No copies found for {stem} (pattern: {pattern})")
+        single_path = ITUNES_DIR / f"{stem}.wav"
+        if single_path.exists():
+            return [single_path]
+        raise FileNotFoundError(f"No copies found for {stem} (pattern: {pattern} or {stem}.wav)")
+    
     return copies
 
 
@@ -143,6 +144,7 @@ def build_plan(ratio: Ratio) -> dict[str, int]:
     plan = {
         BREATHING: ratio.breathing,
         LIVING: ratio.living,
+        SILENCE: ratio.silence,
     }
     for name in OTHERS:
         plan[name] = ratio.each_other
@@ -216,17 +218,20 @@ def main() -> None:
     for name in OTHERS:
         print(f"  {name}: {plan[name]}")
     print(f"  {LIVING}: {plan[LIVING]}")
+    print(f"  {SILENCE}: {plan[SILENCE]}")
     print(f"\nTotal tracks in playlist: {total}\n")
 
     # Select copies (using lowest numbered files)
     print("Building playlist (selecting lowest numbered files)...")
     selected_tracks: list[Path] = []
 
-    # Select in order: Breathing, Others, Living (grouped blocks)
+    # Select in order: Breathing, Others, Living, Silence (grouped blocks)
     selected_tracks.extend(select_copies(BREATHING, plan[BREATHING]))
     for name in OTHERS:
         selected_tracks.extend(select_copies(name, plan[name]))
     selected_tracks.extend(select_copies(LIVING, plan[LIVING]))
+    if plan[SILENCE] > 0:
+        selected_tracks.extend(select_copies(SILENCE, plan[SILENCE]))
 
     # Keep tracks grouped by type (no shuffle)
     write_m3u(selected_tracks)
