@@ -233,7 +233,9 @@ def main() -> None:
     if plan[SILENCE] > 0:
         selected_tracks.extend(select_copies(SILENCE, plan[SILENCE]))
 
-    # Keep tracks grouped by type (no shuffle)
+    # Sort tracks alphabetically by filename for better organization
+    selected_tracks.sort(key=lambda p: p.name)
+    
     write_m3u(selected_tracks)
 
     print("Done.")
