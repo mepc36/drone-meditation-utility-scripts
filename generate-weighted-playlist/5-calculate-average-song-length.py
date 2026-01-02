@@ -55,6 +55,9 @@ def calculate_expected_duration() -> dict:
         - expected_non_living_plays: Expected non-Living tracks before Living
         - expected_duration_seconds: Expected total duration in seconds
         - expected_duration_minutes: Expected total duration in minutes
+        - std_dev_seconds: Standard deviation of duration in seconds
+        - lower_bound_1sd: Duration 1 standard deviation below mean
+        - upper_bound_1sd: Duration 1 standard deviation above mean
     """
     # Count total tracks
     total_breathing = BREATHING_COUNT
@@ -66,11 +69,7 @@ def calculate_expected_duration() -> dict:
     non_living_tracks = total_tracks - total_living
     
     # Geometric distribution:
-    # Probability of selecting Living on any random pick = LIVING_COUNT / total_tracks
     # Expected number of picks until Living is selected = total_tracks / LIVING_COUNT
-    # Since LIVING_COUNT = 1, expected picks = total_tracks
-    
-    # This includes the Living track itself
     expected_picks_until_living = total_tracks / LIVING_COUNT
     expected_non_living_plays = expected_picks_until_living - LIVING_COUNT
     
@@ -79,12 +78,31 @@ def calculate_expected_duration() -> dict:
     expected_duration_seconds = expected_non_living_plays * DESIRED_SAMPLE_LENGTH
     expected_duration_minutes = expected_duration_seconds / 60
     
+    # Standard deviation calculation:
+    # For geometric distribution, variance of number of trials = N(N-1) where N = total_tracks
+    # Standard deviation of number of non-Living plays = sqrt(N(N-1))
+    # Standard deviation of duration = sqrt(N(N-1)) * sample_length
+    import math
+    variance_trials = total_tracks * (total_tracks - 1)
+    std_dev_trials = math.sqrt(variance_trials)
+    std_dev_seconds = std_dev_trials * DESIRED_SAMPLE_LENGTH
+    
+    lower_bound_1sd = expected_duration_seconds - std_dev_seconds
+    upper_bound_1sd = expected_duration_seconds + std_dev_seconds
+    
+    # Ensure lower bound doesn't go negative
+    if lower_bound_1sd < 0:
+        lower_bound_1sd = 0
+    
     return {
         "total_tracks": total_tracks,
         "non_living_tracks": non_living_tracks,
         "expected_non_living_plays": expected_non_living_plays,
         "expected_duration_seconds": expected_duration_seconds,
         "expected_duration_minutes": expected_duration_minutes,
+        "std_dev_seconds": std_dev_seconds,
+        "lower_bound_1sd": lower_bound_1sd,
+        "upper_bound_1sd": upper_bound_1sd,
         "breathing_count": total_breathing,
         "others_count": total_others,
         "living_count": total_living,
@@ -137,14 +155,23 @@ def main() -> None:
     print(f"  (Song ends when Living arrives, not after it plays)")
     print(f"\n  Total expected duration: {result['expected_duration_seconds']:.1f} seconds")
     print(f"                         = {result['expected_duration_minutes']:.2f} minutes")
-    print(f"                         = {format_duration(result['expected_duration_seconds'])}\n")
+    print(f"                         = {format_duration(result['expected_duration_seconds'])}")
+    
+    print(f"\n  Standard deviation: {result['std_dev_seconds']:.1f} seconds")
+    print(f"                    = {result['std_dev_seconds']/60:.2f} minutes")
+    
+    print(f"\n  68% confidence interval (±1 SD):")
+    print(f"    Lower bound: {result['lower_bound_1sd']:.1f}s = {format_duration(result['lower_bound_1sd'])}")
+    print(f"    Upper bound: {result['upper_bound_1sd']:.1f}s = {format_duration(result['upper_bound_1sd'])}\n")
     
     print("Interpretation:")
     print("  On average, when listening to this playlist on random shuffle")
     print("  (with each track selection being independent and random),")
     print(f"  you will listen for approximately {format_duration(result['expected_duration_seconds'])}")
     print("  before the Living sample arrives and the session ends.")
-    print("  (The Living sample itself is not included in this duration.)\n")
+    print("  (The Living sample itself is not included in this duration.)")
+    print(f"\n  About 68% of sessions will fall between:")
+    print(f"    {format_duration(result['lower_bound_1sd'])} and {format_duration(result['upper_bound_1sd'])}\n")
 
 
 if __name__ == "__main__":
