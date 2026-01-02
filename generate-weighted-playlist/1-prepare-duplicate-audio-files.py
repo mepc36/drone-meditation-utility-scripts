@@ -15,9 +15,13 @@ from pathlib import Path
 
 
 # -------------------------------------------------------------------
-# CONFIG: Load from input/config.json
+# CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
-CONFIG_PATH = Path("./input/config.json")
+CONFIG_PATH = Path("./input/config/config.json")
+
+# Ensure input directory structure exists
+CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 

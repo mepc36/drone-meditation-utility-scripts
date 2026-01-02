@@ -18,9 +18,9 @@ import subprocess
 
 
 # -------------------------------------------------------------------
-# CONFIG: Load from input/config.json
+# CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
-CONFIG_PATH = Path("./input/config.json")
+CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
