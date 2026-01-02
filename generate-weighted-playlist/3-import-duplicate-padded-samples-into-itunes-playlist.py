@@ -233,8 +233,8 @@ def main() -> None:
     if plan[SILENCE] > 0:
         selected_tracks.extend(select_copies(SILENCE, plan[SILENCE]))
 
-    # Sort tracks alphabetically by filename for better organization
-    selected_tracks.sort(key=lambda p: p.name)
+    # Sort tracks: Breathing first, then everything else alphabetically
+    selected_tracks.sort(key=lambda p: (0 if p.name.startswith('Breathing') else 1, p.name))
     
     write_m3u(selected_tracks)
 
