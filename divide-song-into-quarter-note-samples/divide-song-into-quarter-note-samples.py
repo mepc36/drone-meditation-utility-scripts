@@ -73,19 +73,17 @@ def save_song_config(config_file: Path, config_data: dict) -> None:
         json.dump(config_data, f, indent=2)
 
 
-def get_bpm(audio_file: Path, config_dir: Path) -> tuple[float, float]:
+def get_bpm(audio_file: Path) -> tuple[float, float]:
     """Get BPM and downbeat offset for an audio file, using config if available.
     
     Args:
         audio_file: Path to the audio file
-        config_dir: Path to the song-configs directory
         
     Returns:
         Tuple of (bpm, downbeat_offset) where downbeat_offset is in seconds
     """
-    # Get config file path using kebab-case name
-    kebab_name = filename_to_kebab_case(audio_file.name)
-    config_file = config_dir / f"{kebab_name}.json"
+    # Get config file path (same directory as audio file, same name with .json extension)
+    config_file = audio_file.with_suffix('.json')
     
     # Load config
     config_data = load_song_config(config_file)
@@ -223,7 +221,6 @@ def main():
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
     output_dir = script_dir / "output" / "audio"
-    config_dir = input_dir / "song-configs"
     
     # Clear output directory before running
     output_base = script_dir / "output"
@@ -234,8 +231,8 @@ def main():
     # Ensure directories exist
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all audio files from input directory (common formats)
-    audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
+    # Get all audio files from input directory (common formats) - search recursively
+    audio_extensions = ['**/*.mp3', '**/*.wav', '**/*.flac', '**/*.m4a', '**/*.aac', '**/*.ogg', '**/*.wma']
     audio_files = []
     for ext in audio_extensions:
         audio_files.extend(input_dir.glob(ext))
@@ -253,7 +250,7 @@ def main():
         print("Remove other files to process a different one.\n")
     
     # Get BPM and downbeat offset (from config or detect)
-    bpm, downbeat_offset = get_bpm(audio_file, config_dir)
+    bpm, downbeat_offset = get_bpm(audio_file)
     
     # Process the file
     divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir)
