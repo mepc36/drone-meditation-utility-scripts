@@ -73,17 +73,16 @@ def save_song_config(config_file: Path, config_data: dict) -> None:
         json.dump(config_data, f, indent=2)
 
 
-def get_bpm(audio_file: Path) -> tuple[float, float]:
+def get_bpm(audio_file: Path, config_file: Path) -> tuple[float, float]:
     """Get BPM and downbeat offset for an audio file, using config if available.
     
     Args:
         audio_file: Path to the audio file
+        config_file: Path to the config file
         
     Returns:
         Tuple of (bpm, downbeat_offset) where downbeat_offset is in seconds
     """
-    # Get config file path (same directory as audio file, same name with .json extension)
-    config_file = audio_file.with_suffix('.json')
     
     # Load config
     config_data = load_song_config(config_file)
@@ -179,8 +178,15 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     num_segments = int(total_samples / quarter_note_samples)
     print(f"Number of quarter note segments: {num_segments}")
     
+    # Get song name from directory structure (not from audio filename)
+    # For main audio: ./input/{SONG_NAME}/audio/{filename}.mp3 -> use SONG_NAME
+    # For vocals: ./input/{SONG_NAME}/demucs/vocals.wav -> use SONG_NAME
+    if is_vocals:
+        song_name = audio_file.parent.parent.name  # demucs parent's parent is SONG_NAME
+    else:
+        song_name = audio_file.parent.parent.name  # audio parent's parent is SONG_NAME
+    
     # Determine output directory based on track type
-    song_name = audio_file.stem if not is_vocals else audio_file.parent.parent.name
     if is_vocals:
         song_output_dir = output_base_dir / song_name / "quarter-note-samples-vocals"
     else:
@@ -232,36 +238,47 @@ def main():
     # Ensure directories exist (don't clear output - vocals.wav is there!)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all audio files from input directory (common formats) - search recursively
-    audio_extensions = ['**/*.mp3', '**/*.wav', '**/*.flac', '**/*.m4a', '**/*.aac', '**/*.ogg', '**/*.wma']
+    # Get all audio files from input/*/audio/ directories (common formats)
+    audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
     audio_files = []
-    for ext in audio_extensions:
-        # Exclude files in demucs directories
-        for f in input_dir.glob(ext):
-            if 'demucs' not in f.parts:
-                audio_files.append(f)
+    for song_dir in input_dir.iterdir():
+        if song_dir.is_dir() and song_dir.name != '.DS_Store':
+            audio_subdir = song_dir / "audio"
+            if audio_subdir.exists():
+                for ext in audio_extensions:
+                    audio_files.extend(audio_subdir.glob(ext))
     
     if not audio_files:
-        print("No audio files found in ./input directory")
-        print(f"Supported formats: {', '.join([e.replace('**/*', '') for e in audio_extensions])}")
+        print("No audio files found in ./input/*/audio/ directories")
+        print(f"Supported formats: {', '.join(audio_extensions)}")
         return
     
-    # Use only the first file
+    if len(audio_files) > 1:
+        print(f"Error: Found {len(audio_files)} audio files, but only 1 is allowed.")
+        print("\nFound files:")
+        for f in audio_files:
+            print(f"  - {f}")
+        print("\nPlease ensure there is only 1 audio file in ./input/*/audio/ directories.")
+        raise ValueError(f"Expected 1 audio file, found {len(audio_files)}")
+    
+    # Process the single audio file
     audio_file = audio_files[0]
     
-    if len(audio_files) > 1:
-        print(f"Warning: Found {len(audio_files)} audio files. Processing only: {audio_file.name}")
-        print("Remove other files to process a different one.\n")
+    # Get song name from grandparent directory (audio file is in ./input/{SONG_NAME}/audio/)
+    song_name = audio_file.parent.parent.name
+    song_dir = input_dir / song_name
+    
+    # Get config file path from ./input/{SONG_NAME}/config/config.json
+    config_file = song_dir / "config" / "config.json"
     
     # Get BPM and downbeat offset (from config or detect)
-    bpm, downbeat_offset = get_bpm(audio_file)
+    bpm, downbeat_offset = get_bpm(audio_file, config_file)
     
     # Process the main audio file
     print(f"\nProcessing main audio file...")
     divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
     
     # Check if vocals.wav exists in the demucs directory
-    song_dir = audio_file.parent
     vocals_file = song_dir / "demucs" / "vocals.wav"
     
     if vocals_file.exists():

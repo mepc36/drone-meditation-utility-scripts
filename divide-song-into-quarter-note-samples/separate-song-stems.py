@@ -159,28 +159,41 @@ def main():
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
     
-    # Get all audio files from input directory (common formats) - search recursively
-    audio_extensions = ['**/*.mp3', '**/*.wav', '**/*.flac', '**/*.m4a', '**/*.aac', '**/*.ogg', '**/*.wma']
+    # Get all audio files from input/*/audio/ directories (common formats)
+    audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
     audio_files = []
-    for ext in audio_extensions:
-        audio_files.extend(input_dir.glob(ext))
+    for song_dir in input_dir.iterdir():
+        if song_dir.is_dir() and song_dir.name != '.DS_Store':
+            audio_subdir = song_dir / "audio"
+            if audio_subdir.exists():
+                for ext in audio_extensions:
+                    audio_files.extend(audio_subdir.glob(ext))
     
     if not audio_files:
-        print("No audio files found in ./input directory")
-        print(f"Supported formats: {', '.join([e.replace('*', '') for e in audio_extensions])}")
+        print("No audio files found in ./input/*/audio/ directories")
+        print(f"Supported formats: {', '.join(audio_extensions)}")
         return
     
-    # Process all audio files
-    for audio_file in audio_files:
-        print(f"\n{'='*80}")
-        print(f"Processing: {audio_file.name}")
-        print(f"{'='*80}")
-        
-        # Get song directory (parent of audio file)
-        song_dir = audio_file.parent
-        
-        # Get config file path (same directory as audio file)
-        config_file = audio_file.with_suffix('.json')
+    if len(audio_files) > 1:
+        print(f"Error: Found {len(audio_files)} audio files, but only 1 is allowed.")
+        print("\nFound files:")
+        for f in audio_files:
+            print(f"  - {f}")
+        print("\nPlease ensure there is only 1 audio file in ./input/*/audio/ directories.")
+        raise ValueError(f"Expected 1 audio file, found {len(audio_files)}")
+    
+    # Process the single audio file
+    audio_file = audio_files[0]
+    print(f"\n{'='*80}")
+    print(f"Processing: {audio_file.name}")
+    print(f"{'='*80}")
+    
+    # Get song name from grandparent directory (audio file is in ./input/{SONG_NAME}/audio/)
+    song_name = audio_file.parent.parent.name
+    song_dir = input_dir / song_name
+    
+    # Get config file path from ./input/{SONG_NAME}/config/config.json
+    config_file = song_dir / "config" / "config.json"
         
         # Load config
         config_data = load_song_config(config_file)
@@ -191,30 +204,22 @@ def main():
             print(f"  Config file: {config_file}")
             print(f"  Skipping Demucs processing.")
             print(f"\nTo re-process, use the -f flag or set 'source_separated' to false in the config file.")
-            continue
-        
-        if args.force and config_data.get("source_separated", False):
-            print(f"⚠ Force flag detected - ignoring source_separated status")
-        
-        # Run Demucs
-        success = run_demucs(audio_file, song_dir)
-        
-        if success:
-            # Update config to mark as source separated
-            config_data["source_separated"] = True
-            save_song_config(config_file, config_data)
-            
-            print(f"\n✓ Source separation complete!")
-            print(f"  Output directory: {song_dir / 'demucs'}")
-            print(f"  Config updated: {config_file}")
-            print(f"  Marked as source_separated: true")
-        else:
-            print(f"\n✗ Source separation failed for {audio_file.name}")
+        return
     
-    print(f"\n{'='*80}")
-    print("Processing complete!")
-    print(f"{'='*80}")
-
-
-if __name__ == "__main__":
-    main()
+    if args.force and config_data.get("source_separated", False):
+        print(f"⚠ Force flag detected - ignoring source_separated status")
+    
+    # Run Demucs
+    success = run_demucs(audio_file, song_dir)
+    
+    if success:
+        # Update config to mark as source separated
+        config_data["source_separated"] = True
+        save_song_config(config_file, config_data)
+        
+        print(f"\n✓ Source separation complete!")
+        print(f"  Output directory: {song_dir / 'demucs'}")
+        print(f"  Config updated: {config_file}")
+        print(f"  Marked as source_separated: true")
+    else:
+        print(f"\n✗ Source separation failed for {audio_file.name}")
