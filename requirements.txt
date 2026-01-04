@@ -2,6 +2,7 @@
 numpy>=1.19.5,<3.0.0
 soundfile>=0.12.1
 scipy>=1.11
+librosa>=0.10.0
 
 # Optional: uncomment if you want to pin to tested versions
 # numpy==1.23.5
