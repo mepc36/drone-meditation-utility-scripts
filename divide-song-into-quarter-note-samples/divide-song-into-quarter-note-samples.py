@@ -130,7 +130,7 @@ def calculate_quarter_note_duration(bpm: float) -> float:
     return duration_seconds
 
 
-def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset: float, output_dir: Path) -> None:
+def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset: float, output_base_dir: Path, is_vocals: bool = False) -> None:
     """
     Divide an audio file into quarter note segments.
     
@@ -138,7 +138,8 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
         audio_file: Path to the input audio file (any format)
         bpm: Beats per minute of the song
         downbeat_offset: Number of seconds to skip at the start of the file
-        output_dir: Directory to save the output segments
+        output_base_dir: Base output directory
+        is_vocals: Whether this is the vocals track
     """
     print(f"\nProcessing: {audio_file.name}")
     print(f"BPM: {bpm}")
@@ -178,10 +179,16 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     num_segments = int(total_samples / quarter_note_samples)
     print(f"Number of quarter note segments: {num_segments}")
     
-    # Create output directory for this song
-    song_name = audio_file.stem
-    song_output_dir = output_dir / song_name
+    # Determine output directory based on track type
+    song_name = audio_file.stem if not is_vocals else audio_file.parent.parent.name
+    if is_vocals:
+        song_output_dir = output_base_dir / song_name / "quarter-note-samples-vocals"
+    else:
+        song_output_dir = output_base_dir / song_name / "quarter-note-samples"
     song_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine filename prefix
+    file_prefix = "vocals" if is_vocals else song_name
     
     # Divide and export segments
     print("\nExporting segments...")
@@ -193,7 +200,7 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
         segment = audio_data[start_sample:end_sample]
         
         # Create output filename with zero-padded index
-        output_filename = f"{song_name}_quarter_note_{i+1:04d}.wav"
+        output_filename = f"{file_prefix}_quarter_note_{i+1:04d}.wav"
         output_path = song_output_dir / output_filename
         
         # Export segment
@@ -206,7 +213,7 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     remaining_start = num_segments * quarter_note_samples
     if remaining_start < total_samples:
         remaining_segment = audio_data[remaining_start:]
-        output_filename = f"{song_name}_quarter_note_{num_segments+1:04d}_partial.wav"
+        output_filename = f"{file_prefix}_quarter_note_{num_segments+1:04d}_partial.wav"
         output_path = song_output_dir / output_filename
         sf.write(output_path, remaining_segment, sample_rate)
         print(f"  Exported 1 partial segment (remainder)")
@@ -220,26 +227,23 @@ def main():
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
-    output_dir = script_dir / "output" / "audio"
+    output_dir = script_dir / "output"
     
-    # Clear output directory before running
-    output_base = script_dir / "output"
-    if output_base.exists():
-        print(f"Clearing output directory...")
-        shutil.rmtree(output_base)
-    
-    # Ensure directories exist
+    # Ensure directories exist (don't clear output - vocals.wav is there!)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Get all audio files from input directory (common formats) - search recursively
     audio_extensions = ['**/*.mp3', '**/*.wav', '**/*.flac', '**/*.m4a', '**/*.aac', '**/*.ogg', '**/*.wma']
     audio_files = []
     for ext in audio_extensions:
-        audio_files.extend(input_dir.glob(ext))
+        # Exclude files in demucs directories
+        for f in input_dir.glob(ext):
+            if 'demucs' not in f.parts:
+                audio_files.append(f)
     
     if not audio_files:
         print("No audio files found in ./input directory")
-        print(f"Supported formats: {', '.join([e.replace('*', '') for e in audio_extensions])}")
+        print(f"Supported formats: {', '.join([e.replace('**/*', '') for e in audio_extensions])}")
         return
     
     # Use only the first file
@@ -252,8 +256,20 @@ def main():
     # Get BPM and downbeat offset (from config or detect)
     bpm, downbeat_offset = get_bpm(audio_file)
     
-    # Process the file
-    divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir)
+    # Process the main audio file
+    print(f"\nProcessing main audio file...")
+    divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
+    
+    # Check if vocals.wav exists in the demucs directory
+    song_dir = audio_file.parent
+    vocals_file = song_dir / "demucs" / "vocals.wav"
+    
+    if vocals_file.exists():
+        print(f"\n\nProcessing vocals track...")
+        divide_song_into_quarter_notes(vocals_file, bpm, downbeat_offset, output_dir, is_vocals=True)
+    else:
+        print(f"\n\nNote: vocals.wav not found at {vocals_file}")
+        print(f"Run separate-song-stems.py first to generate vocals track.")
 
 
 if __name__ == "__main__":

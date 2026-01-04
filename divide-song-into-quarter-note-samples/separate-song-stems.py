@@ -15,6 +15,7 @@ import subprocess
 import json
 import re
 import shutil
+import argparse
 
 
 def filename_to_kebab_case(filename: str) -> str:
@@ -71,18 +72,25 @@ def save_song_config(config_file: Path, config_data: dict) -> None:
         json.dump(config_data, f, indent=2)
 
 
-def run_demucs(audio_file: Path, output_dir: Path) -> bool:
+def run_demucs(audio_file: Path, song_dir: Path) -> bool:
     """Run Demucs to separate audio stems.
     
     Args:
         audio_file: Path to the input audio file
-        output_dir: Path to the output directory
+        song_dir: Path to the song directory (in input folder)
         
     Returns:
         True if successful, False otherwise
     """
     print(f"\nRunning Demucs on: {audio_file.name}")
     print(f"This may take several minutes...\n")
+    
+    # Create output directory in the input song folder
+    demucs_output_dir = song_dir / "demucs"
+    demucs_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create temporary output directory for demucs
+    temp_output = song_dir / "temp_demucs"
     
     # Build command - use python -m demucs instead of the binary
     cmd = [
@@ -91,7 +99,7 @@ def run_demucs(audio_file: Path, output_dir: Path) -> bool:
         "demucs.separate",
         str(audio_file),
         "-n", "83fc094f",
-        "-o", str(output_dir)
+        "-o", str(temp_output)
     ]
     
     try:
@@ -110,6 +118,22 @@ def run_demucs(audio_file: Path, output_dir: Path) -> bool:
             print("Demucs stderr:")
             print(result.stderr)
         
+        # Move only vocals.wav to the demucs output directory
+        # Demucs outputs to temp_output/model_name/song_name/
+        demucs_temp = temp_output / "83fc094f" / audio_file.stem
+        vocals_file = demucs_temp / "vocals.wav"
+        
+        if vocals_file.exists():
+            target = demucs_output_dir / "vocals.wav"
+            shutil.move(str(vocals_file), str(target))
+            print(f"\n✓ Saved vocals.wav to: {target}")
+        else:
+            print(f"\nWarning: vocals.wav not found at {vocals_file}")
+        
+        # Clean up temp directory
+        if temp_output.exists():
+            shutil.rmtree(temp_output)
+        
         return True
         
     except subprocess.CalledProcessError as e:
@@ -125,18 +149,15 @@ def run_demucs(audio_file: Path, output_dir: Path) -> bool:
 
 def main():
     """Main function to process audio files."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Separate audio stems using Demucs')
+    parser.add_argument('-f', '--force', action='store_true', 
+                        help='Force separation even if already marked as source_separated')
+    args = parser.parse_args()
+    
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
-    output_dir = script_dir / "output"
-    
-    # Clear output directory before running
-    if output_dir.exists():
-        print(f"Clearing output directory...")
-        shutil.rmtree(output_dir)
-    
-    # Ensure directories exist
-    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Get all audio files from input directory (common formats) - search recursively
     audio_extensions = ['**/*.mp3', '**/*.wav', '**/*.flac', '**/*.m4a', '**/*.aac', '**/*.ogg', '**/*.wma']
@@ -149,41 +170,50 @@ def main():
         print(f"Supported formats: {', '.join([e.replace('*', '') for e in audio_extensions])}")
         return
     
-    # Use only the first file
-    audio_file = audio_files[0]
-    
-    if len(audio_files) > 1:
-        print(f"Warning: Found {len(audio_files)} audio files. Processing only: {audio_file.name}")
-        print("Remove other files to process a different one.\n")
-    
-    # Get config file path (same directory as audio file)
-    config_file = audio_file.with_suffix('.json')
-    
-    # Load config
-    config_data = load_song_config(config_file)
-    
-    # Check if already source separated
-    if config_data.get("source_separated", False):
-        print(f"✓ Song already source separated: {audio_file.name}")
-        print(f"  Config file: {config_file}")
-        print(f"  Skipping Demucs processing.")
-        print(f"\nTo re-process, set 'source_separated' to false in the config file.")
-        return
-    
-    # Run Demucs
-    success = run_demucs(audio_file, output_dir)
-    
-    if success:
-        # Update config to mark as source separated
-        config_data["source_separated"] = True
-        save_song_config(config_file, config_data)
+    # Process all audio files
+    for audio_file in audio_files:
+        print(f"\n{'='*80}")
+        print(f"Processing: {audio_file.name}")
+        print(f"{'='*80}")
         
-        print(f"\n✓ Source separation complete!")
-        print(f"  Output directory: {output_dir}")
-        print(f"  Config updated: {config_file}")
-        print(f"  Marked as source_separated: true")
-    else:
-        print(f"\n✗ Source separation failed")
+        # Get song directory (parent of audio file)
+        song_dir = audio_file.parent
+        
+        # Get config file path (same directory as audio file)
+        config_file = audio_file.with_suffix('.json')
+        
+        # Load config
+        config_data = load_song_config(config_file)
+        
+        # Check if already source separated (unless force flag is set)
+        if config_data.get("source_separated", False) and not args.force:
+            print(f"✓ Song already source separated: {audio_file.name}")
+            print(f"  Config file: {config_file}")
+            print(f"  Skipping Demucs processing.")
+            print(f"\nTo re-process, use the -f flag or set 'source_separated' to false in the config file.")
+            continue
+        
+        if args.force and config_data.get("source_separated", False):
+            print(f"⚠ Force flag detected - ignoring source_separated status")
+        
+        # Run Demucs
+        success = run_demucs(audio_file, song_dir)
+        
+        if success:
+            # Update config to mark as source separated
+            config_data["source_separated"] = True
+            save_song_config(config_file, config_data)
+            
+            print(f"\n✓ Source separation complete!")
+            print(f"  Output directory: {song_dir / 'demucs'}")
+            print(f"  Config updated: {config_file}")
+            print(f"  Marked as source_separated: true")
+        else:
+            print(f"\n✗ Source separation failed for {audio_file.name}")
+    
+    print(f"\n{'='*80}")
+    print("Processing complete!")
+    print(f"{'='*80}")
 
 
 if __name__ == "__main__":
