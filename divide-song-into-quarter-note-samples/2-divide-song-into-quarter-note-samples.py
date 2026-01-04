@@ -180,7 +180,7 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     
     # Get song name from directory structure (not from audio filename)
     # For main audio: ./input/{SONG_NAME}/audio/{filename}.mp3 -> use SONG_NAME
-    # For vocals: ./input/{SONG_NAME}/demucs/vocals.wav -> use SONG_NAME
+    # For acappella: ./input/{SONG_NAME}/demucs/acappella.wav -> use SONG_NAME
     if is_vocals:
         song_name = audio_file.parent.parent.name  # demucs parent's parent is SONG_NAME
     else:
@@ -188,13 +188,13 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     
     # Determine output directory based on track type
     if is_vocals:
-        song_output_dir = output_base_dir / song_name / "quarter-note-samples-vocals"
+        song_output_dir = output_base_dir / song_name / "quarter-note-samples-acappella"
     else:
         song_output_dir = output_base_dir / song_name / "quarter-note-samples"
     song_output_dir.mkdir(parents=True, exist_ok=True)
     
     # Determine filename prefix
-    file_prefix = "vocals" if is_vocals else song_name
+    file_prefix = "acappella" if is_vocals else song_name
     
     # Divide and export segments
     print("\nExporting segments...")
@@ -205,8 +205,11 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
         # Extract segment
         segment = audio_data[start_sample:end_sample]
         
-        # Create output filename with zero-padded index
-        output_filename = f"{file_prefix}_quarter_note_{i+1:04d}.wav"
+        # Calculate timestamp for this segment (in seconds)
+        timestamp = i * quarter_note_sec
+        
+        # Create output filename with zero-padded index at start, then timestamp
+        output_filename = f"{i+1:04d}_{timestamp:.6f}_{file_prefix}.wav"
         output_path = song_output_dir / output_filename
         
         # Export segment
@@ -219,7 +222,11 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     remaining_start = num_segments * quarter_note_samples
     if remaining_start < total_samples:
         remaining_segment = audio_data[remaining_start:]
-        output_filename = f"{file_prefix}_quarter_note_{num_segments+1:04d}_partial.wav"
+        
+        # Calculate timestamp for the partial segment
+        timestamp = num_segments * quarter_note_sec
+        
+        output_filename = f"{num_segments+1:04d}_{timestamp:.6f}_{file_prefix}_partial.wav"
         output_path = song_output_dir / output_filename
         sf.write(output_path, remaining_segment, sample_rate)
         print(f"  Exported 1 partial segment (remainder)")
@@ -278,15 +285,15 @@ def main():
     print(f"\nProcessing main audio file...")
     divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
     
-    # Check if vocals.wav exists in the demucs directory
-    vocals_file = song_dir / "demucs" / "vocals.wav"
+    # Check if acappella.wav exists in the demucs directory
+    vocals_file = song_dir / "demucs" / "acappella.wav"
     
     if vocals_file.exists():
-        print(f"\n\nProcessing vocals track...")
+        print(f"\n\nProcessing acappella track...")
         divide_song_into_quarter_notes(vocals_file, bpm, downbeat_offset, output_dir, is_vocals=True)
     else:
-        print(f"\n\nNote: vocals.wav not found at {vocals_file}")
-        print(f"Run separate-song-stems.py first to generate vocals track.")
+        print(f"\n\nNote: acappella.wav not found at {vocals_file}")
+        print(f"Run 1-separate-song-stems.py first to generate acappella track.")
 
 
 if __name__ == "__main__":

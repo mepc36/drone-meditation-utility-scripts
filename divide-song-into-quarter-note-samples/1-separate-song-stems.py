@@ -118,15 +118,15 @@ def run_demucs(audio_file: Path, song_dir: Path) -> bool:
             print("Demucs stderr:")
             print(result.stderr)
         
-        # Move only vocals.wav to the demucs output directory
+        # Move only vocals.wav to the demucs output directory and rename to acappella.wav
         # Demucs outputs to temp_output/model_name/song_name/
         demucs_temp = temp_output / "83fc094f" / audio_file.stem
         vocals_file = demucs_temp / "vocals.wav"
         
         if vocals_file.exists():
-            target = demucs_output_dir / "vocals.wav"
+            target = demucs_output_dir / "acappella.wav"
             shutil.move(str(vocals_file), str(target))
-            print(f"\n✓ Saved vocals.wav to: {target}")
+            print(f"\n✓ Saved acappella.wav to: {target}")
         else:
             print(f"\nWarning: vocals.wav not found at {vocals_file}")
         
@@ -194,16 +194,16 @@ def main():
     
     # Get config file path from ./input/{SONG_NAME}/config/config.json
     config_file = song_dir / "config" / "config.json"
-        
-        # Load config
-        config_data = load_song_config(config_file)
-        
-        # Check if already source separated (unless force flag is set)
-        if config_data.get("source_separated", False) and not args.force:
-            print(f"✓ Song already source separated: {audio_file.name}")
-            print(f"  Config file: {config_file}")
-            print(f"  Skipping Demucs processing.")
-            print(f"\nTo re-process, use the -f flag or set 'source_separated' to false in the config file.")
+    
+    # Load config
+    config_data = load_song_config(config_file)
+    
+    # Check if already source separated (unless force flag is set)
+    if config_data.get("source_separated", False) and not args.force:
+        print(f"✓ Song already source separated: {audio_file.name}")
+        print(f"  Config file: {config_file}")
+        print(f"  Skipping Demucs processing.")
+        print(f"\nTo re-process, use the -f flag or set 'source_separated' to false in the config file.")
         return
     
     if args.force and config_data.get("source_separated", False):
@@ -223,3 +223,7 @@ def main():
         print(f"  Marked as source_separated: true")
     else:
         print(f"\n✗ Source separation failed for {audio_file.name}")
+
+
+if __name__ == "__main__":
+    main()
