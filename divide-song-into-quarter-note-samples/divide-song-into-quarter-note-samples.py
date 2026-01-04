@@ -16,58 +16,89 @@ import soundfile as sf
 import librosa
 import json
 import shutil
+import re
 
 
-def load_bpm_cache(cache_file: Path) -> dict:
-    """Load BPM cache from JSON file.
+def filename_to_kebab_case(filename: str) -> str:
+    """Convert filename to kebab-case (remove extension, lowercase, replace spaces/special chars with hyphens).
     
     Args:
-        cache_file: Path to the BPM cache JSON file
+        filename: Original filename
         
     Returns:
-        Dictionary with filename -> bpm mapping
+        Kebab-case version without extension
     """
-    if cache_file.exists():
+    # Remove extension
+    name = Path(filename).stem
+    # Convert to lowercase
+    name = name.lower()
+    # Replace spaces and underscores with hyphens
+    name = re.sub(r'[\s_]+', '-', name)
+    # Remove non-alphanumeric characters except hyphens
+    name = re.sub(r'[^a-z0-9-]+', '', name)
+    # Remove multiple consecutive hyphens
+    name = re.sub(r'-+', '-', name)
+    # Remove leading/trailing hyphens
+    name = name.strip('-')
+    return name
+
+
+def load_song_config(config_file: Path) -> dict:
+    """Load song configuration from JSON file.
+    
+    Args:
+        config_file: Path to the song config JSON file
+        
+    Returns:
+        Dictionary with song configuration (bpm, downbeat_offset, etc.)
+    """
+    if config_file.exists():
         try:
-            with open(cache_file, 'r') as f:
+            with open(config_file, 'r') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             return {}
     return {}
 
 
-def save_bpm_cache(cache_file: Path, cache_data: dict) -> None:
-    """Save BPM cache to JSON file.
+def save_song_config(config_file: Path, config_data: dict) -> None:
+    """Save song configuration to JSON file.
     
     Args:
-        cache_file: Path to the BPM cache JSON file
-        cache_data: Dictionary with filename -> bpm mapping
+        config_file: Path to the song config JSON file
+        config_data: Dictionary with song configuration
     """
-    cache_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(cache_file, 'w') as f:
-        json.dump(cache_data, f, indent=2)
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_file, 'w') as f:
+        json.dump(config_data, f, indent=2)
 
 
-def get_bpm(audio_file: Path, cache_file: Path) -> float:
-    """Get BPM for an audio file, using cache if available.
+def get_bpm(audio_file: Path, config_dir: Path) -> tuple[float, float]:
+    """Get BPM and downbeat offset for an audio file, using config if available.
     
     Args:
         audio_file: Path to the audio file
-        cache_file: Path to the BPM cache JSON file
+        config_dir: Path to the song-configs directory
         
     Returns:
-        BPM as a float
+        Tuple of (bpm, downbeat_offset) where downbeat_offset is in seconds
     """
-    filename = audio_file.name
+    # Get config file path using kebab-case name
+    kebab_name = filename_to_kebab_case(audio_file.name)
+    config_file = config_dir / f"{kebab_name}.json"
     
-    # Load cache
-    cache_data = load_bpm_cache(cache_file)
+    # Load config
+    config_data = load_song_config(config_file)
     
-    # Check if BPM is cached
-    if filename in cache_data and "bpm" in cache_data[filename]:
-        bpm = cache_data[filename]["bpm"]
-        print(f"Using cached BPM: {bpm:.2f}")
-        return bpm
+    # Check if BPM is in config
+    if config_data and "bpm" in config_data:
+        bpm = config_data["bpm"]
+        downbeat_offset = config_data.get("downbeat_offset", 0.0)
+        print(f"Using config from: {config_file.name}")
+        print(f"BPM: {bpm:.2f}")
+        if downbeat_offset > 0:
+            print(f"Downbeat offset: {downbeat_offset:.3f} seconds")
+        return bpm, downbeat_offset
     
     # Detect BPM
     print(f"Analyzing audio to detect BPM...")
@@ -80,12 +111,14 @@ def get_bpm(audio_file: Path, cache_file: Path) -> float:
     else:
         bpm = float(tempo)
     
-    # Save to cache
-    cache_data[filename] = {"bpm": bpm}
-    save_bpm_cache(cache_file, cache_data)
-    print(f"Detected and cached BPM: {bpm:.2f}")
+    # Save to config (with default downbeat_offset of 0)
+    config_data = {"bpm": bpm, "downbeat_offset": 0.0}
+    save_song_config(config_file, config_data)
+    print(f"Detected and saved BPM: {bpm:.2f}")
+    print(f"Config saved to: {config_file}")
+    print(f"Note: downbeat_offset set to 0.0. Edit the config file to adjust if needed.")
     
-    return bpm
+    return bpm, 0.0
 
 
 def calculate_quarter_note_duration(bpm: float) -> float:
@@ -99,17 +132,20 @@ def calculate_quarter_note_duration(bpm: float) -> float:
     return duration_seconds
 
 
-def divide_song_into_quarter_notes(audio_file: Path, bpm: float, output_dir: Path) -> None:
+def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset: float, output_dir: Path) -> None:
     """
     Divide an audio file into quarter note segments.
     
     Args:
         audio_file: Path to the input audio file (any format)
         bpm: Beats per minute of the song
+        downbeat_offset: Number of seconds to skip at the start of the file
         output_dir: Directory to save the output segments
     """
     print(f"\nProcessing: {audio_file.name}")
     print(f"BPM: {bpm}")
+    if downbeat_offset > 0:
+        print(f"Downbeat offset: {downbeat_offset:.3f} seconds")
     
     # Load the audio file using librosa (handles any format)
     audio_data, sample_rate = librosa.load(str(audio_file), sr=None, mono=False)
@@ -122,6 +158,13 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, output_dir: Pat
         # Stereo - transpose so shape is (samples, channels)
         audio_data = audio_data.T
         total_samples = len(audio_data)
+    
+    # Apply downbeat offset - skip the specified number of seconds
+    offset_samples = int(downbeat_offset * sample_rate)
+    if offset_samples > 0:
+        audio_data = audio_data[offset_samples:]
+        total_samples = len(audio_data)
+        print(f"Skipped {downbeat_offset:.3f} seconds ({offset_samples} samples)")
     
     total_duration_sec = total_samples / sample_rate
     
@@ -180,7 +223,7 @@ def main():
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
     output_dir = script_dir / "output" / "audio"
-    bpm_cache_file = input_dir / "bpm" / "bpm.json"
+    config_dir = input_dir / "song-configs"
     
     # Clear output directory before running
     output_base = script_dir / "output"
@@ -209,11 +252,11 @@ def main():
         print(f"Warning: Found {len(audio_files)} audio files. Processing only: {audio_file.name}")
         print("Remove other files to process a different one.\n")
     
-    # Get BPM (from cache or detect)
-    bpm = get_bpm(audio_file, bpm_cache_file)
+    # Get BPM and downbeat offset (from config or detect)
+    bpm, downbeat_offset = get_bpm(audio_file, config_dir)
     
     # Process the file
-    divide_song_into_quarter_notes(audio_file, bpm, output_dir)
+    divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir)
 
 
 if __name__ == "__main__":
