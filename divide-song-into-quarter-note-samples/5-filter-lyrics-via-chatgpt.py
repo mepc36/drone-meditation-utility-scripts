@@ -13,6 +13,7 @@ from pathlib import Path
 import json
 from dotenv import load_dotenv
 from openai import OpenAI
+import shutil
 
 # Load environment variables
 load_dotenv()
@@ -222,10 +223,24 @@ def main():
     
     print(f"\n✓ Results saved to: {output_file}")
     
+    # Copy meditation lyric files to their own folder
+    meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
+    meditation_files_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\nCopying meditation lyric files...")
+    for filename in output_summary["meditation_lyrics_files"]:
+        source = full_song_dir / filename
+        dest = meditation_files_dir / filename
+        if source.exists():
+            shutil.copy2(source, dest)
+    
+    print(f"✓ Copied {len(output_summary['meditation_lyrics_files'])} files to: {meditation_files_dir}")
+    
     print(f"\n{'='*80}")
     print("Summary:")
     print(f"{'='*80}")
     print(f"Total meditation lyric files: {len(output_summary['meditation_lyrics_files'])}")
+    print(f"Output directory: {meditation_files_dir}")
 
 
 if __name__ == "__main__":
