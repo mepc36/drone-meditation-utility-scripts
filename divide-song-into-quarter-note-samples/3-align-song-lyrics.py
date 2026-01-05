@@ -57,8 +57,8 @@ def main():
             print(f"⏭  Skipping - alignment already exists at {output_file}")
             continue
         
-        # Find vocals.wav
-        vocals_file = song_dir / "demucs" / "acappella.wav"
+        # Find vocals.wav in output directory
+        vocals_file = output_base_dir / song_name / "demucs" / "acappella.wav"
         if not vocals_file.exists():
             raise FileNotFoundError(f"acappella.wav not found at {vocals_file}\nRun 1-separate-song-stems.py first.")
         
