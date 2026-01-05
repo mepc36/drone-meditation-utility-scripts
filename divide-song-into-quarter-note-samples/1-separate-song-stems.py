@@ -215,6 +215,12 @@ def main():
         # Get config file path
         config_file = song_dir / "config" / "config.json"
         
+        # Create config if it doesn't exist
+        if not config_file.exists():
+            print(f"Creating config file at: {config_file}")
+            initial_config = {}
+            save_song_config(config_file, initial_config)
+        
         # Load config
         config_data = load_song_config(config_file)
         

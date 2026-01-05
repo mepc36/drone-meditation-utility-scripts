@@ -7,21 +7,25 @@ Usage:
 
 Arguments:
     song_path: Relative path to the song directory (e.g., "how-we-do")
-    sample1: First sample filename (e.g., "sample_001.wav")
+    sample1: First sample index or filename (e.g., "1", "001", or "sample_001.wav")
     panning1: Optional panning value for sample1 (-1.0 to 1.0, default: -1.0 hard left)
-    sample2: Second sample filename (e.g., "sample_002.wav")
+    sample2: Second sample index or filename (e.g., "2", "002", or "sample_002.wav")
     panning2: Optional panning value for sample2 (-1.0 to 1.0, default: 1.0 hard right)
     padding: Optional padding silence in seconds (default: 2.0)
 
 Examples:
-    # All defaults (hard left, hard right, 2 seconds padding)
+    # Using index numbers (all defaults: hard left, hard right, 2 seconds padding)
+    python script.py how-we-do 1 2
+    python script.py how-we-do 001 002
+    
+    # Using full filenames
     python script.py how-we-do sample_001.wav sample_002.wav
     
     # With panning values
-    python script.py how-we-do sample_001.wav -0.5 sample_002.wav 0.5
+    python script.py how-we-do 1 -0.5 2 0.5
     
     # With panning and padding
-    python script.py how-we-do sample_001.wav -0.5 sample_002.wav 0.5 3.0
+    python script.py how-we-do 1 -0.5 2 0.5 3.0
 """
 
 import sys
@@ -30,6 +34,7 @@ from pathlib import Path
 from pydub import AudioSegment
 from pydub.generators import Sine
 import datetime
+import glob
 
 
 def is_numeric(value):
@@ -102,6 +107,64 @@ def parse_arguments(args):
     return song_path, sample1, panning1, sample2, panning2, padding
 
 
+def resolve_sample_path(sample_identifier, samples_dir):
+    """
+    Resolve a sample identifier (index or filename) to the actual file path.
+    
+    Args:
+        sample_identifier: Either an index number (e.g., "1", "001") or a filename (e.g., "sample_001.wav")
+        samples_dir: Directory containing the sample files
+    
+    Returns:
+        Path object to the sample file
+    
+    Raises:
+        FileNotFoundError: If no matching sample is found
+        ValueError: If multiple samples match
+    """
+    # If it's already a file path and exists, return it
+    full_path = samples_dir / sample_identifier
+    if full_path.exists() and full_path.is_file():
+        return full_path
+    
+    # Try to interpret as an index number
+    # Strip leading zeros and check if it's a number
+    clean_identifier = sample_identifier.lstrip('0') or '0'
+    if clean_identifier.isdigit():
+        index = int(clean_identifier)
+        
+        # Look for files matching sample_NNN* pattern
+        # Try with zero-padded versions: 001, 01, 1
+        patterns = [
+            f"sample_{index:03d}*",  # sample_001*
+            f"sample_{index:02d}*",  # sample_01*
+            f"sample_{index}*",      # sample_1*
+        ]
+        
+        matches = []
+        for pattern in patterns:
+            matches.extend(samples_dir.glob(pattern))
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_matches = []
+        for match in matches:
+            if match not in seen:
+                seen.add(match)
+                unique_matches.append(match)
+        
+        if len(unique_matches) == 0:
+            raise FileNotFoundError(f"No sample found matching index {index} in {samples_dir}")
+        elif len(unique_matches) > 1:
+            files_list = '\n  '.join([m.name for m in unique_matches])
+            raise ValueError(f"Multiple samples found matching index {index}:\n  {files_list}")
+        
+        return unique_matches[0]
+    
+    # If we get here, it's not a valid index or existing file
+    raise FileNotFoundError(f"No sample found matching '{sample_identifier}' in {samples_dir}")
+
+
 def apply_panning(audio, pan_value):
     """
     Apply panning to an audio segment.
@@ -168,16 +231,19 @@ def main():
     script_dir = Path(__file__).parent
     input_base = script_dir / "output" / song_name / "quarter-note-samples-labeled-with-lyrics"
     
-    sample1_path = input_base / sample1
-    sample2_path = input_base / sample2
-    
-    # Check if files exist
-    if not sample1_path.exists():
-        print(f"Error: Sample 1 not found: {sample1_path}")
+    # Resolve sample paths (supports index numbers or filenames)
+    try:
+        sample1_path = resolve_sample_path(sample1, input_base)
+        print(f"Resolved sample 1: {sample1_path.name}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error resolving sample 1 '{sample1}': {e}")
         sys.exit(1)
     
-    if not sample2_path.exists():
-        print(f"Error: Sample 2 not found: {sample2_path}")
+    try:
+        sample2_path = resolve_sample_path(sample2, input_base)
+        print(f"Resolved sample 2: {sample2_path.name}")
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error resolving sample 2 '{sample2}': {e}")
         sys.exit(1)
     
     # Load audio files
