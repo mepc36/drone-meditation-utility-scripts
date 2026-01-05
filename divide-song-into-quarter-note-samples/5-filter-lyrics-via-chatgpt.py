@@ -156,10 +156,10 @@ def main():
             print(f"⏭  Skipping - lyrics already curated (lyrics_curated_by_gpt=true in config)")
             continue
         
-        # Remove existing curated-lyrics-files directory if it exists
-        curated_files_dir = output_dir / song_name / "curated-lyrics-files"
+        # Remove existing directory if it exists
+        curated_files_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics-curated-by-gpt"
         if curated_files_dir.exists():
-            print(f"Removing existing curated-lyrics-files directory...")
+            print(f"Removing existing quarter-note-samples-labeled-with-lyrics-curated-by-gpt directory...")
             shutil.rmtree(curated_files_dir)
         
         # Process only full song samples
@@ -202,6 +202,7 @@ def main():
         for lyric in curated_lyrics:
             if lyric in full_song_lyrics:
                 # Get all files for this lyric and sort by index
+                # Format: index_timestamp_prefix_lyrics[_partial].wav
                 files_for_lyric = sorted(full_song_lyrics[lyric], key=lambda f: int(f.split('_')[0]))
                 # Take only the first one
                 if files_for_lyric:
@@ -220,26 +221,36 @@ def main():
         print(f"\n✓ Results saved to: {output_file}")
         
         # Copy curated lyric files to their own folder
-        curated_files_dir = output_dir / song_name / "curated-lyrics-files"
+        curated_files_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics-curated-by-gpt"
         curated_files_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"\nCopying curated lyric files...")
         for filename in output_summary["curated_lyrics_files"]:
             source = full_song_dir / filename
             
-            # Extract just the lyrics part from the filename
-            # Format: index_timestamp_prefix_lyrics.wav or index_timestamp_prefix_lyrics_partial.wav
+            # Extract parts from the filename
+            # Input format: index_timestamp_prefix_lyrics[_partial].wav
             stem = Path(filename).stem
             parts = stem.split('_')
             
-            # Last part is lyrics (or second-to-last if ends with 'partial')
-            if parts[-1] == 'partial':
-                lyrics = parts[-2]
-            else:
-                lyrics = parts[-1]
+            # Parse: index (0), timestamp (1), prefix (2), lyrics (3+)
+            index = parts[0]
+            timestamp = parts[1]
+            prefix = parts[2]
             
-            # Create destination filename with just lyrics
-            dest = curated_files_dir / f"{lyrics}.wav"
+            # Check if last part is 'partial'
+            if parts[-1] == 'partial':
+                # lyrics are parts 3 to -2 (excluding 'partial')
+                lyrics = '_'.join(parts[3:-1])
+                partial_suffix = '_partial'
+            else:
+                # lyrics are parts 3 to end
+                lyrics = '_'.join(parts[3:])
+                partial_suffix = ''
+            
+            # Create destination filename with index and timestamp at end
+            # Output format: prefix_lyrics[_partial]_index_timestamp.wav
+            dest = curated_files_dir / f"{prefix}_{lyrics}{partial_suffix}_{index}_{timestamp}.wav"
             
             if source.exists():
                 shutil.copy2(source, dest)
