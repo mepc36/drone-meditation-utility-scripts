@@ -213,7 +213,7 @@ def main():
         output_summary["curated_lyrics_files"] = unique_files
         
         # Save to JSON
-        output_file = output_dir / song_name / "prompts" / "curated-lyrics.json"
+        output_file = output_dir / song_name / "prompts" / "lyrics-curated-by-gpt.json"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump(output_summary, f, indent=2)
