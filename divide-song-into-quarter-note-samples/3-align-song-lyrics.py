@@ -69,21 +69,16 @@ def main():
         # Find lyrics .txt file
         lyrics_dir = song_dir / "lyrics"
         if not lyrics_dir.exists():
-            print(f"⚠ Skipping - lyrics directory not found at {lyrics_dir}")
-            continue
+            raise FileNotFoundError(f"Lyrics directory not found at {lyrics_dir}")
         
         lyrics_files = list(lyrics_dir.glob("*.txt"))
         
         if not lyrics_files:
-            print(f"⚠ Skipping - no .txt files found in {lyrics_dir}")
-            continue
+            raise FileNotFoundError(f"No .txt files found in {lyrics_dir}")
         
         if len(lyrics_files) > 1:
-            print(f"⚠ Skipping - found {len(lyrics_files)} .txt files in lyrics directory, but only 1 is allowed.")
-            print("  Found files:")
-            for f in lyrics_files:
-                print(f"    - {f.name}")
-            continue
+            files_list = '\n    '.join([f.name for f in lyrics_files])
+            raise ValueError(f"Found {len(lyrics_files)} .txt files in {lyrics_dir}, but only 1 is allowed.\n  Found files:\n    {files_list}")
         
         lyrics_file = lyrics_files[0]
         print(f"✓ Found lyrics: {lyrics_file}")
