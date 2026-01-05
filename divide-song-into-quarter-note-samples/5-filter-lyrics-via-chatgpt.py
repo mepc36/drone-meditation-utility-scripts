@@ -1,10 +1,10 @@
 """
-Filter quarter note samples to find meditation-appropriate lyrics using ChatGPT.
+Curate quarter note samples to find complete lyric phrases using ChatGPT.
 
 This script:
 1. Reads labeled quarter note sample filenames
 2. Extracts the lyrics portion from filenames
-3. Asks ChatGPT to identify self-contained meditation-appropriate phrases
+3. Asks ChatGPT to identify self-contained, complete phrases
 4. Returns a list of filenames containing suitable lyrics
 """
 
@@ -62,8 +62,8 @@ def extract_lyrics_from_filenames(directory: Path) -> dict:
     return lyrics_to_files
 
 
-def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Path) -> list:
-    """Use ChatGPT to filter lyrics for meditation appropriateness.
+def curate_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Path) -> list:
+    """Use ChatGPT to curate lyrics for completeness.
     
     Args:
         lyrics_list: List of lyrics strings (kebab-case)
@@ -71,7 +71,7 @@ def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Pat
         prompt_file: Path to the prompt template file
         
     Returns:
-        List of meditation-appropriate lyrics
+        List of complete, curated lyrics
     """
     client = OpenAI(api_key=api_key)
     
@@ -101,8 +101,8 @@ def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Pat
         result_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else result_text
     
     try:
-        filtered_lyrics = json.loads(result_text)
-        return filtered_lyrics
+        curated_lyrics = json.loads(result_text)
+        return curated_lyrics
     except json.JSONDecodeError as e:
         print(f"Error parsing ChatGPT response: {e}")
         print(f"Response: {result_text}")
@@ -110,7 +110,7 @@ def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Pat
 
 
 def main():
-    """Main function to filter lyrics via ChatGPT."""
+    """Main function to curate lyrics via ChatGPT."""
     # Get API key
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
@@ -131,7 +131,7 @@ def main():
     print(f"\nFound {len(song_dirs)} song(s) to process")
     
     # Get prompt file once (shared across all songs)
-    prompt_file = script_dir / "input" / "openai" / "meditation-lyrics-filter-prompt.md"
+    prompt_file = script_dir / "openai" / "curate-lyrics-prompt.md"
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
     
@@ -151,16 +151,16 @@ def main():
         with open(config_file, 'r') as f:
             config = json.load(f)
         
-        # Skip if already filtered
+        # Skip if already curated
         if config.get('lyrics_curated_by_gpt', False):
-            print(f"⏭  Skipping - lyrics already filtered (lyrics_curated_by_gpt=true in config)")
+            print(f"⏭  Skipping - lyrics already curated (lyrics_curated_by_gpt=true in config)")
             continue
         
-        # Remove existing meditation-lyrics-files directory if it exists
-        meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
-        if meditation_files_dir.exists():
-            print(f"Removing existing meditation-lyrics-files directory...")
-            shutil.rmtree(meditation_files_dir)
+        # Remove existing curated-lyrics-files directory if it exists
+        curated_files_dir = output_dir / song_name / "curated-lyrics-files"
+        if curated_files_dir.exists():
+            print(f"Removing existing curated-lyrics-files directory...")
+            shutil.rmtree(curated_files_dir)
         
         # Process only full song samples
         full_song_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
@@ -174,32 +174,32 @@ def main():
         print(f"Found {len(all_lyrics)} unique lyric phrases")
         
         if not all_lyrics:
-            raise ValueError(f"No lyrics found to filter in {full_song_dir}\nRun 4-label-quarter-note-samples-with-lyrics.py first.")
+            raise ValueError(f"No lyrics found to curate in {full_song_dir}\nRun 4-label-quarter-note-samples-with-lyrics.py first.")
         
-        # Filter with ChatGPT
-        filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
+        # Curate with ChatGPT
+        curated_lyrics = curate_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
         
         print(f"\n{'='*80}")
         print(f"ChatGPT Results:")
         print(f"{'='*80}")
         print(f"Input: {len(all_lyrics)} unique phrases")
-        print(f"Output: {len(filtered_lyrics)} meditation-appropriate phrases")
-        print(f"\nFiltered lyrics:")
-        for lyric in sorted(filtered_lyrics):
+        print(f"Output: {len(curated_lyrics)} complete phrases")
+        print(f"\nCurated lyrics:")
+        for lyric in sorted(curated_lyrics):
             print(f"  - {lyric}")
         
         # Create output summary
         output_summary = {
             "song_name": song_name,
             "total_unique_lyrics": len(all_lyrics),
-            "meditation_lyrics_count": len(filtered_lyrics),
-            "meditation_lyrics": sorted(filtered_lyrics),
-            "meditation_lyrics_files": []
+            "curated_lyrics_count": len(curated_lyrics),
+            "curated_lyrics": sorted(curated_lyrics),
+            "curated_lyrics_files": []
         }
         
         # Collect only the first occurrence of each lyric (lowest index)
         unique_files = []
-        for lyric in filtered_lyrics:
+        for lyric in curated_lyrics:
             if lyric in full_song_lyrics:
                 # Get all files for this lyric and sort by index
                 files_for_lyric = sorted(full_song_lyrics[lyric], key=lambda f: int(f.split('_')[0]))
@@ -209,30 +209,30 @@ def main():
         
         # Sort by index (first part of filename)
         unique_files.sort(key=lambda f: int(f.split('_')[0]))
-        output_summary["meditation_lyrics_files"] = unique_files
+        output_summary["curated_lyrics_files"] = unique_files
         
         # Save to JSON
-        output_file = output_dir / song_name / "openai" / "meditation-lyrics.json"
+        output_file = output_dir / song_name / "openai" / "curated-lyrics.json"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump(output_summary, f, indent=2)
         
         print(f"\n✓ Results saved to: {output_file}")
         
-        # Copy meditation lyric files to their own folder
-        meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
-        meditation_files_dir.mkdir(parents=True, exist_ok=True)
+        # Copy curated lyric files to their own folder
+        curated_files_dir = output_dir / song_name / "curated-lyrics-files"
+        curated_files_dir.mkdir(parents=True, exist_ok=True)
         
-        print(f"\nCopying meditation lyric files...")
-        for filename in output_summary["meditation_lyrics_files"]:
+        print(f"\nCopying curated lyric files...")
+        for filename in output_summary["curated_lyrics_files"]:
             source = full_song_dir / filename
-            dest = meditation_files_dir / filename
+            dest = curated_files_dir / filename
             if source.exists():
                 shutil.copy2(source, dest)
         
-        print(f"✓ Copied {len(output_summary['meditation_lyrics_files'])} files to: {meditation_files_dir}")
+        print(f"✓ Copied {len(output_summary['curated_lyrics_files'])} files to: {curated_files_dir}")
         
-        # Update config to mark as filtered
+        # Update config to mark as curated
         config['lyrics_curated_by_gpt'] = True
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
@@ -240,8 +240,8 @@ def main():
         print(f"\n{'='*80}")
         print(f"Summary for {song_name}:")
         print(f"{'='*80}")
-        print(f"Total meditation lyric files: {len(output_summary['meditation_lyrics_files'])}")
-        print(f"Output directory: {meditation_files_dir}")
+        print(f"Total curated lyric files: {len(output_summary['curated_lyrics_files'])}")
+        print(f"Output directory: {curated_files_dir}")
         print(f"✓ Config updated: lyrics_curated_by_gpt=true")
 
 
