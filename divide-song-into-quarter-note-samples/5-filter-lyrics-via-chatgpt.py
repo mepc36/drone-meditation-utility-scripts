@@ -62,55 +62,25 @@ def extract_lyrics_from_filenames(directory: Path) -> dict:
     return lyrics_to_files
 
 
-def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str) -> list:
+def filter_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Path) -> list:
     """Use ChatGPT to filter lyrics for meditation appropriateness.
     
     Args:
         lyrics_list: List of lyrics strings (kebab-case)
         api_key: OpenAI API key
+        prompt_file: Path to the prompt template file
         
     Returns:
         List of meditation-appropriate lyrics
     """
     client = OpenAI(api_key=api_key)
     
-    # Create prompt
-    prompt = f"""You are analyzing lyrics from a hip-hop song that have been time-aligned to audio samples. Each lyric phrase is in kebab-case format (lowercase with hyphens).
-
-I need you to identify which phrases would work well in a meditation or mindfulness context. Look for phrases that are:
-- Self-contained (complete thoughts or actions)
-- Calming, introspective, or mindful
-- Related to breathing, feeling, awareness, presence, living, being, hearing, etc.
-- Simple present-tense verbs or gerunds (like "breathing", "feeling", "living")
-- Short phrases that could stand alone
-
-Examples of types to include (NOT from this song, just examples of the style):
-- living
-- breathing
-- feeling
-- ya-hear (you hear)
-- acting
-- changing
-- being
-- moving
-- thinking
-
-Examples of what NOT to include:
-- Violence, weapons, drugs, explicit content
-- Incomplete phrases that don't make sense alone
-- Negative or aggressive language
-- Complex multi-word phrases that aren't self-contained
-
-IMPORTANT: You must ONLY return lyrics from the list below. Do not add any lyrics that are not in this list, even if they seem meditation-appropriate.
-
-Here are the ACTUAL lyrics from this song to analyze (in kebab-case format):
-{json.dumps(lyrics_list, indent=2)}
-
-Please return ONLY a JSON array containing ONLY lyrics from the above list that are meditation-appropriate. Err on the side of including too much rather than too little - if there's any doubt, include it.
-
-Response format (example):
-["living", "breathing", "feeling", "ya-hear"]
-"""
+    # Read prompt template from file
+    with open(prompt_file, 'r') as f:
+        prompt_template = f.read()
+    
+    # Replace placeholder with actual lyrics list
+    prompt = prompt_template.replace('{LYRICS_LIST}', json.dumps(lyrics_list, indent=2))
     
     print("Sending request to ChatGPT...")
     
@@ -184,8 +154,13 @@ def main():
         print("No lyrics found to filter")
         return
     
+    # Get prompt file
+    prompt_file = script_dir / "input" / "openai" / "meditation-lyrics-filter-prompt.txt"
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
+    
     # Filter with ChatGPT
-    filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key)
+    filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
     
     print(f"\n{'='*80}")
     print(f"ChatGPT Results:")
