@@ -122,7 +122,7 @@ def main():
     output_dir = script_dir / "output"
     
     # Find all song directories
-    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
+    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'prompts']
     
     if not song_dirs:
         print("No song directories found in ./input")
@@ -131,7 +131,7 @@ def main():
     print(f"\nFound {len(song_dirs)} song(s) to process")
     
     # Get prompt file once (shared across all songs)
-    prompt_file = script_dir / "openai" / "curate-lyrics-prompt.md"
+    prompt_file = script_dir / "prompts" / "curate-lyrics-prompt.md"
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
     
@@ -212,7 +212,7 @@ def main():
         output_summary["curated_lyrics_files"] = unique_files
         
         # Save to JSON
-        output_file = output_dir / song_name / "openai" / "curated-lyrics.json"
+        output_file = output_dir / song_name / "prompts" / "curated-lyrics.json"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump(output_summary, f, indent=2)

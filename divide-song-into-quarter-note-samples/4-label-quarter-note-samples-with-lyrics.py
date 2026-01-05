@@ -191,7 +191,7 @@ def main():
     output_dir = script_dir / "output"
     
     # Find all song directories
-    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
+    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'prompts']
     
     if not song_dirs:
         print("No song directories found in ./input")
