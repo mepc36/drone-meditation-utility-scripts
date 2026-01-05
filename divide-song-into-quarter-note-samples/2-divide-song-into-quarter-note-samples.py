@@ -242,58 +242,78 @@ def main():
     input_dir = script_dir / "input"
     output_dir = script_dir / "output"
     
-    # Ensure directories exist (don't clear output - vocals.wav is there!)
+    # Ensure directories exist
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all audio files from input/*/audio/ directories (common formats)
-    audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
-    audio_files = []
-    for song_dir in input_dir.iterdir():
-        if song_dir.is_dir() and song_dir.name != '.DS_Store':
-            audio_subdir = song_dir / "audio"
-            if audio_subdir.exists():
-                for ext in audio_extensions:
-                    audio_files.extend(audio_subdir.glob(ext))
+    # Find all song directories
+    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
     
-    if not audio_files:
-        print("No audio files found in ./input/*/audio/ directories")
-        print(f"Supported formats: {', '.join(audio_extensions)}")
+    if not song_dirs:
+        print("No song directories found in ./input")
         return
     
-    if len(audio_files) > 1:
-        print(f"Error: Found {len(audio_files)} audio files, but only 1 is allowed.")
-        print("\nFound files:")
-        for f in audio_files:
-            print(f"  - {f}")
-        print("\nPlease ensure there is only 1 audio file in ./input/*/audio/ directories.")
-        raise ValueError(f"Expected 1 audio file, found {len(audio_files)}")
+    print(f"\nFound {len(song_dirs)} song(s) to process")
     
-    # Process the single audio file
-    audio_file = audio_files[0]
+    audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
     
-    # Get song name from grandparent directory (audio file is in ./input/{SONG_NAME}/audio/)
-    song_name = audio_file.parent.parent.name
-    song_dir = input_dir / song_name
-    
-    # Get config file path from ./input/{SONG_NAME}/config/config.json
-    config_file = song_dir / "config" / "config.json"
-    
-    # Get BPM and downbeat offset (from config or detect)
-    bpm, downbeat_offset = get_bpm(audio_file, config_file)
-    
-    # Process the main audio file
-    print(f"\nProcessing main audio file...")
-    divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
-    
-    # Check if acappella.wav exists in the demucs directory
-    vocals_file = song_dir / "demucs" / "acappella.wav"
-    
-    if vocals_file.exists():
-        print(f"\n\nProcessing acappella track...")
-        divide_song_into_quarter_notes(vocals_file, bpm, downbeat_offset, output_dir, is_vocals=True)
-    else:
-        print(f"\n\nNote: acappella.wav not found at {vocals_file}")
-        print(f"Run 1-separate-song-stems.py first to generate acappella track.")
+    # Process each song directory
+    for song_dir in song_dirs:
+        song_name = song_dir.name
+        
+        print(f"\n{'='*80}")
+        print(f"Processing: {song_name}")
+        print(f"{'='*80}")
+        
+        # Check if output already exists
+        main_samples_dir = output_dir / song_name / "quarter-note-samples"
+        if main_samples_dir.exists() and list(main_samples_dir.glob("*.wav")):
+            print(f"⏭  Skipping - quarter note samples already exist at {main_samples_dir}")
+            continue
+        
+        # Find audio file in this song's audio directory
+        audio_subdir = song_dir / "audio"
+        if not audio_subdir.exists():
+            print(f"⚠ Skipping - audio directory not found at {audio_subdir}")
+            continue
+        
+        audio_files = []
+        for ext in audio_extensions:
+            audio_files.extend(audio_subdir.glob(ext))
+        
+        if not audio_files:
+            print(f"⚠ Skipping - no audio files found in {audio_subdir}")
+            print(f"  Supported formats: {', '.join(audio_extensions)}")
+            continue
+        
+        if len(audio_files) > 1:
+            print(f"⚠ Skipping - found {len(audio_files)} audio files in {audio_subdir}, but only 1 is allowed.")
+            print("  Found files:")
+            for f in audio_files:
+                print(f"    - {f.name}")
+            continue
+        
+        audio_file = audio_files[0]
+        print(f"✓ Found audio file: {audio_file.name}")
+        
+        # Get config file path
+        config_file = song_dir / "config" / "config.json"
+        
+        # Get BPM and downbeat offset (from config or detect)
+        bpm, downbeat_offset = get_bpm(audio_file, config_file)
+        
+        # Process the main audio file
+        print(f"\nProcessing main audio file...")
+        divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
+        
+        # Check if acappella.wav exists in the demucs directory
+        vocals_file = song_dir / "demucs" / "acappella.wav"
+        
+        if vocals_file.exists():
+            print(f"\n\nProcessing acappella track...")
+            divide_song_into_quarter_notes(vocals_file, bpm, downbeat_offset, output_dir, is_vocals=True)
+        else:
+            print(f"\n\nNote: acappella.wav not found at {vocals_file}")
+            print(f"Run 1-separate-song-stems.py first to generate acappella track.")
 
 
 if __name__ == "__main__":

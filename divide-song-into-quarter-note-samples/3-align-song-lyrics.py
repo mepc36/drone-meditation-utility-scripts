@@ -38,107 +38,105 @@ def main():
         print("No song directories found in ./input")
         return
     
-    if len(song_dirs) > 1:
-        print(f"Error: Found {len(song_dirs)} song directories, but only 1 is allowed.")
-        print("\\nFound directories:")
-        for d in song_dirs:
-            print(f"  - {d.name}")
-        print("\\nPlease ensure there is only 1 song directory in ./input")
-        raise ValueError(f"Expected 1 song directory, found {len(song_dirs)}")
+    print(f"\nFound {len(song_dirs)} song(s) to process")
     
-    song_dir = song_dirs[0]
-    song_name = song_dir.name
+    # Get output directory base
+    output_base_dir = script_dir / "output"
     
-    print(f"\\n{'='*80}")
-    print(f"Processing: {song_name}")
-    print(f"{'='*80}")
-    
-    # Find vocals.wav
-    vocals_file = song_dir / "demucs" / "acappella.wav"
-    if not vocals_file.exists():
-        raise FileNotFoundError(f"acappella.wav not found at {vocals_file}\nRun 1-separate-song-stems.py first.")
-    
-    print(f"✓ Found acappella: {vocals_file}")
-    
-    # Find lyrics .txt file
-    lyrics_dir = song_dir / "lyrics"
-    if not lyrics_dir.exists():
-        raise FileNotFoundError(f"Lyrics directory not found at {lyrics_dir}")
-    
-    lyrics_files = list(lyrics_dir.glob("*.txt"))
-    
-    if not lyrics_files:
-        print(f"No .txt files found in {lyrics_dir}")
-        raise FileNotFoundError("No lyrics .txt file found")
-    
-    if len(lyrics_files) > 1:
-        print(f"Error: Found {len(lyrics_files)} .txt files in lyrics directory, but only 1 is allowed.")
-        print("\\nFound files:")
-        for f in lyrics_files:
-            print(f"  - {f.name}")
-        raise ValueError(f"Expected 1 lyrics file, found {len(lyrics_files)}")
-    
-    lyrics_file = lyrics_files[0]
-    print(f"✓ Found lyrics: {lyrics_file}")
-    
-    # Create output directory
-    output_dir = script_dir / "output" / song_name / "gentle"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    output_file = output_dir / "alignment.json"
-    
-    # Check if alignment already exists
-    if output_file.exists():
-        print(f"\\n⚠ Alignment already exists at {output_file}")
-        user_response = input("Overwrite? (y/n): ")
-        if user_response.lower() != 'y':
-            print("Aborted.")
-            return
-    
-    # Send request to Gentle aligner
-    print(f"\\nSending request to Gentle aligner...")
-    print("This may take several minutes...")
-    
-    try:
-        with open(vocals_file, 'rb') as audio_f, open(lyrics_file, 'rb') as lyrics_f:
-            files = {
-                'audio': ('vocals.wav', audio_f, 'audio/wav'),
-                'transcript': ('lyrics.txt', lyrics_f, 'text/plain')
-            }
+    # Process each song directory
+    for song_dir in song_dirs:
+        song_name = song_dir.name
+        
+        print(f"\n{'='*80}")
+        print(f"Processing: {song_name}")
+        print(f"{'='*80}")
+        
+        # Check if output already exists
+        output_file = output_base_dir / song_name / "gentle" / "alignment.json"
+        if output_file.exists():
+            print(f"⏭  Skipping - alignment already exists at {output_file}")
+            continue
+        
+        # Find vocals.wav
+        vocals_file = song_dir / "demucs" / "acappella.wav"
+        if not vocals_file.exists():
+            print(f"⚠ Skipping - acappella.wav not found at {vocals_file}")
+            print("  Run 1-separate-song-stems.py first.")
+            continue
+        
+        print(f"✓ Found acappella: {vocals_file}")
+        
+        # Find lyrics .txt file
+        lyrics_dir = song_dir / "lyrics"
+        if not lyrics_dir.exists():
+            print(f"⚠ Skipping - lyrics directory not found at {lyrics_dir}")
+            continue
+        
+        lyrics_files = list(lyrics_dir.glob("*.txt"))
+        
+        if not lyrics_files:
+            print(f"⚠ Skipping - no .txt files found in {lyrics_dir}")
+            continue
+        
+        if len(lyrics_files) > 1:
+            print(f"⚠ Skipping - found {len(lyrics_files)} .txt files in lyrics directory, but only 1 is allowed.")
+            print("  Found files:")
+            for f in lyrics_files:
+                print(f"    - {f.name}")
+            continue
+        
+        lyrics_file = lyrics_files[0]
+        print(f"✓ Found lyrics: {lyrics_file}")
+        
+        # Create output directory
+        output_dir = output_base_dir / song_name / "gentle"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Send request to Gentle aligner
+        print(f"\nSending request to Gentle aligner...")
+        print("This may take several minutes...")
+        
+        try:
+            with open(vocals_file, 'rb') as audio_f, open(lyrics_file, 'rb') as lyrics_f:
+                files = {
+                    'audio': ('vocals.wav', audio_f, 'audio/wav'),
+                    'transcript': ('lyrics.txt', lyrics_f, 'text/plain')
+                }
+                
+                response = requests.post(gentle_url, files=files, timeout=600)
+                response.raise_for_status()
             
-            response = requests.post(gentle_url, files=files, timeout=600)
-            response.raise_for_status()
-        
-        # Parse JSON response
-        alignment_data = response.json()
-        
-        # Save to file
-        with open(output_file, 'w') as f:
-            json.dump(alignment_data, f, indent=2)
-        
-        # Check for words in response
-        if 'words' not in alignment_data:
-            raise ValueError("Response does not contain 'words' field")
-        
-        num_words = len(alignment_data['words'])
-        num_aligned = len([w for w in alignment_data['words'] if w.get('case') == 'success'])
-        
-        print(f"\\n✓ Alignment complete!")
-        print(f"  Total words: {num_words}")
-        print(f"  Successfully aligned: {num_aligned}")
-        print(f"  Failed: {num_words - num_aligned}")
-        print(f"  Output saved to: {output_file}")
-        
-    except requests.exceptions.RequestException as e:
-        print(f"Error calling Gentle aligner: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Response status: {e.response.status_code}")
-            print(f"Response content: {e.response.text[:500]}")
-        raise
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON response from Gentle aligner")
-        print(f"Response content: {response.text[:500]}")
-        raise
+            # Parse JSON response
+            alignment_data = response.json()
+            
+            # Save to file
+            with open(output_file, 'w') as f:
+                json.dump(alignment_data, f, indent=2)
+            
+            # Check for words in response
+            if 'words' not in alignment_data:
+                print(f"⚠ Warning: Response does not contain 'words' field")
+                continue
+            
+            num_words = len(alignment_data['words'])
+            num_aligned = len([w for w in alignment_data['words'] if w.get('case') == 'success'])
+            
+            print(f"\n✓ Alignment complete!")
+            print(f"  Total words: {num_words}")
+            print(f"  Successfully aligned: {num_aligned}")
+            print(f"  Failed: {num_words - num_aligned}")
+            print(f"  Output saved to: {output_file}")
+            
+        except requests.exceptions.RequestException as e:
+            print(f"⚠ Error calling Gentle aligner: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"  Response status: {e.response.status_code}")
+                print(f"  Response content: {e.response.text[:500]}")
+            continue
+        except json.JSONDecodeError as e:
+            print(f"⚠ Error: Invalid JSON response from Gentle aligner")
+            print(f"  Response content: {response.text[:500]}")
+            continue
 
 
 if __name__ == "__main__":

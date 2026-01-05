@@ -190,66 +190,71 @@ def main():
     input_dir = script_dir / "input"
     output_dir = script_dir / "output"
     
-    # Find song directory (should only be one)
+    # Find all song directories
     song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
     
     if not song_dirs:
         print("No song directories found in ./input")
         return
     
-    if len(song_dirs) > 1:
-        print(f"Error: Found {len(song_dirs)} song directories, but only 1 is allowed.")
-        print("\nFound directories:")
-        for d in song_dirs:
-            print(f"  - {d.name}")
-        raise ValueError(f"Expected 1 song directory, found {len(song_dirs)}")
+    print(f"\nFound {len(song_dirs)} song(s) to process")
     
-    song_dir = song_dirs[0]
-    song_name = song_dir.name
-    
-    print(f"\n{'='*80}")
-    print(f"Processing: {song_name}")
-    print(f"{'='*80}")
-    
-    # Load alignment data
-    alignment_file = output_dir / song_name / "gentle" / "alignment.json"
-    if not alignment_file.exists():
-        raise FileNotFoundError(f"Alignment file not found: {alignment_file}\nRun 3-align-song-lyrics.py first.")
-    
-    print(f"✓ Found alignment data: {alignment_file}")
-    alignment_data = load_alignment_data(alignment_file)
-    words = alignment_data.get('words', [])
-    print(f"  Total words in alignment: {len(words)}")
-    
-    # Load config to get BPM (for quarter note duration)
-    config_file = song_dir / "config" / "config.json"
-    if not config_file.exists():
-        raise FileNotFoundError(f"Config file not found: {config_file}")
-    
-    with open(config_file, 'r') as f:
-        config = json.load(f)
-    
-    bpm = config.get('bpm')
-    if not bpm:
-        raise ValueError("BPM not found in config file")
-    
-    quarter_note_duration = 60.0 / bpm
-    print(f"✓ BPM: {bpm:.2f}")
-    print(f"  Quarter note duration: {quarter_note_duration:.6f} seconds")
-    
-    # Process full song samples
-    full_song_source = output_dir / song_name / "quarter-note-samples"
-    full_song_output = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
-    process_quarter_notes(full_song_source, full_song_output, words, quarter_note_duration, is_acappella=False)
-    
-    # Process acappella samples
-    acappella_source = output_dir / song_name / "quarter-note-samples-acappella"
-    acappella_output = output_dir / song_name / "quarter-note-samples-acappella-labeled-with-lyrics"
-    process_quarter_notes(acappella_source, acappella_output, words, quarter_note_duration, is_acappella=True)
-    
-    print(f"\n{'='*80}")
-    print("✓ All samples labeled successfully!")
-    print(f"{'='*80}")
+    # Process each song directory
+    for song_dir in song_dirs:
+        song_name = song_dir.name
+        
+        print(f"\n{'='*80}")
+        print(f"Processing: {song_name}")
+        print(f"{'='*80}")
+        
+        # Check if output already exists
+        full_song_output = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
+        if full_song_output.exists() and list(full_song_output.glob("*.wav")):
+            print(f"⏭  Skipping - labeled samples already exist at {full_song_output}")
+            continue
+        
+        # Load alignment data
+        alignment_file = output_dir / song_name / "gentle" / "alignment.json"
+        if not alignment_file.exists():
+            print(f"⚠ Skipping - alignment file not found at {alignment_file}")
+            print("  Run 3-align-song-lyrics.py first.")
+            continue
+        
+        print(f"✓ Found alignment data: {alignment_file}")
+        alignment_data = load_alignment_data(alignment_file)
+        words = alignment_data.get('words', [])
+        print(f"  Total words in alignment: {len(words)}")
+        
+        # Load config to get BPM (for quarter note duration)
+        config_file = song_dir / "config" / "config.json"
+        if not config_file.exists():
+            print(f"⚠ Skipping - config file not found at {config_file}")
+            continue
+        
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        bpm = config.get('bpm')
+        if not bpm:
+            print(f"⚠ Skipping - BPM not found in config file")
+            continue
+        
+        quarter_note_duration = 60.0 / bpm
+        print(f"✓ BPM: {bpm:.2f}")
+        print(f"  Quarter note duration: {quarter_note_duration:.6f} seconds")
+        
+        # Process full song samples
+        full_song_source = output_dir / song_name / "quarter-note-samples"
+        process_quarter_notes(full_song_source, full_song_output, words, quarter_note_duration, is_acappella=False)
+        
+        # Process acappella samples
+        acappella_source = output_dir / song_name / "quarter-note-samples-acappella"
+        acappella_output = output_dir / song_name / "quarter-note-samples-acappella-labeled-with-lyrics"
+        process_quarter_notes(acappella_source, acappella_output, words, quarter_note_duration, is_acappella=True)
+        
+        print(f"\n{'='*80}")
+        print(f"✓ Completed labeling for {song_name}")
+        print(f"{'='*80}")
 
 
 if __name__ == "__main__":

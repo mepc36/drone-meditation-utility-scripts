@@ -159,70 +159,85 @@ def main():
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
     
-    # Get all audio files from input/*/audio/ directories (common formats)
+    # Find all song directories
+    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
+    
+    if not song_dirs:
+        print("No song directories found in ./input")
+        return
+    
+    print(f"\nFound {len(song_dirs)} song(s) to process")
+    
+    # Get all audio files with their song directories
     audio_extensions = ['*.mp3', '*.wav', '*.flac', '*.m4a', '*.aac', '*.ogg', '*.wma']
-    audio_files = []
-    for song_dir in input_dir.iterdir():
-        if song_dir.is_dir() and song_dir.name != '.DS_Store':
-            audio_subdir = song_dir / "audio"
-            if audio_subdir.exists():
-                for ext in audio_extensions:
-                    audio_files.extend(audio_subdir.glob(ext))
     
-    if not audio_files:
-        print("No audio files found in ./input/*/audio/ directories")
-        print(f"Supported formats: {', '.join(audio_extensions)}")
-        return
-    
-    if len(audio_files) > 1:
-        print(f"Error: Found {len(audio_files)} audio files, but only 1 is allowed.")
-        print("\nFound files:")
-        for f in audio_files:
-            print(f"  - {f}")
-        print("\nPlease ensure there is only 1 audio file in ./input/*/audio/ directories.")
-        raise ValueError(f"Expected 1 audio file, found {len(audio_files)}")
-    
-    # Process the single audio file
-    audio_file = audio_files[0]
-    print(f"\n{'='*80}")
-    print(f"Processing: {audio_file.name}")
-    print(f"{'='*80}")
-    
-    # Get song name from grandparent directory (audio file is in ./input/{SONG_NAME}/audio/)
-    song_name = audio_file.parent.parent.name
-    song_dir = input_dir / song_name
-    
-    # Get config file path from ./input/{SONG_NAME}/config/config.json
-    config_file = song_dir / "config" / "config.json"
-    
-    # Load config
-    config_data = load_song_config(config_file)
-    
-    # Check if already source separated (unless force flag is set)
-    if config_data.get("source_separated", False) and not args.force:
-        print(f"✓ Song already source separated: {audio_file.name}")
-        print(f"  Config file: {config_file}")
-        print(f"  Skipping Demucs processing.")
-        print(f"\nTo re-process, use the -f flag or set 'source_separated' to false in the config file.")
-        return
-    
-    if args.force and config_data.get("source_separated", False):
-        print(f"⚠ Force flag detected - ignoring source_separated status")
-    
-    # Run Demucs
-    success = run_demucs(audio_file, song_dir)
-    
-    if success:
-        # Update config to mark as source separated
-        config_data["source_separated"] = True
-        save_song_config(config_file, config_data)
+    # Process each song directory
+    for song_dir in song_dirs:
+        song_name = song_dir.name
         
-        print(f"\n✓ Source separation complete!")
-        print(f"  Output directory: {song_dir / 'demucs'}")
-        print(f"  Config updated: {config_file}")
-        print(f"  Marked as source_separated: true")
-    else:
-        print(f"\n✗ Source separation failed for {audio_file.name}")
+        print(f"\n{'='*80}")
+        print(f"Processing: {song_name}")
+        print(f"{'='*80}")
+        
+        # Check if acappella.wav already exists (unless force flag is set)
+        acappella_file = song_dir / "demucs" / "acappella.wav"
+        if acappella_file.exists() and not args.force:
+            print(f"⏭  Skipping - acappella.wav already exists at {acappella_file}")
+            continue
+        
+        if args.force and acappella_file.exists():
+            print(f"⚠ Force flag detected - re-processing")
+        
+        # Find audio file in this song's audio directory
+        audio_subdir = song_dir / "audio"
+        if not audio_subdir.exists():
+            print(f"⚠ Skipping - audio directory not found at {audio_subdir}")
+            continue
+        
+        audio_files = []
+        for ext in audio_extensions:
+            audio_files.extend(audio_subdir.glob(ext))
+        
+        if not audio_files:
+            print(f"⚠ Skipping - no audio files found in {audio_subdir}")
+            print(f"  Supported formats: {', '.join(audio_extensions)}")
+            continue
+        
+        if len(audio_files) > 1:
+            print(f"⚠ Skipping - found {len(audio_files)} audio files in {audio_subdir}, but only 1 is allowed.")
+            print("  Found files:")
+            for f in audio_files:
+                print(f"    - {f.name}")
+            continue
+        
+        audio_file = audio_files[0]
+        print(f"✓ Found audio file: {audio_file.name}")
+        
+        # Get config file path
+        config_file = song_dir / "config" / "config.json"
+        
+        # Load config
+        config_data = load_song_config(config_file)
+        
+        # Check if already source separated (unless force flag is set)
+        if config_data.get("source_separated", False) and not args.force:
+            print(f"⏭  Skipping - already marked as source_separated in config")
+            print(f"  To re-process, use the -f flag")
+            continue
+        
+        # Run Demucs
+        success = run_demucs(audio_file, song_dir)
+        
+        if success:
+            # Update config to mark as source separated
+            config_data["source_separated"] = True
+            save_song_config(config_file, config_data)
+            
+            print(f"\n✓ Source separation complete!")
+            print(f"  Output directory: {song_dir / 'demucs'}")
+            print(f"  Config updated: {config_file}")
+        else:
+            print(f"\n✗ Source separation failed for {audio_file.name}")
 
 
 if __name__ == "__main__":

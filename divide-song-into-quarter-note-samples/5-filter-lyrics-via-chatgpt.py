@@ -131,7 +131,7 @@ def main():
     print(f"\nFound {len(song_dirs)} song(s) to process")
     
     # Get prompt file once (shared across all songs)
-    prompt_file = script_dir / "input" / "openai" / "meditation-lyrics-filter-prompt.txt"
+    prompt_file = script_dir / "input" / "openai" / "meditation-lyrics-filter-prompt.md"
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
     
@@ -142,6 +142,12 @@ def main():
         print(f"\n{'='*80}")
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
+        
+        # Check if output already exists
+        meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
+        if meditation_files_dir.exists() and list(meditation_files_dir.glob("*.wav")):
+            print(f"⏭  Skipping - meditation lyrics files already exist at {meditation_files_dir}")
+            continue
         
         # Process only full song samples
         full_song_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
@@ -155,7 +161,7 @@ def main():
         print(f"Found {len(all_lyrics)} unique lyric phrases")
         
         if not all_lyrics:
-            print("No lyrics found to filter - skipping")
+            print("⚠ Skipping - no lyrics found to filter")
             continue
         
         # Filter with ChatGPT
