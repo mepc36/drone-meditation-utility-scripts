@@ -299,8 +299,8 @@ def main():
         print(f"\nProcessing main audio file...")
         divide_song_into_quarter_notes(audio_file, bpm, downbeat_offset, output_dir, is_vocals=False)
         
-        # Check if acappella.wav exists in the demucs directory
-        vocals_file = song_dir / "demucs" / "acappella.wav"
+        # Check if acappella.wav exists in the output demucs directory
+        vocals_file = output_dir / song_name / "demucs" / "acappella.wav"
         
         if vocals_file.exists():
             print(f"\n\nProcessing acappella track...")

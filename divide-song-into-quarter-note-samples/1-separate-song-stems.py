@@ -72,12 +72,13 @@ def save_song_config(config_file: Path, config_data: dict) -> None:
         json.dump(config_data, f, indent=2)
 
 
-def run_demucs(audio_file: Path, song_dir: Path) -> bool:
+def run_demucs(audio_file: Path, song_name: str, output_base_dir: Path) -> bool:
     """Run Demucs to separate audio stems.
     
     Args:
         audio_file: Path to the input audio file
-        song_dir: Path to the song directory (in input folder)
+        song_name: Name of the song (directory name)
+        output_base_dir: Base output directory (./output)
         
     Returns:
         True if successful, False otherwise
@@ -85,12 +86,12 @@ def run_demucs(audio_file: Path, song_dir: Path) -> bool:
     print(f"\nRunning Demucs on: {audio_file.name}")
     print(f"This may take several minutes...\n")
     
-    # Create output directory in the input song folder
-    demucs_output_dir = song_dir / "demucs"
+    # Create output directory in ./output/{song_name}/demucs/
+    demucs_output_dir = output_base_dir / song_name / "demucs"
     demucs_output_dir.mkdir(parents=True, exist_ok=True)
     
     # Create temporary output directory for demucs
-    temp_output = song_dir / "temp_demucs"
+    temp_output = output_base_dir / song_name / "temp_demucs"
     
     # Build command - use python -m demucs instead of the binary
     cmd = [
@@ -158,6 +159,10 @@ def main():
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
+    output_dir = script_dir / "output"
+    
+    # Ensure output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Find all song directories
     song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
@@ -180,7 +185,7 @@ def main():
         print(f"{'='*80}")
         
         # Check if acappella.wav already exists (unless force flag is set)
-        acappella_file = song_dir / "demucs" / "acappella.wav"
+        acappella_file = output_dir / song_name / "demucs" / "acappella.wav"
         if acappella_file.exists() and not args.force:
             print(f"⏭  Skipping - acappella.wav already exists at {acappella_file}")
             continue
@@ -220,7 +225,7 @@ def main():
             continue
         
         # Run Demucs
-        success = run_demucs(audio_file, song_dir)
+        success = run_demucs(audio_file, song_name, output_dir)
         
         if success:
             # Update config to mark as source separated
@@ -228,7 +233,7 @@ def main():
             save_song_config(config_file, config_data)
             
             print(f"\n✓ Source separation complete!")
-            print(f"  Output directory: {song_dir / 'demucs'}")
+            print(f"  Output directory: {output_dir / song_name / 'demucs'}")
             print(f"  Config updated: {config_file}")
         else:
             print(f"\n✗ Source separation failed for {audio_file.name}")
