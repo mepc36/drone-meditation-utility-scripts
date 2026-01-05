@@ -14,6 +14,7 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 import shutil
+import argparse
 
 # Load environment variables
 load_dotenv()
@@ -111,6 +112,12 @@ def curate_lyrics_with_chatgpt(lyrics_list: list, api_key: str, prompt_file: Pat
 
 def main():
     """Main function to curate lyrics via ChatGPT."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Curate lyrics via ChatGPT')
+    parser.add_argument('-f', '--force', action='store_true', 
+                        help='Force curation even if already marked as lyrics_curated_by_gpt')
+    args = parser.parse_args()
+    
     # Get API key
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
@@ -151,10 +158,14 @@ def main():
         with open(config_file, 'r') as f:
             config = json.load(f)
         
-        # Skip if already curated
-        if config.get('lyrics_curated_by_gpt', False):
+        # Skip if already curated (unless force flag is set)
+        if config.get('lyrics_curated_by_gpt', False) and not args.force:
             print(f"⏭  Skipping - lyrics already curated (lyrics_curated_by_gpt=true in config)")
+            print(f"  To re-process, use the -f flag")
             continue
+        
+        if args.force and config.get('lyrics_curated_by_gpt', False):
+            print(f"⚠ Force flag detected - re-processing")
         
         # Remove existing directory if it exists
         curated_files_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics-curated-by-gpt"
@@ -225,7 +236,7 @@ def main():
         curated_files_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"\nCopying curated lyric files...")
-        for filename in output_summary["curated_lyrics_files"]:
+        for file_index, filename in enumerate(output_summary["curated_lyrics_files"], start=1):
             source = full_song_dir / filename
             
             # Extract parts from the filename
@@ -242,15 +253,13 @@ def main():
             if parts[-1] == 'partial':
                 # lyrics are parts 3 to -2 (excluding 'partial')
                 lyrics = '_'.join(parts[3:-1])
-                partial_suffix = '_partial'
             else:
                 # lyrics are parts 3 to end
                 lyrics = '_'.join(parts[3:])
-                partial_suffix = ''
             
-            # Create destination filename with index and timestamp at end
-            # Output format: prefix_lyrics[_partial]_index_timestamp.wav
-            dest = curated_files_dir / f"{prefix}_{lyrics}{partial_suffix}_{index}_{timestamp}.wav"
+            # Create destination filename
+            # Output format: index_lyrics_timestamp_songname.wav
+            dest = curated_files_dir / f"{file_index:04d}_{lyrics}_{timestamp}_{song_name}.wav"
             
             if source.exists():
                 shutil.copy2(source, dest)

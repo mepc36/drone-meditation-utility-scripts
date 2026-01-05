@@ -3,13 +3,13 @@
 Combine two quarter note samples into a single audio file with panning and padded silence.
 
 Usage:
-    python 6-combine-quarter-notes-into-piece.py <song_path> <sample1> [panning1] <sample2> [panning2] [padding]
+    python 6-combine-quarter-notes-into-piece.py <song_path> <sample1> <sample2> [panning1] [panning2] [padding]
 
 Arguments:
     song_path: Relative path to the song directory (e.g., "how-we-do")
     sample1: First sample index or filename (e.g., "1", "001", or "sample_001.wav")
-    panning1: Optional panning value for sample1 (-1.0 to 1.0, default: -1.0 hard left)
     sample2: Second sample index or filename (e.g., "2", "002", or "sample_002.wav")
+    panning1: Optional panning value for sample1 (-1.0 to 1.0, default: -1.0 hard left)
     panning2: Optional panning value for sample2 (-1.0 to 1.0, default: 1.0 hard right)
     padding: Optional padding silence in seconds (default: 2.0)
 
@@ -22,10 +22,10 @@ Examples:
     python script.py how-we-do sample_001.wav sample_002.wav
     
     # With panning values
-    python script.py how-we-do 1 -0.5 2 0.5
+    python script.py how-we-do 1 2 -0.5 0.5
     
     # With panning and padding
-    python script.py how-we-do 1 -0.5 2 0.5 3.0
+    python script.py how-we-do 1 2 -0.5 0.5 3.0
 """
 
 import sys
@@ -48,61 +48,54 @@ def is_numeric(value):
 
 def parse_arguments(args):
     """
-    Parse command line arguments intelligently.
+    Parse command line arguments positionally.
     Returns: (song_path, sample1, panning1, sample2, panning2, padding)
+    
+    Format: song_path sample1 sample2 [panning1] [panning2] [padding]
     """
     if len(args) < 3:
         print("Error: At least 3 arguments required (song_path, sample1, sample2)")
         sys.exit(1)
     
     song_path = args[0]
-    
-    # Collect remaining arguments
     remaining = args[1:]
     
-    # Separate filenames from numeric values
-    filenames = []
-    numeric_values = []
-    
-    for arg in remaining:
-        if is_numeric(arg):
-            numeric_values.append(float(arg))
-        else:
-            filenames.append(arg)
-    
-    # Must have exactly 2 filenames
-    if len(filenames) != 2:
-        print(f"Error: Expected 2 sample filenames, got {len(filenames)}")
+    if len(remaining) < 2:
+        print("Error: Need at least 2 sample identifiers")
         sys.exit(1)
     
-    sample1, sample2 = filenames
-    
-    # Parse numeric values
-    # They can be: [panning1, panning2, padding] or [panning1, panning2] or [padding] or []
-    # Panning values are typically -1.0 to 1.0
-    # Padding is typically >= 0
+    # First two arguments are always sample identifiers
+    sample1 = remaining[0]
+    sample2 = remaining[1]
     
     # Default values
     panning1 = -1.0  # Hard left
     panning2 = 1.0   # Hard right
     padding = 2.0    # 2 seconds
     
-    if len(numeric_values) == 0:
-        # All defaults
-        pass
-    elif len(numeric_values) == 1:
-        # Could be padding only
-        # Assume it's padding (typically > 1)
-        padding = numeric_values[0]
-    elif len(numeric_values) == 2:
-        # Two panning values
-        panning1 = numeric_values[0]
-        panning2 = numeric_values[1]
-    elif len(numeric_values) >= 3:
-        # All three values
-        panning1 = numeric_values[0]
-        panning2 = numeric_values[1]
-        padding = numeric_values[2]
+    # Parse remaining optional numeric arguments
+    if len(remaining) >= 3:
+        try:
+            panning1 = float(remaining[2])
+        except ValueError:
+            print(f"Error: Expected numeric panning value for sample1, got '{remaining[2]}'")
+            sys.exit(1)
+    
+    if len(remaining) >= 4:
+        try:
+            panning2 = float(remaining[3])
+        except ValueError:
+            print(f"Error: Expected numeric panning value for sample2, got '{remaining[3]}'")
+            sys.exit(1)
+    
+    if len(remaining) >= 5:
+        try:
+            padding = float(remaining[4])
+        except ValueError:
+            print(f"Error: Expected numeric padding value, got '{remaining[4]}'")
+            sys.exit(1)
+    
+    return song_path, sample1, panning1, sample2, panning2, padding
     
     return song_path, sample1, panning1, sample2, panning2, padding
 
@@ -112,7 +105,7 @@ def resolve_sample_path(sample_identifier, samples_dir):
     Resolve a sample identifier (index or filename) to the actual file path.
     
     Args:
-        sample_identifier: Either an index number (e.g., "1", "001") or a filename (e.g., "sample_001.wav")
+        sample_identifier: Either an index number (e.g., "1", "001", "0001") or a filename
         samples_dir: Directory containing the sample files
     
     Returns:
@@ -128,17 +121,20 @@ def resolve_sample_path(sample_identifier, samples_dir):
         return full_path
     
     # Try to interpret as an index number
-    # Strip leading zeros and check if it's a number
-    clean_identifier = sample_identifier.lstrip('0') or '0'
-    if clean_identifier.isdigit():
-        index = int(clean_identifier)
+    # Check if it's numeric (could have leading zeros like "0001")
+    if sample_identifier.isdigit():
+        # Look for files starting with this index
+        # The new format is: INDEX_LYRICS_TIMESTAMP_SONGNAME.wav (e.g., 0001_yeah_1.914894_if-i-cant.wav)
+        # Also support old format: sample_INDEX_... (e.g., sample_001_...)
         
-        # Look for files matching sample_NNN* pattern
-        # Try with zero-padded versions: 001, 01, 1
+        # Normalize to 4-digit format for new files
+        index = int(sample_identifier)
+        
         patterns = [
-            f"sample_{index:03d}*",  # sample_001*
-            f"sample_{index:02d}*",  # sample_01*
-            f"sample_{index}*",      # sample_1*
+            f"{index:04d}_*",        # New format: 0001_*
+            f"sample_{index:03d}*",  # Old format: sample_001*
+            f"sample_{index:02d}*",  # Old format: sample_01*
+            f"sample_{index}*",      # Old format: sample_1*
         ]
         
         matches = []
@@ -229,7 +225,7 @@ def main():
     
     # Construct input paths
     script_dir = Path(__file__).parent
-    input_base = script_dir / "output" / song_name / "quarter-note-samples-labeled-with-lyrics"
+    input_base = script_dir / "output" / song_name / "quarter-note-samples-labeled-with-lyrics-curated-by-gpt"
     
     # Resolve sample paths (supports index numbers or filenames)
     try:
