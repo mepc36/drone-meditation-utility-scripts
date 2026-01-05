@@ -121,101 +121,100 @@ def main():
     input_dir = script_dir / "input"
     output_dir = script_dir / "output"
     
-    # Find song directory (should only be one)
-    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store']
+    # Find all song directories
+    song_dirs = [d for d in input_dir.iterdir() if d.is_dir() and d.name != '.DS_Store' and d.name != 'openai']
     
     if not song_dirs:
         print("No song directories found in ./input")
         return
     
-    if len(song_dirs) > 1:
-        print(f"Error: Found {len(song_dirs)} song directories, but only 1 is allowed.")
-        raise ValueError(f"Expected 1 song directory, found {len(song_dirs)}")
+    print(f"\nFound {len(song_dirs)} song(s) to process")
     
-    song_dir = song_dirs[0]
-    song_name = song_dir.name
-    
-    print(f"\n{'='*80}")
-    print(f"Processing: {song_name}")
-    print(f"{'='*80}")
-    
-    # Process only full song samples
-    full_song_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
-    
-    # Extract lyrics from full song directory
-    print("\nExtracting lyrics from full song filenames...")
-    full_song_lyrics = extract_lyrics_from_filenames(full_song_dir)
-    
-    all_lyrics = sorted(list(full_song_lyrics.keys()))
-    
-    print(f"Found {len(all_lyrics)} unique lyric phrases")
-    
-    if not all_lyrics:
-        print("No lyrics found to filter")
-        return
-    
-    # Get prompt file
+    # Get prompt file once (shared across all songs)
     prompt_file = script_dir / "input" / "openai" / "meditation-lyrics-filter-prompt.txt"
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
     
-    # Filter with ChatGPT
-    filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
-    
-    print(f"\n{'='*80}")
-    print(f"ChatGPT Results:")
-    print(f"{'='*80}")
-    print(f"Input: {len(all_lyrics)} unique phrases")
-    print(f"Output: {len(filtered_lyrics)} meditation-appropriate phrases")
-    print(f"\nFiltered lyrics:")
-    for lyric in sorted(filtered_lyrics):
-        print(f"  - {lyric}")
-    
-    # Create output summary
-    output_summary = {
-        "song_name": song_name,
-        "total_unique_lyrics": len(all_lyrics),
-        "meditation_lyrics_count": len(filtered_lyrics),
-        "meditation_lyrics": sorted(filtered_lyrics),
-        "meditation_lyrics_files": []
-    }
-    
-    # Collect all matching filenames into a single list
-    all_files = []
-    for lyric in filtered_lyrics:
-        if lyric in full_song_lyrics:
-            all_files.extend(full_song_lyrics[lyric])
-    
-    # Sort by index (first part of filename)
-    all_files.sort(key=lambda f: int(f.split('_')[0]))
-    output_summary["meditation_lyrics_files"] = all_files
-    
-    # Save to JSON
-    output_file = output_dir / song_name / "openai" / "meditation-lyrics.json"
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, 'w') as f:
-        json.dump(output_summary, f, indent=2)
-    
-    print(f"\n✓ Results saved to: {output_file}")
-    
-    # Copy meditation lyric files to their own folder
-    meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
-    meditation_files_dir.mkdir(parents=True, exist_ok=True)
-    
-    print(f"\nCopying meditation lyric files...")
-    for filename in output_summary["meditation_lyrics_files"]:
-        source = full_song_dir / filename
-        dest = meditation_files_dir / filename
-        if source.exists():
-            shutil.copy2(source, dest)
-    
-    print(f"✓ Copied {len(output_summary['meditation_lyrics_files'])} files to: {meditation_files_dir}")
-    
-    print(f"\n{'='*80}")
-    print("Summary:")
-    print(f"{'='*80}")
-    print(f"Total meditation lyric files: {len(output_summary['meditation_lyrics_files'])}")
-    print(f"Output directory: {meditation_files_dir}")
+    # Process each song directory
+    for song_dir in song_dirs:
+        song_name = song_dir.name
+        
+        print(f"\n{'='*80}")
+        print(f"Processing: {song_name}")
+        print(f"{'='*80}")
+        
+        # Process only full song samples
+        full_song_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
+        
+        # Extract lyrics from full song directory
+        print("\nExtracting lyrics from full song filenames...")
+        full_song_lyrics = extract_lyrics_from_filenames(full_song_dir)
+        
+        all_lyrics = sorted(list(full_song_lyrics.keys()))
+        
+        print(f"Found {len(all_lyrics)} unique lyric phrases")
+        
+        if not all_lyrics:
+            print("No lyrics found to filter - skipping")
+            continue
+        
+        # Filter with ChatGPT
+        filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
+        
+        print(f"\n{'='*80}")
+        print(f"ChatGPT Results:")
+        print(f"{'='*80}")
+        print(f"Input: {len(all_lyrics)} unique phrases")
+        print(f"Output: {len(filtered_lyrics)} meditation-appropriate phrases")
+        print(f"\nFiltered lyrics:")
+        for lyric in sorted(filtered_lyrics):
+            print(f"  - {lyric}")
+        
+        # Create output summary
+        output_summary = {
+            "song_name": song_name,
+            "total_unique_lyrics": len(all_lyrics),
+            "meditation_lyrics_count": len(filtered_lyrics),
+            "meditation_lyrics": sorted(filtered_lyrics),
+            "meditation_lyrics_files": []
+        }
+        
+        # Collect all matching filenames into a single list
+        all_files = []
+        for lyric in filtered_lyrics:
+            if lyric in full_song_lyrics:
+                all_files.extend(full_song_lyrics[lyric])
+        
+        # Sort by index (first part of filename)
+        all_files.sort(key=lambda f: int(f.split('_')[0]))
+        output_summary["meditation_lyrics_files"] = all_files
+        
+        # Save to JSON
+        output_file = output_dir / song_name / "openai" / "meditation-lyrics.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w') as f:
+            json.dump(output_summary, f, indent=2)
+        
+        print(f"\n✓ Results saved to: {output_file}")
+        
+        # Copy meditation lyric files to their own folder
+        meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
+        meditation_files_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"\nCopying meditation lyric files...")
+        for filename in output_summary["meditation_lyrics_files"]:
+            source = full_song_dir / filename
+            dest = meditation_files_dir / filename
+            if source.exists():
+                shutil.copy2(source, dest)
+        
+        print(f"✓ Copied {len(output_summary['meditation_lyrics_files'])} files to: {meditation_files_dir}")
+        
+        print(f"\n{'='*80}")
+        print(f"Summary for {song_name}:")
+        print(f"{'='*80}")
+        print(f"Total meditation lyric files: {len(output_summary['meditation_lyrics_files'])}")
+        print(f"Output directory: {meditation_files_dir}")
 
 
 if __name__ == "__main__":
