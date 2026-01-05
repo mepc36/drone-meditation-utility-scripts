@@ -143,11 +143,11 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
-        # Check if output already exists
+        # Remove existing meditation-lyrics-files directory if it exists
         meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
-        if meditation_files_dir.exists() and list(meditation_files_dir.glob("*.wav")):
-            print(f"⏭  Skipping - meditation lyrics files already exist at {meditation_files_dir}")
-            continue
+        if meditation_files_dir.exists():
+            print(f"Removing existing meditation-lyrics-files directory...")
+            shutil.rmtree(meditation_files_dir)
         
         # Process only full song samples
         full_song_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
@@ -185,15 +185,19 @@ def main():
             "meditation_lyrics_files": []
         }
         
-        # Collect all matching filenames into a single list
-        all_files = []
+        # Collect only the first occurrence of each lyric (lowest index)
+        unique_files = []
         for lyric in filtered_lyrics:
             if lyric in full_song_lyrics:
-                all_files.extend(full_song_lyrics[lyric])
+                # Get all files for this lyric and sort by index
+                files_for_lyric = sorted(full_song_lyrics[lyric], key=lambda f: int(f.split('_')[0]))
+                # Take only the first one
+                if files_for_lyric:
+                    unique_files.append(files_for_lyric[0])
         
         # Sort by index (first part of filename)
-        all_files.sort(key=lambda f: int(f.split('_')[0]))
-        output_summary["meditation_lyrics_files"] = all_files
+        unique_files.sort(key=lambda f: int(f.split('_')[0]))
+        output_summary["meditation_lyrics_files"] = unique_files
         
         # Save to JSON
         output_file = output_dir / song_name / "openai" / "meditation-lyrics.json"
