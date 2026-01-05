@@ -273,24 +273,18 @@ def main():
         # Find audio file in this song's audio directory
         audio_subdir = song_dir / "audio"
         if not audio_subdir.exists():
-            print(f"⚠ Skipping - audio directory not found at {audio_subdir}")
-            continue
+            raise FileNotFoundError(f"Audio directory not found at {audio_subdir}")
         
         audio_files = []
         for ext in audio_extensions:
             audio_files.extend(audio_subdir.glob(ext))
         
         if not audio_files:
-            print(f"⚠ Skipping - no audio files found in {audio_subdir}")
-            print(f"  Supported formats: {', '.join(audio_extensions)}")
-            continue
+            raise FileNotFoundError(f"No audio files found in {audio_subdir}\nSupported formats: {', '.join(audio_extensions)}")
         
         if len(audio_files) > 1:
-            print(f"⚠ Skipping - found {len(audio_files)} audio files in {audio_subdir}, but only 1 is allowed.")
-            print("  Found files:")
-            for f in audio_files:
-                print(f"    - {f.name}")
-            continue
+            files_list = '\n    '.join([f.name for f in audio_files])
+            raise ValueError(f"Found {len(audio_files)} audio files in {audio_subdir}, but only 1 is allowed.\n  Found files:\n    {files_list}")
         
         audio_file = audio_files[0]
         print(f"✓ Found audio file: {audio_file.name}")

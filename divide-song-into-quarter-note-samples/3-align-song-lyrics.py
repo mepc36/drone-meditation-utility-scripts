@@ -60,9 +60,7 @@ def main():
         # Find vocals.wav
         vocals_file = song_dir / "demucs" / "acappella.wav"
         if not vocals_file.exists():
-            print(f"⚠ Skipping - acappella.wav not found at {vocals_file}")
-            print("  Run 1-separate-song-stems.py first.")
-            continue
+            raise FileNotFoundError(f"acappella.wav not found at {vocals_file}\nRun 1-separate-song-stems.py first.")
         
         print(f"✓ Found acappella: {vocals_file}")
         

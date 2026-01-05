@@ -216,9 +216,7 @@ def main():
         # Load alignment data
         alignment_file = output_dir / song_name / "gentle" / "alignment.json"
         if not alignment_file.exists():
-            print(f"⚠ Skipping - alignment file not found at {alignment_file}")
-            print("  Run 3-align-song-lyrics.py first.")
-            continue
+            raise FileNotFoundError(f"Alignment file not found at {alignment_file}\nRun 3-align-song-lyrics.py first.")
         
         print(f"✓ Found alignment data: {alignment_file}")
         alignment_data = load_alignment_data(alignment_file)
@@ -228,16 +226,14 @@ def main():
         # Load config to get BPM (for quarter note duration)
         config_file = song_dir / "config" / "config.json"
         if not config_file.exists():
-            print(f"⚠ Skipping - config file not found at {config_file}")
-            continue
+            raise FileNotFoundError(f"Config file not found at {config_file}")
         
         with open(config_file, 'r') as f:
             config = json.load(f)
         
         bpm = config.get('bpm')
         if not bpm:
-            print(f"⚠ Skipping - BPM not found in config file")
-            continue
+            raise ValueError(f"BPM not found in config file: {config_file}")
         
         quarter_note_duration = 60.0 / bpm
         print(f"✓ BPM: {bpm:.2f}")

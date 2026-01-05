@@ -143,6 +143,19 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
+        # Load config to check if already filtered
+        config_file = song_dir / "config" / "config.json"
+        if not config_file.exists():
+            raise FileNotFoundError(f"Config file not found at {config_file}")
+        
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        # Skip if already filtered
+        if config.get('lyrics_curated_by_gpt', False):
+            print(f"⏭  Skipping - lyrics already filtered (lyrics_curated_by_gpt=true in config)")
+            continue
+        
         # Remove existing meditation-lyrics-files directory if it exists
         meditation_files_dir = output_dir / song_name / "meditation-lyrics-files"
         if meditation_files_dir.exists():
@@ -161,8 +174,7 @@ def main():
         print(f"Found {len(all_lyrics)} unique lyric phrases")
         
         if not all_lyrics:
-            print("⚠ Skipping - no lyrics found to filter")
-            continue
+            raise ValueError(f"No lyrics found to filter in {full_song_dir}\nRun 4-label-quarter-note-samples-with-lyrics.py first.")
         
         # Filter with ChatGPT
         filtered_lyrics = filter_lyrics_with_chatgpt(all_lyrics, api_key, prompt_file)
@@ -220,11 +232,17 @@ def main():
         
         print(f"✓ Copied {len(output_summary['meditation_lyrics_files'])} files to: {meditation_files_dir}")
         
+        # Update config to mark as filtered
+        config['lyrics_curated_by_gpt'] = True
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        
         print(f"\n{'='*80}")
         print(f"Summary for {song_name}:")
         print(f"{'='*80}")
         print(f"Total meditation lyric files: {len(output_summary['meditation_lyrics_files'])}")
         print(f"Output directory: {meditation_files_dir}")
+        print(f"✓ Config updated: lyrics_curated_by_gpt=true")
 
 
 if __name__ == "__main__":
