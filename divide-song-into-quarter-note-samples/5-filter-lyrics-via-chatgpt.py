@@ -226,7 +226,21 @@ def main():
         print(f"\nCopying curated lyric files...")
         for filename in output_summary["curated_lyrics_files"]:
             source = full_song_dir / filename
-            dest = curated_files_dir / filename
+            
+            # Extract just the lyrics part from the filename
+            # Format: index_timestamp_prefix_lyrics.wav or index_timestamp_prefix_lyrics_partial.wav
+            stem = Path(filename).stem
+            parts = stem.split('_')
+            
+            # Last part is lyrics (or second-to-last if ends with 'partial')
+            if parts[-1] == 'partial':
+                lyrics = parts[-2]
+            else:
+                lyrics = parts[-1]
+            
+            # Create destination filename with just lyrics
+            dest = curated_files_dir / f"{lyrics}.wav"
+            
             if source.exists():
                 shutil.copy2(source, dest)
         
