@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import json
 import requests
+import argparse
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -20,6 +21,12 @@ load_dotenv()
 
 def main():
     """Main function to align lyrics with audio."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Align song lyrics with audio using Gentle')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Force reprocessing even if alignment already exists')
+    args = parser.parse_args()
+    
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
@@ -51,10 +58,11 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
-        # Check if output already exists
+        # Check if output already exists (skip check if force flag is used)
         output_file = output_base_dir / song_name / "gentle" / "alignment.json"
-        if output_file.exists():
+        if not args.force and output_file.exists():
             print(f"⏭  Skipping - alignment already exists at {output_file}")
+            print(f"   Use -f or --force flag to reprocess")
             continue
         
         # Find vocals.wav in output directory
