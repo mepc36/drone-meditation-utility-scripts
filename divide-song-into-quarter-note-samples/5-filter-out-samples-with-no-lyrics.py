@@ -70,7 +70,7 @@ def filter_no_lyrics_samples(output_dir: Path, song_name: str) -> None:
         output_dir: Base output directory
         song_name: Name of the song directory
     """
-    filtered_dir = output_dir / song_name / "quarter-note-samples-filtered-no-lyrics"
+    filtered_dir = output_dir / song_name / "quarter-note-samples-with-no-lyrics"
     
     total_moved = 0
     
