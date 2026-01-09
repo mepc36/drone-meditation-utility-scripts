@@ -13,6 +13,7 @@ from pathlib import Path
 import json
 import shutil
 import re
+import argparse
 
 
 def text_to_kebab_case(text: str) -> str:
@@ -185,6 +186,12 @@ def process_quarter_notes(source_dir: Path, output_dir: Path, words: list,
 
 def main():
     """Main function to label quarter note samples with lyrics."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Label quarter note samples with lyrics')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Force reprocessing even if output already exists')
+    args = parser.parse_args()
+    
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
@@ -207,10 +214,11 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
-        # Check if output already exists
+        # Check if output already exists (skip check if force flag is used)
         full_song_output = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
-        if full_song_output.exists() and list(full_song_output.glob("*.wav")):
+        if not args.force and full_song_output.exists() and list(full_song_output.glob("*.wav")):
             print(f"⏭  Skipping - labeled samples already exist at {full_song_output}")
+            print(f"   Use -f or --force flag to reprocess")
             continue
         
         # Load alignment data
