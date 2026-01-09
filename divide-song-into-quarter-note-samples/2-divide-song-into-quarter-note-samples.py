@@ -17,6 +17,7 @@ import librosa
 import json
 import shutil
 import re
+import argparse
 
 
 def filename_to_kebab_case(filename: str) -> str:
@@ -129,6 +130,43 @@ def calculate_quarter_note_duration(bpm: float) -> float:
     return duration_seconds
 
 
+def apply_slow_then_sudden_fade_out(
+    audio: np.ndarray,
+    sr: int,
+    fade_ms: float = 100.0,
+    power: float = 4.5
+) -> np.ndarray:
+    """
+    Applies a slow-then-sudden fade-out that ends at absolute silence.
+    - audio: mono (samples,) or stereo (samples, channels)
+    - fade_ms: fade duration in milliseconds
+    - power: curve steepness (>1 = slower start, sharper drop)
+    """
+    fade_samples = int(sr * fade_ms / 1000.0)
+    if fade_samples <= 1:
+        return audio
+
+    n = audio.shape[0]
+    fade_samples = min(fade_samples, n)
+
+    # Linear time 0 → 1
+    t = np.linspace(0.0, 1.0, fade_samples, endpoint=True)
+
+    # Curve: stays loud, then drops fast
+    gain = 1.0 - np.power(t, power)
+
+    # Enforce absolute silence at the final sample
+    gain[-1] = 0.0
+
+    out = audio.copy()
+    if out.ndim == 1:
+        out[-fade_samples:] *= gain
+    else:
+        out[-fade_samples:, :] *= gain[:, None]
+
+    return out
+
+
 def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset: float, output_base_dir: Path, is_vocals: bool = False) -> None:
     """
     Divide an audio file into quarter note segments.
@@ -205,6 +243,14 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
         # Extract segment
         segment = audio_data[start_sample:end_sample]
         
+        # Apply fade-out
+        segment = apply_slow_then_sudden_fade_out(
+            segment,
+            sample_rate,
+            fade_ms=100.0,   # ~16% of a quarter note at 94 BPM
+            power=4.5
+        )
+        
         # Calculate timestamp for this segment (in seconds)
         timestamp = i * quarter_note_sec
         
@@ -223,6 +269,14 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     if remaining_start < total_samples:
         remaining_segment = audio_data[remaining_start:]
         
+        # Apply fade-out
+        remaining_segment = apply_slow_then_sudden_fade_out(
+            remaining_segment,
+            sample_rate,
+            fade_ms=100.0,
+            power=4.5
+        )
+        
         # Calculate timestamp for the partial segment
         timestamp = num_segments * quarter_note_sec
         
@@ -237,6 +291,12 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
 
 def main():
     """Main function to process audio files."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Divide audio files into quarter note samples')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Force reprocessing even if output already exists')
+    args = parser.parse_args()
+    
     # Get directories
     script_dir = Path(__file__).parent
     input_dir = script_dir / "input"
@@ -264,10 +324,11 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
-        # Check if output already exists
+        # Check if output already exists (skip check if force flag is used)
         main_samples_dir = output_dir / song_name / "quarter-note-samples"
-        if main_samples_dir.exists() and list(main_samples_dir.glob("*.wav")):
+        if not args.force and main_samples_dir.exists() and list(main_samples_dir.glob("*.wav")):
             print(f"⏭  Skipping - quarter note samples already exist at {main_samples_dir}")
+            print(f"   Use -f or --force flag to reprocess")
             continue
         
         # Find audio file in this song's audio directory
