@@ -9,6 +9,7 @@ torchcodec>=0.0.1
 python-dotenv>=1.0.0
 requests>=2.31.0
 openai>=1.0.0
+matplotlib>=3.8.0
 
 # BPM detection with essentia (via Docker)
 # Install Docker and pull image: docker pull mtgupf/essentia
@@ -16,5 +17,13 @@ openai>=1.0.0
 beautifulsoup4
 
 # Optional: uncomment if you want to pin to tested versions
+# Note: These older pinned versions may not be compatible with Python 3.13+
+# librosa==0.10.1
+# numba==0.58.1  # Does not support Python 3.13+
+# numpy==1.26.4
+# scipy==1.11.4
+# matplotlib==3.8.2
+# soundfile==0.12.1
+# audioread==3.0.1
 # numpy==1.23.5
 # soundfile==0.13.1
