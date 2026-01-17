@@ -225,7 +225,7 @@ def main():
     
     # Construct input paths
     script_dir = Path(__file__).parent
-    input_base = script_dir / "output" / song_name / "quarter-note-samples-labeled-with-lyrics-curated-by-gpt"
+    input_base = script_dir / "output" / song_name / "quarter-note-samples-labeled-with-lyrics"
     
     # Resolve sample paths (supports index numbers or filenames)
     try:
