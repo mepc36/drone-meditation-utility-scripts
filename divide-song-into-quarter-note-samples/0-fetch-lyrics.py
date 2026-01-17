@@ -4,6 +4,13 @@ from bs4 import BeautifulSoup
 import argparse
 import sys
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+CLEAN_UP_LYRICS_VIA_GPT = True
 
 HEADERS = {
     "User-Agent": (
@@ -57,8 +64,8 @@ def scrape_genius_lyrics(url: str) -> str:
 
     return lyrics
 
-def clean_lyrics(lyrics: str) -> str:
-    """Clean lyrics by removing empty lines and bracketed annotations.
+def clean_lyrics_via_regex(lyrics: str) -> str:
+    """Clean lyrics by removing empty lines and bracketed annotations (regex method).
     
     Args:
         lyrics: Raw lyrics text
@@ -81,6 +88,224 @@ def clean_lyrics(lyrics: str) -> str:
         cleaned_lines.append(line)
     
     return '\n'.join(cleaned_lines)
+
+
+def clean_lyrics_via_gpt(lyrics: str, api_key: str) -> str:
+    """Clean lyrics using GPT to remove annotations, headers, and metadata.
+    
+    Args:
+        lyrics: Raw lyrics text
+        api_key: OpenAI API key
+        
+    Returns:
+        Cleaned lyrics text
+    """
+    client = OpenAI(api_key=api_key)
+    
+    # Create prompt with example
+    prompt = f"""You are cleaning song lyrics fetched from Genius.com. Remove all the following:
+1. All section headers like [Intro: 50 Cent], [Verse 1: 50 Cent], [Chorus: 50 Cent], [Outro: 50 Cent], etc.
+2. All site metadata and advertising content like "See rap shows near Philadelphia", "Get tickets as low as $42", "You might also like", etc.
+3. Any other non-lyric content
+4. Any empty lines
+
+Keep ONLY the actual song lyrics - the words that are sung/rapped in the song.
+
+**EXAMPLE INPUT:**
+
+[Intro: 50 Cent]
+Yeah
+Haha, yeah
+Yeah
+
+[Chorus: 50 Cent]
+If I can't do it, homie
+It can't be done
+Now I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+
+[Verse 1: 50 Cent]
+I apply pressure to pussies, they stunt and I pop (Yeah)
+Stand alone squeezing my pistol, I'm sure that I got 'em (Uh-huh)
+Now, Peter Piper picked peppers, and Run rocked rhymes
+I'm 50 Cent, I write a little bit, but I pop nines (Brrat)
+Tell niggas get they money right, 'cause I got mine (Uh-huh)
+And I'm around, quit playing, nigga, you can't shine (Woo)
+You gon' be that next chump to end up in the trunk
+After being hit by the pump, is that what you want?
+Be easy, nigga, I'll lay your ass out
+Believe me, nigga, that's what I'm about
+Gangsta, you could find a nigga sitting on chrome
+Hit the clutch, hit the gear, hit the gas and I'm gone (Yeah)
+
+[Chorus: 50 Cent]
+If I can't do it, homie
+It can't be done
+Now, I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+See rap shows near Philadelphia
+Get tickets as low as $42
+
+You might also like
+Many Men (Wish Death)
+50 Cent
+Heat
+50 Cent
+Family Matters
+Drake
+
+[Verse 2: 50 Cent & Dr. Dre]
+I'm down for the action, he smart with his mouth, so smack him (Woo)
+You holding a strap, he might come back, so clap him (Yeah)
+React like a gangsta, or die like a gangsta for acting (C'mon)
+'Cause you'll get hit and homicide'll be asking, "What happened?"
+Oh no, look who crept in with the .44
+Twenty-inch rims sitting on low-pros (Uh-huh)
+East side, west side, niggas know, yo, I'm loco (Yeah)
+Even my mama said something really wrong with my brain
+Niggas don't rob me, they know I'm down to die for my chain
+G-Unit (Yeah), we get it popping in the hood
+G-Unit (Yeah), motherfucker, what's good?
+I'm waiting on niggas to act like they don't know how to act (Uh-huh)
+After sippin' too much Jack, I'll blow 'em off the map
+With the MAC, thinking it's all rap
+'Til that ass get clapped and Doc say, "It's a wrap" (It's a wrap, nigga)
+
+[Chorus: 50 Cent]
+If I can't do it, homie
+It can't be done
+Now, I'ma let the champagne bottle pop (Uh-huh), I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+
+[Verse 3: 50 Cent]
+I invented how to teach lessons to slow learners
+Go ahead, act up, get smacked in the head with the burner (Ah)
+I don't fight fair, I'm dirty, dirty
+I'm from Southside Jamaica, Queens, nigga, you heard me? (Yeah)
+When the streetlights come on, niggas blast the nines (Uh-huh)
+Get locked up, then read books to pass the time (Woo)
+In the game, there's ups and downs, so I stay on the grind
+Niggas on my dick more than my bitch, I stay on they mind
+There ain't nothing they could do to stop my shine (Uh-uh)
+This is God's plan, homie, this ain't mine
+I played the music loud so Grandpa called me a nuisance
+And Grandma always gotta throw in her two cents
+I'm the dropout who made more money than his teachers
+Roofless like the coupe, but I come with more features
+I am what I am, you can like it or love it
+It feels good to blow fifty grand and think nothing of it, fuck it
+
+
+[Chorus: 50 Cent]
+If I can't do it, homie
+It can't be done
+Now I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+If I can't do it, homie
+It can't be done (Haha)
+Now I'ma let the champagne bottle pop, I'ma take it to the top (Yeah)
+For sure I'ma make it hot, baby (Baby)
+
+[Outro: 50 Cent]
+Uh-huh
+I'ma make it hot
+Dr. Dre, Aftermath
+Shady, haha
+
+**EXAMPLE OUTPUT:**
+
+Yeah
+Haha, yeah
+Yeah
+If I can't do it, homie
+It can't be done
+Now I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+I apply pressure to pussies, they stunt and I pop (Yeah)
+Stand alone squeezing my pistol, I'm sure that I got 'em (Uh-huh)
+Now, Peter Piper picked peppers, and Run rocked rhymes
+I'm 50 Cent, I write a little bit, but I pop nines (Brrat)
+Tell niggas get they money right, 'cause I got mine (Uh-huh)
+And I'm around, quit playing, nigga, you can't shine (Woo)
+You gon' be that next chump to end up in the trunk
+After being hit by the pump, is that what you want?
+Be easy, nigga, I'll lay your ass out
+Believe me, nigga, that's what I'm about
+Gangsta, you could find a nigga sitting on chrome
+Hit the clutch, hit the gear, hit the gas and I'm gone (Yeah)
+If I can't do it, homie
+It can't be done
+Now, I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+I'm down for the action, he smart with his mouth, so smack him (Woo)
+You holding a strap, he might come back, so clap him (Yeah)
+React like a gangsta, or die like a gangsta for acting (C'mon)
+'Cause you'll get hit and homicide'll be asking, "What happened?"
+Oh no, look who crept in with the .44
+Twenty-inch rims sitting on low-pros (Uh-huh)
+East side, west side, niggas know, yo, I'm loco (Yeah)
+Even my mama said something really wrong with my brain
+Niggas don't rob me, they know I'm down to die for my chain
+G-Unit (Yeah), we get it popping in the hood
+G-Unit (Yeah), motherfucker, what's good?
+I'm waiting on niggas to act like they don't know how to act (Uh-huh)
+After sippin' too much Jack, I'll blow 'em off the map
+With the MAC, thinking it's all rap
+'Til that ass get clapped and Doc say, "It's a wrap" (It's a wrap, nigga)
+If I can't do it, homie
+It can't be done
+Now, I'ma let the champagne bottle pop (Uh-huh), I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+I invented how to teach lessons to slow learners
+Go ahead, act up, get smacked in the head with the burner (Ah)
+I don't fight fair, I'm dirty, dirty
+I'm from Southside Jamaica, Queens, nigga, you heard me? (Yeah)
+When the streetlights come on, niggas blast the nines (Uh-huh)
+Get locked up, then read books to pass the time (Woo)
+In the game, there's ups and downs, so I stay on the grind
+Niggas on my dick more than my bitch, I stay on they mind
+There ain't nothing they could do to stop my shine (Uh-uh)
+This is God's plan, homie, this ain't mine
+I played the music loud so Grandpa called me a nuisance
+And Grandma always gotta throw in her two cents
+I'm the dropout who made more money than his teachers
+Roofless like the coupe, but I come with more features
+I am what I am, you can like it or love it
+It feels good to blow fifty grand and think nothing of it, fuck it
+If I can't do it, homie
+It can't be done
+Now I'ma let the champagne bottle pop, I'ma take it to the top
+For sure, I'ma make it hot, baby (Baby)
+If I can't do it, homie
+It can't be done (Haha)
+Now I'ma let the champagne bottle pop, I'ma take it to the top (Yeah)
+For sure I'ma make it hot, baby (Baby)
+Uh-huh
+I'ma make it hot
+Dr. Dre, Aftermath
+Shady, haha
+
+---
+
+Now clean the following lyrics:
+
+{lyrics}
+
+Return ONLY the cleaned lyrics with no additional commentary."""
+    
+    print("Sending lyrics to GPT for cleaning...")
+    
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.3
+    )
+    
+    cleaned_lyrics = response.choices[0].message.content.strip()
+    
+    return cleaned_lyrics
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch and clean song lyrics from Genius')
@@ -107,8 +332,20 @@ def main():
         lyrics = scrape_genius_lyrics(genius_url)
         print(f"✓ Fetched lyrics ({len(lyrics)} characters)")
         
-        # Clean lyrics
-        cleaned_lyrics = clean_lyrics(lyrics)
+        # Clean lyrics based on environment variable
+        if CLEAN_UP_LYRICS_VIA_GPT:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
+                print("❌ Error: OPENAI_API_KEY not found in .env file", file=sys.stderr)
+                print("  Set CLEAN_UP_LYRICS_VIA_GPT=false to use regex cleaning instead", file=sys.stderr)
+                sys.exit(1)
+            
+            print("Cleaning lyrics via GPT...")
+            cleaned_lyrics = clean_lyrics_via_gpt(lyrics, api_key)
+        else:
+            print("Cleaning lyrics via regex...")
+            cleaned_lyrics = clean_lyrics_via_regex(lyrics)
+        
         print(f"✓ Cleaned lyrics ({len(cleaned_lyrics)} characters)")
         
         # Write to file
