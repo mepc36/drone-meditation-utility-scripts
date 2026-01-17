@@ -10,7 +10,7 @@ from openai import OpenAI
 
 load_dotenv()
 
-CLEAN_UP_LYRICS_VIA_GPT = True
+CLEAN_UP_LYRICS_VIA_GPT = False
 
 HEADERS = {
     "User-Agent": (
@@ -65,7 +65,7 @@ def scrape_genius_lyrics(url: str) -> str:
     return lyrics
 
 def clean_lyrics_via_regex(lyrics: str) -> str:
-    """Clean lyrics by removing empty lines and bracketed annotations (regex method).
+    """Clean lyrics by removing empty lines, bracketed annotations, and commas (regex method).
     
     Args:
         lyrics: Raw lyrics text
@@ -77,12 +77,19 @@ def clean_lyrics_via_regex(lyrics: str) -> str:
     cleaned_lines = []
     
     for line in lines:
-        # Skip empty lines
+        # Remove empty lines
         if not line.strip():
             continue
         
-        # Skip lines that start with [ and end with ]
+        # Remove lines that start with [ and end with ]
         if line.strip().startswith('[') and line.strip().endswith(']'):
+            continue
+        
+        # Remove all commas from the line
+        line = line.replace(',', '')
+        
+        # Remove line if now empty after removing commas
+        if not line.strip():
             continue
         
         cleaned_lines.append(line)
