@@ -314,24 +314,81 @@ Return ONLY the cleaned lyrics with no additional commentary."""
     
     return cleaned_lyrics
 
+def is_url(text: str) -> bool:
+    """Check if a string is a URL.
+    
+    Args:
+        text: String to check
+        
+    Returns:
+        True if the string is a URL, False otherwise
+    """
+    return text.startswith('http://') or text.startswith('https://')
+
+
+def extract_song_name_from_url(url: str) -> str:
+    """Extract song name from a Genius URL for directory naming.
+    
+    Args:
+        url: Genius URL
+        
+    Returns:
+        Song name slug extracted from URL
+    """
+    # Extract the path component from the URL
+    # Example: https://genius.com/artist-song-name-lyrics -> artist-song-name-lyrics
+    path = url.rstrip('/').split('/')[-1]
+    
+    # Remove -lyrics suffix if present
+    if path.endswith('-lyrics'):
+        path = path[:-7]
+    
+    return path
+
+
 def main():
-    parser = argparse.ArgumentParser(description='Fetch and clean song lyrics from Genius')
-    parser.add_argument('artist', help='Artist name')
-    parser.add_argument('song', help='Song name')
+    parser = argparse.ArgumentParser(
+        description='Fetch and clean song lyrics from Genius',
+        epilog='Usage: python 0-fetch-lyrics.py <artist> <song> OR python 0-fetch-lyrics.py <url>'
+    )
+    parser.add_argument('artist_or_url', help='Artist name or Genius URL')
+    parser.add_argument('song', nargs='?', help='Song name (not required if URL is provided)')
     args = parser.parse_args()
     
     # Get script directory and create input path
     script_dir = Path(__file__).parent
     
-    # Create song name slug for directory
-    song_slug = re.sub(r'[^a-z0-9]+', '-', args.song.lower()).strip('-')
+    # Check if first argument is a URL
+    is_url_mode = is_url(args.artist_or_url)
+    
+    if is_url_mode:
+        genius_url = args.artist_or_url
+        # Extract song name from URL for directory naming
+        song_slug = extract_song_name_from_url(genius_url)
+        print(f"Detected URL input")
+    else:
+        # Traditional mode: artist and song name
+        if not args.song:
+            print("❌ Error: Song name is required when not using a URL", file=sys.stderr)
+            print("  Usage: python 0-fetch-lyrics.py <artist> <song>", file=sys.stderr)
+            print("     OR: python 0-fetch-lyrics.py <url>", file=sys.stderr)
+            sys.exit(1)
+        
+        # Create song name slug for directory
+        song_slug = re.sub(r'[^a-z0-9]+', '-', args.song.lower()).strip('-')
+        
+        # Create Genius URL
+        genius_url = create_genius_url(args.artist_or_url, args.song)
     
     # Create output directory
-    output_dir = script_dir / "input" / song_slug / "lyrics"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if is_url_mode:
+        # When URL is provided, write to current directory
+        output_dir = script_dir
+    else:
+        # When artist/song provided, write to input directory structure
+        output_dir = script_dir / "input" / song_slug / "lyrics"
+        output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create Genius URL
-    genius_url = create_genius_url(args.artist, args.song)
     print(f"Fetching lyrics from: {genius_url}")
     
     try:
