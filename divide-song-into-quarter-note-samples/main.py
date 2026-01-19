@@ -40,23 +40,40 @@ def write_error_log(output_dir: Path, song_name: str, step: str, error: Exceptio
         step: Description of the step that failed
         error: The exception that occurred
     """
-    error_log_dir = output_dir / song_name
-    error_log_dir.mkdir(parents=True, exist_ok=True)
+    # Create timestamp for directory and filename
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
-    error_log_file = error_log_dir / "error-log.txt"
+    # Create error directory structure
+    error_dir = output_dir / song_name / "errors" / f"error-{timestamp}"
+    error_dir.mkdir(parents=True, exist_ok=True)
     
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    error_log_file = error_dir / f"error-{timestamp}.txt"
     
-    with open(error_log_file, 'a') as f:
-        f.write(f"\n{'='*80}\n")
-        f.write(f"ERROR: {timestamp}\n")
+    # Human readable timestamp for content
+    human_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(error_log_file, 'w') as f:
+        f.write(f"{'='*80}\n")
+        f.write(f"ERROR: {human_timestamp}\n")
         f.write(f"{'='*80}\n")
         f.write(f"Step: {step}\n")
         f.write(f"Song: {song_name}\n")
         f.write(f"Error: {str(error)}\n")
+        
+        # Include captured stdout/stderr if available
+        if hasattr(error, 'stdout') and error.stdout:
+            f.write(f"\nStdout:\n")
+            f.write(error.stdout)
+        
+        if hasattr(error, 'stderr') and error.stderr:
+            f.write(f"\nStderr:\n")
+            f.write(error.stderr)
+        
         f.write(f"\nTraceback:\n")
         f.write(traceback.format_exc())
         f.write(f"\n{'='*80}\n")
+    
+    return error_log_file
 
 
 def run_command(cmd: list, description: str, song_name: str, output_dir: Path) -> bool:
@@ -76,30 +93,67 @@ def run_command(cmd: list, description: str, song_name: str, output_dir: Path) -
     print(f"{'='*80}")
     print(f"Running: {' '.join(cmd)}\n")
     
+    # Capture output while streaming in real-time
+    stdout_lines = []
+    stderr_lines = []
+    
     try:
-        # Stream output in real-time instead of buffering
-        result = subprocess.run(
-            cmd, 
-            check=True,
-            text=True
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
         )
+        
+        # Stream stdout in real-time
+        for line in process.stdout:
+            print(line, end='')
+            stdout_lines.append(line)
+        
+        # Get stderr after stdout finishes
+        stderr_output = process.stderr.read()
+        if stderr_output:
+            print(stderr_output, file=sys.stderr, end='')
+            stderr_lines.append(stderr_output)
+        
+        # Wait for process to complete
+        return_code = process.wait()
+        
+        if return_code != 0:
+            error_msg = f"{description} failed with exit code {return_code}"
+            print(f"\n✗ {error_msg}", file=sys.stderr)
+            
+            # Create a mock exception with captured output for logging
+            class MockException(Exception):
+                def __init__(self, msg, stdout, stderr, returncode):
+                    super().__init__(msg)
+                    self.stdout = stdout
+                    self.stderr = stderr
+                    self.returncode = returncode
+            
+            mock_error = MockException(
+                error_msg,
+                ''.join(stdout_lines),
+                ''.join(stderr_lines),
+                return_code
+            )
+            
+            # Write to error log with captured output
+            error_file = write_error_log(output_dir, song_name, description, mock_error)
+            print(f"Error logged to: {error_file}")
+            return False
+        
         print(f"\n✓ {description} completed successfully")
         return True
-    except subprocess.CalledProcessError as e:
-        error_msg = f"{description} failed with exit code {e.returncode}"
-        print(f"\n✗ {error_msg}", file=sys.stderr)
         
-        # Write to error log
-        write_error_log(output_dir, song_name, description, e)
-        print(f"Error logged to: {output_dir / song_name / 'error-log.txt'}")
-        return False
     except Exception as e:
         error_msg = f"{description} failed with error: {e}"
         print(f"\n✗ {error_msg}", file=sys.stderr)
         
         # Write to error log
-        write_error_log(output_dir, song_name, description, e)
-        print(f"Error logged to: {output_dir / song_name / 'error-log.txt'}")
+        error_file = write_error_log(output_dir, song_name, description, e)
+        print(f"Error logged to: {error_file}")
         return False
 
 
@@ -306,7 +360,7 @@ Options:
         if failed:
             f.write(f"\n✗ Failed: {len(failed)}/{len(results)}\n")
             for name in failed:
-                f.write(f"  - {name} (see ./output/{name}/error-log.txt)\n")
+                f.write(f"  - {name} (see ./output/{name}/errors/)\n")
         
         f.write("\n")
         f.write("Output directory: ./output/\n")
@@ -327,7 +381,7 @@ Options:
     if failed:
         print(f"\n✗ Failed: {len(failed)}/{len(results)}")
         for name in failed:
-            print(f"  - {name} (see ./output/{name}/error-log.txt)")
+            print(f"  - {name} (see ./output/{name}/errors/)")
     
     print("\nOutput directory: ./output/")
     print(f"Summary saved to: {summary_file}")
