@@ -100,9 +100,9 @@ def main():
         print(f"✓ Found acappella: {vocals_file}")
         
         # Find lyrics .txt file
-        lyrics_dir = song_dir / "lyrics"
+        lyrics_dir = song_dir
         if not lyrics_dir.exists():
-            raise FileNotFoundError(f"Lyrics directory not found at {lyrics_dir}")
+            raise FileNotFoundError(f"Song directory not found at {lyrics_dir}")
         
         lyrics_files = list(lyrics_dir.glob("*.txt"))
         

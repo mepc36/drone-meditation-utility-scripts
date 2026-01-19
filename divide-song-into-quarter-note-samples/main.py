@@ -211,16 +211,17 @@ def process_song(song_dir: Path, script_dir: Path, output_dir: Path, force_flag:
     
     # Steps 1-6 (or 2-6 if skipping lyrics)
     steps = [
-        (str(script_dir / "1-separate-song-stems.py"), force_flag, "Step 1: Separate vocals using Demucs"),
-        (str(script_dir / "2-divide-song-into-quarter-note-samples.py"), force_flag, "Step 2: Divide audio into quarter note samples"),
-        (str(script_dir / "3-align-song-lyrics.py"), force_flag, "Step 3: Align lyrics with audio using Gentle"),
-        (str(script_dir / "4-label-quarter-note-samples-with-lyrics.py"), force_flag, "Step 4: Label samples with aligned lyrics"),
-        (str(script_dir / "5-filter-out-samples-with-no-lyrics.py"), [], "Step 5: Filter samples with no lyrics"),
+        (str(script_dir / "1-separate-song-stems.py"), force_flag, "Step 1", "Separating vocal stems..."),
+        (str(script_dir / "2-divide-song-into-quarter-note-samples.py"), force_flag, "Step 2", "Dividing audio into quarter notes..."),
+        (str(script_dir / "3-align-song-lyrics.py"), force_flag, "Step 3", "Aligning lyrics with audio..."),
+        (str(script_dir / "4-label-quarter-note-samples-with-lyrics.py"), force_flag, "Step 4", "Labeling samples with aligned lyrics..."),
+        (str(script_dir / "5-filter-out-samples-with-no-lyrics.py"), [], "Step 5", "Filtering samples with no lyrics..."),
     ]
     
-    for script_path, flags, description in steps:
+    for script_path, flags, step_num, description in steps:
+        print(f"\n{step_num} -- {song_name} -- {description}")
         cmd = [sys.executable, script_path] + flags
-        if not run_command(cmd, description, song_name, output_dir):
+        if not run_command(cmd, f"{step_num}: {description}", song_name, output_dir):
             all_succeeded = False
             print(f"\n⚠️  Continuing to next song despite error in {song_name}...")
             break  # Skip remaining steps for this song
@@ -327,11 +328,61 @@ Options:
         print(f"No song directories found in {input_dir}")
         return 0
     
-    print(f"\nFound {len(song_dirs)} song(s) to process\n")
+    # Count already processed vs new songs
+    already_processed = []
+    new_to_process_names = []
+    songs_to_process = []
+    
+    for song_dir in song_dirs:
+        song_name = song_dir.name
+        # Check if song has been fully processed (has labeled samples)
+        labeled_samples_dir = output_dir / song_name / "quarter-note-samples-labeled-with-lyrics"
+        acappella_labeled_samples_dir = output_dir / song_name / "quarter-note-samples-acappella-labeled-with-lyrics"
+        
+        # Song is processed if either full song or acappella labeled samples exist
+        has_labeled_samples = (
+            (labeled_samples_dir.exists() and list(labeled_samples_dir.glob("*.wav"))) or
+            (acappella_labeled_samples_dir.exists() and list(acappella_labeled_samples_dir.glob("*.wav")))
+        )
+        
+        if has_labeled_samples and not args.force:
+            already_processed.append(song_name)
+        else:
+            new_to_process_names.append(song_name)
+            songs_to_process.append(song_dir)
+    
+    print(f"\nFound {len(song_dirs)} song(s) total")
+    print(f"  ✓ Already processed: {len(already_processed)}")
+    print(f"  → New to process: {len(new_to_process_names)}")
+    
+    if new_to_process_names:
+        print(f"\nNew songs to process:")
+        for song_name in sorted(new_to_process_names):
+            print(f"  - {song_name}")
+    
+    if args.force:
+        print(f"\n⚠️  Force mode ON - will reprocess all songs\n")
+    elif not songs_to_process:
+        print(f"\n✓ All songs already processed!\n")
+        return 0
+    else:
+        print()
+    
+    # Sort songs to process: those with acappella.wav first
+    def has_acappella(song_dir: Path) -> bool:
+        """Check if song has acappella.wav file."""
+        acappella_path = output_dir / song_dir.name / "demucs" / "acappella.wav"
+        return acappella_path.exists()
+    
+    songs_with_acappella = [d for d in songs_to_process if has_acappella(d)]
+    songs_without_acappella = [d for d in songs_to_process if not has_acappella(d)]
+    sorted_song_dirs = songs_with_acappella + songs_without_acappella
+    
+    print(f"Processing order: {len(songs_with_acappella)} with acappella.wav first, then {len(songs_without_acappella)} without\n")
     
     # Process each song
     results = {}
-    for song_dir in song_dirs:
+    for song_dir in sorted_song_dirs:
         success = process_song(song_dir, script_dir, output_dir, force_flag, skip_lyrics=not fetch_lyrics)
         results[song_dir.name] = success
     

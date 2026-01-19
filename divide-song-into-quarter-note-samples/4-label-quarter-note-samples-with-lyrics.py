@@ -260,7 +260,7 @@ def main():
         print(f"  Total words in alignment: {len(words)}")
         
         # Load config to get BPM (for quarter note duration)
-        config_file = song_dir / "config" / "config.json"
+        config_file = song_dir / "config.json"
         if not config_file.exists():
             raise FileNotFoundError(f"Config file not found at {config_file}")
         

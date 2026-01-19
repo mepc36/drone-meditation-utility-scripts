@@ -220,10 +220,10 @@ def main():
         if args.force and acappella_file.exists():
             print(f"⚠ Force flag detected - re-processing")
         
-        # Find audio file in this song's audio directory
-        audio_subdir = song_dir / "audio"
+        # Find audio file in this song's directory
+        audio_subdir = song_dir
         if not audio_subdir.exists():
-            raise FileNotFoundError(f"Audio directory not found at {audio_subdir}")
+            raise FileNotFoundError(f"Song directory not found at {audio_subdir}")
         
         audio_files = []
         for ext in audio_extensions:
@@ -240,7 +240,7 @@ def main():
         print(f"✓ Found audio file: {audio_file.name}")
         
         # Get config file path
-        config_file = song_dir / "config" / "config.json"
+        config_file = song_dir / "config.json"
         
         # Create config if it doesn't exist
         if not config_file.exists():
