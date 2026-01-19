@@ -244,12 +244,12 @@ def divide_song_into_quarter_notes(audio_file: Path, bpm: float, downbeat_offset
     print(f"Number of quarter note segments: {num_segments}")
     
     # Get song name from directory structure (not from audio filename)
-    # For main audio: ./input/{SONG_NAME}/audio/{filename}.mp3 -> use SONG_NAME
-    # For acappella: ./input/{SONG_NAME}/demucs/acappella.wav -> use SONG_NAME
+    # For main audio: ./input/{SONG_NAME}/{filename}.mp3 -> use SONG_NAME
+    # For acappella: ./output/{SONG_NAME}/demucs/acappella.wav -> use SONG_NAME
     if is_vocals:
         song_name = audio_file.parent.parent.name  # demucs parent's parent is SONG_NAME
     else:
-        song_name = audio_file.parent.parent.name  # audio parent's parent is SONG_NAME
+        song_name = audio_file.parent.name  # audio parent is SONG_NAME
     
     # Determine output directory based on track type
     if is_vocals:
@@ -358,10 +358,10 @@ def main():
             print(f"   Use -f or --force flag to reprocess")
             continue
         
-        # Find audio file in this song's audio directory
-        audio_subdir = song_dir / "audio"
+        # Find audio file in this song's directory
+        audio_subdir = song_dir
         if not audio_subdir.exists():
-            raise FileNotFoundError(f"Audio directory not found at {audio_subdir}")
+            raise FileNotFoundError(f"Song directory not found at {audio_subdir}")
         
         audio_files = []
         for ext in audio_extensions:
@@ -378,7 +378,7 @@ def main():
         print(f"✓ Found audio file: {audio_file.name}")
         
         # Get config file path
-        config_file = song_dir / "config" / "config.json"
+        config_file = song_dir / "config.json"
         
         # Get BPM and downbeat offset (from config or detect)
         bpm, downbeat_offset = get_bpm(audio_file, config_file)
