@@ -395,7 +395,7 @@ def main():
         output_dir = script_dir
     else:
         # When artist/song provided, write to input directory structure
-        output_dir = script_dir / "input" / song_slug / "lyrics"
+        output_dir = script_dir / "input" / song_slug
         output_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"Fetching lyrics from: {genius_url}")
