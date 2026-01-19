@@ -73,6 +73,9 @@ def clean_lyrics_via_regex(lyrics: str) -> str:
     Returns:
         Cleaned lyrics text
     """
+    # Remove everything before "read more" (case insensitive)
+    lyrics = re.sub(r'^.*?read more', '', lyrics, flags=re.IGNORECASE | re.DOTALL)
+    
     # Remove all content between square brackets (including multi-line)
     lyrics = re.sub(r'\[.*?\]', '', lyrics, flags=re.DOTALL)
     
@@ -92,6 +95,10 @@ def clean_lyrics_via_regex(lyrics: str) -> str:
         
         # Skip empty lines
         if not line:
+            continue
+        
+        # Skip lines with no alphanumeric characters
+        if not re.search(r'[a-zA-Z0-9]', line):
             continue
         
         cleaned_lines.append(line)
