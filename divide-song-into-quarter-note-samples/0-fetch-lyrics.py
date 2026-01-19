@@ -73,23 +73,25 @@ def clean_lyrics_via_regex(lyrics: str) -> str:
     Returns:
         Cleaned lyrics text
     """
+    # Remove all content between square brackets (including multi-line)
+    lyrics = re.sub(r'\[.*?\]', '', lyrics, flags=re.DOTALL)
+    
+    # Remove all content in parentheses (ad-libs like (Ha), (Ho!), etc.)
+    lyrics = re.sub(r'\([^)]*\)', '', lyrics)
+    
+    # Remove all commas
+    lyrics = lyrics.replace(',', '')
+    
+    # Split into lines and clean up
     lines = lyrics.split('\n')
     cleaned_lines = []
     
     for line in lines:
-        # Remove empty lines
-        if not line.strip():
-            continue
+        # Strip whitespace
+        line = line.strip()
         
-        # Remove lines that start with [ and end with ]
-        if line.strip().startswith('[') and line.strip().endswith(']'):
-            continue
-        
-        # Remove all commas from the line
-        line = line.replace(',', '')
-        
-        # Remove line if now empty after removing commas
-        if not line.strip():
+        # Skip empty lines
+        if not line:
             continue
         
         cleaned_lines.append(line)
