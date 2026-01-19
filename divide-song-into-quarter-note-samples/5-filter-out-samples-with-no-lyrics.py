@@ -9,6 +9,34 @@ This script:
 
 from pathlib import Path
 import shutil
+from datetime import datetime
+
+
+def write_status_marker(output_dir: Path, status: str, error_msg: str = None) -> None:
+    """Write status marker file (.success or .error) to output directory.
+    
+    Args:
+        output_dir: Directory to write the marker file
+        status: Either 'success' or 'error'
+        error_msg: Optional error message for .error files
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Remove old status markers
+    for old_marker in ['.success', '.error']:
+        old_file = output_dir / old_marker
+        if old_file.exists():
+            old_file.unlink()
+    
+    # Write new status marker
+    marker_file = output_dir / f'.{status}'
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(marker_file, 'w') as f:
+        f.write(f"timestamp: {timestamp}\n")
+        if error_msg:
+            f.write(f"error: {error_msg}\n")
+from datetime import datetime
 
 
 def filter_no_lyrics_samples_from_dir(source_dir: Path, filtered_dir: Path, track_type: str) -> int:
@@ -115,7 +143,16 @@ def main():
         print(f"Processing: {song_name}")
         print(f"{'='*80}")
         
-        filter_no_lyrics_samples(output_dir, song_name)
+        try:
+            filter_no_lyrics_samples(output_dir, song_name)
+            
+            # Write success marker
+            write_status_marker(song_dir, 'success')
+        except Exception as e:
+            # Write error marker
+            write_status_marker(song_dir, 'error', str(e))
+            print(f"  ✗ Error: {e}")
+            continue
     
     print(f"\n✓ Complete!")
 

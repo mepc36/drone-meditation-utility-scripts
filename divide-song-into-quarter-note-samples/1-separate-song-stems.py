@@ -16,6 +16,7 @@ import json
 import re
 import shutil
 import argparse
+from datetime import datetime
 
 
 def filename_to_kebab_case(filename: str) -> str:
@@ -70,6 +71,32 @@ def save_song_config(config_file: Path, config_data: dict) -> None:
     config_file.parent.mkdir(parents=True, exist_ok=True)
     with open(config_file, 'w') as f:
         json.dump(config_data, f, indent=2)
+
+
+def write_status_marker(output_dir: Path, status: str, error_msg: str = None) -> None:
+    """Write status marker file (.success or .error) to output directory.
+    
+    Args:
+        output_dir: Directory to write the marker file
+        status: Either 'success' or 'error'
+        error_msg: Optional error message for .error files
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Remove old status markers
+    for old_marker in ['.success', '.error']:
+        old_file = output_dir / old_marker
+        if old_file.exists():
+            old_file.unlink()
+    
+    # Write new status marker
+    marker_file = output_dir / f'.{status}'
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(marker_file, 'w') as f:
+        f.write(f"timestamp: {timestamp}\n")
+        if error_msg:
+            f.write(f"error: {error_msg}\n")
 
 
 def run_demucs(audio_file: Path, song_name: str, output_base_dir: Path) -> bool:
@@ -233,15 +260,23 @@ def main():
         # Run Demucs
         success = run_demucs(audio_file, song_name, output_dir)
         
+        demucs_output_dir = output_dir / song_name / "demucs"
+        
         if success:
             # Update config to mark as source separated
             config_data["source_separated"] = True
             save_song_config(config_file, config_data)
             
+            # Write success marker
+            write_status_marker(demucs_output_dir, 'success')
+            
             print(f"\n✓ Source separation complete!")
-            print(f"  Output directory: {output_dir / song_name / 'demucs'}")
+            print(f"  Output directory: {demucs_output_dir}")
             print(f"  Config updated: {config_file}")
         else:
+            # Write error marker
+            write_status_marker(demucs_output_dir, 'error', 'Demucs separation failed')
+            
             print(f"\n✗ Source separation failed for {audio_file.name}")
 
 

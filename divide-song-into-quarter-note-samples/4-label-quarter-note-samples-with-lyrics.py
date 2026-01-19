@@ -14,6 +14,34 @@ import json
 import shutil
 import re
 import argparse
+from datetime import datetime
+
+
+def write_status_marker(output_dir: Path, status: str, error_msg: str = None) -> None:
+    """Write status marker file (.success or .error) to output directory.
+    
+    Args:
+        output_dir: Directory to write the marker file
+        status: Either 'success' or 'error'
+        error_msg: Optional error message for .error files
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Remove old status markers
+    for old_marker in ['.success', '.error']:
+        old_file = output_dir / old_marker
+        if old_file.exists():
+            old_file.unlink()
+    
+    # Write new status marker
+    marker_file = output_dir / f'.{status}'
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(marker_file, 'w') as f:
+        f.write(f"timestamp: {timestamp}\n")
+        if error_msg:
+            f.write(f"error: {error_msg}\n")
+from datetime import datetime
 
 
 def text_to_kebab_case(text: str) -> str:
@@ -247,18 +275,28 @@ def main():
         print(f"✓ BPM: {bpm:.2f}")
         print(f"  Quarter note duration: {quarter_note_duration:.6f} seconds")
         
-        # Process full song samples
-        full_song_source = output_dir / song_name / "quarter-note-samples"
-        process_quarter_notes(full_song_source, full_song_output, words, quarter_note_duration, is_acappella=False)
+        song_output_dir = output_dir / song_name
         
-        # Process acappella samples
-        acappella_source = output_dir / song_name / "quarter-note-samples-acappella"
-        acappella_output = output_dir / song_name / "quarter-note-samples-acappella-labeled-with-lyrics"
-        process_quarter_notes(acappella_source, acappella_output, words, quarter_note_duration, is_acappella=True)
-        
-        print(f"\n{'='*80}")
-        print(f"✓ Completed labeling for {song_name}")
-        print(f"{'='*80}")
+        try:
+            # Process full song samples
+            full_song_source = output_dir / song_name / "quarter-note-samples"
+            process_quarter_notes(full_song_source, full_song_output, words, quarter_note_duration, is_acappella=False)
+            
+            # Process acappella samples
+            acappella_source = output_dir / song_name / "quarter-note-samples-acappella"
+            acappella_output = output_dir / song_name / "quarter-note-samples-acappella-labeled-with-lyrics"
+            process_quarter_notes(acappella_source, acappella_output, words, quarter_note_duration, is_acappella=True)
+            
+            print(f"\n{'='*80}")
+            print(f"✓ Completed labeling for {song_name}")
+            print(f"{'='*80}")
+            
+            # Write success marker
+            write_status_marker(song_output_dir, 'success')
+        except Exception as e:
+            # Write error marker
+            write_status_marker(song_output_dir, 'error', str(e))
+            raise
 
 
 if __name__ == "__main__":

@@ -77,24 +77,17 @@ def run_command(cmd: list, description: str, song_name: str, output_dir: Path) -
     print(f"Running: {' '.join(cmd)}\n")
     
     try:
+        # Stream output in real-time instead of buffering
         result = subprocess.run(
             cmd, 
             check=True,
-            capture_output=True,
             text=True
         )
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr, file=sys.stderr)
         print(f"\n✓ {description} completed successfully")
         return True
     except subprocess.CalledProcessError as e:
         error_msg = f"{description} failed with exit code {e.returncode}"
         print(f"\n✗ {error_msg}", file=sys.stderr)
-        if e.stdout:
-            print(e.stdout)
-        if e.stderr:
-            print(e.stderr, file=sys.stderr)
         
         # Write to error log
         write_error_log(output_dir, song_name, description, e)
@@ -288,6 +281,37 @@ Options:
         success = process_song(song_dir, script_dir, output_dir, force_flag, skip_lyrics=not fetch_lyrics)
         results[song_dir.name] = success
     
+    # Generate summary file
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    summaries_dir = output_dir / "1-run-summaries"
+    summaries_dir.mkdir(parents=True, exist_ok=True)
+    summary_file = summaries_dir / f"run_summary_{timestamp}.txt"
+    
+    with open(summary_file, 'w') as f:
+        f.write("="*80 + "\n")
+        f.write("SONG PROCESSING PIPELINE SUMMARY\n")
+        f.write("="*80 + "\n")
+        f.write(f"Run date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Force mode: {'ON' if args.force else 'OFF'}\n")
+        f.write(f"Total songs processed: {len(results)}\n")
+        f.write("\n")
+        
+        successful = [name for name, success in results.items() if success]
+        failed = [name for name, success in results.items() if not success]
+        
+        f.write(f"✓ Successful: {len(successful)}/{len(results)}\n")
+        for name in successful:
+            f.write(f"  - {name}\n")
+        
+        if failed:
+            f.write(f"\n✗ Failed: {len(failed)}/{len(results)}\n")
+            for name in failed:
+                f.write(f"  - {name} (see ./output/{name}/error-log.txt)\n")
+        
+        f.write("\n")
+        f.write("Output directory: ./output/\n")
+        f.write("="*80 + "\n")
+    
     # Summary
     print("\n" + "="*80)
     print("PIPELINE SUMMARY")
@@ -306,6 +330,7 @@ Options:
             print(f"  - {name} (see ./output/{name}/error-log.txt)")
     
     print("\nOutput directory: ./output/")
+    print(f"Summary saved to: {summary_file}")
     print("\nTo curate lyrics (optional), run:")
     print("  python 6-curate-lyrics-via-chatgpt.py")
     print("\nTo overlay samples (optional), run:")

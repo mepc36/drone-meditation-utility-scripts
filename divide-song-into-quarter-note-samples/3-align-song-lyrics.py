@@ -14,9 +14,36 @@ import json
 import requests
 import argparse
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
+
+
+def write_status_marker(output_dir: Path, status: str, error_msg: str = None) -> None:
+    """Write status marker file (.success or .error) to output directory.
+    
+    Args:
+        output_dir: Directory to write the marker file
+        status: Either 'success' or 'error'
+        error_msg: Optional error message for .error files
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Remove old status markers
+    for old_marker in ['.success', '.error']:
+        old_file = output_dir / old_marker
+        if old_file.exists():
+            old_file.unlink()
+    
+    # Write new status marker
+    marker_file = output_dir / f'.{status}'
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    with open(marker_file, 'w') as f:
+        f.write(f"timestamp: {timestamp}\n")
+        if error_msg:
+            f.write(f"error: {error_msg}\n")
 
 
 def main():
@@ -117,6 +144,7 @@ def main():
             # Check for words in response
             if 'words' not in alignment_data:
                 print(f"⚠ Warning: Response does not contain 'words' field")
+                write_status_marker(output_dir, 'error', "Response does not contain 'words' field")
                 continue
             
             num_words = len(alignment_data['words'])
@@ -128,15 +156,22 @@ def main():
             print(f"  Failed: {num_words - num_aligned}")
             print(f"  Output saved to: {output_file}")
             
+            # Write success marker
+            write_status_marker(output_dir, 'success')
+            
         except requests.exceptions.RequestException as e:
-            print(f"⚠ Error calling Gentle aligner: {e}")
+            error_msg = f"Error calling Gentle aligner: {e}"
+            print(f"⚠ {error_msg}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"  Response status: {e.response.status_code}")
                 print(f"  Response content: {e.response.text[:500]}")
+            write_status_marker(output_dir, 'error', error_msg)
             continue
         except json.JSONDecodeError as e:
-            print(f"⚠ Error: Invalid JSON response from Gentle aligner")
+            error_msg = f"Invalid JSON response from Gentle aligner"
+            print(f"⚠ Error: {error_msg}")
             print(f"  Response content: {response.text[:500]}")
+            write_status_marker(output_dir, 'error', error_msg)
             continue
 
 
