@@ -46,8 +46,6 @@ MANIFEST
 *.bak
 *.old
 
-input
-output
+input*
+output*
 .env
-input-already-processed
-output-copy
