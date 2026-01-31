@@ -43,7 +43,7 @@ SILENCE_FILE = "Silence.wav"
 
 # Output locations (relative to where you run the script)
 OUTPUT_DIR = Path("./output")
-AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio" / "duplicated-padded-samples"
+AUDIO_OUTPUT_DIR = OUTPUT_DIR / "audio" / "final-sample-versions"
 
 
 # -------------------------------------------------------------------
