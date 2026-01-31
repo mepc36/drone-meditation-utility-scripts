@@ -2,9 +2,11 @@
 """
 remove-from-itunes-library.py
 
-Complete cleanup script for duplicate audio files:
-1. Deletes physical .wav files from disk (iTunes import location)
-2. Removes database entries from iTunes/Music library using AppleScript
+Complete cleanup script for audio files:
+1. Deletes physical .wav files from local output directory
+2. Deletes physical .wav files from iTunes import location (if they exist)
+3. Removes database entries from iTunes/Music library using AppleScript
+4. Deletes playlist file and removes playlist from iTunes
 """
 
 import json
@@ -20,73 +22,35 @@ with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
 ITUNES_DIR = Path(config["itunes_dir"])
-CANONICAL_STEMS = config["canonical_files"]
-LIVING_FILE = config["living_file"]
-SILENCE_FILE = "Silence"
-COPIES_PER_FILE = config["copies_per_file"]
-
-# Parse samples_ratio to get actual copy counts
-ratio_parts = [int(x) for x in config["samples_ratio"].split(":")]
-BREATHING_COPIES = ratio_parts[0]  # First number for Breathing
-OTHER_COPIES = ratio_parts[1]  # Second number for other 6 activities
-LIVING_COPIES = ratio_parts[2]  # Third number for Living
-SILENCE_COPIES = ratio_parts[3] if len(ratio_parts) > 3 else 0  # Fourth number for Silence
-
-BREATHING_STEM = CANONICAL_STEMS[0]  # "Breathing"
-OTHER_STEMS = CANONICAL_STEMS[1:]  # All except Breathing
+OUTPUT_AUDIO_DIR = Path("./output/audio/final-sample-versions")
 
 # Playlist location and name
 PLAYLIST_NAME = config["playlist_name"]
 PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
 
+
 # -------------------------------------------------------------------
 # File Deletion Functions
 # -------------------------------------------------------------------
+def get_output_files() -> list[Path]:
+    """Get all .wav files from the output directory."""
+    if not OUTPUT_AUDIO_DIR.exists():
+        return []
+    return list(OUTPUT_AUDIO_DIR.glob("*.wav"))
+
+
 def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:
     """
-    Delete physical .wav files from iTunes directory based on samples_ratio.
+    Delete physical .wav files from output directory and iTunes directory.
     Returns (deleted_count, errors_list).
     """
-    if not ITUNES_DIR.exists():
-        print(f"iTunes directory does not exist: {ITUNES_DIR}")
-        return (0, [])
+    files_to_delete = get_output_files()
     
-    files_to_delete = []
-    
-    # Find Breathing copies (first ratio number)
-    for i in range(1, BREATHING_COPIES + 1):
-        filename = f"{BREATHING_STEM}_{i:03d}.wav"
-        filepath = ITUNES_DIR / filename
-        if filepath.exists():
-            files_to_delete.append(filepath)
-    
-    # Find other canonical files copies (second ratio number)
-    for stem in OTHER_STEMS:
-        for i in range(1, OTHER_COPIES + 1):
-            filename = f"{stem}_{i:03d}.wav"
-            filepath = ITUNES_DIR / filename
-            if filepath.exists():
-                files_to_delete.append(filepath)
-    
-    # Find Living files (third ratio number)
-    if LIVING_COPIES == 1:
-        living_path = ITUNES_DIR / f"{LIVING_FILE}.wav"
-        if living_path.exists():
-            files_to_delete.append(living_path)
-    else:
-        for i in range(1, LIVING_COPIES + 1):
-            filename = f"{LIVING_FILE}_{i:03d}.wav"
-            filepath = ITUNES_DIR / filename
-            if filepath.exists():
-                files_to_delete.append(filepath)
-    
-    # Find Silence files (fourth ratio number)
-    if SILENCE_COPIES > 0:
-        for i in range(1, SILENCE_COPIES + 1):
-            filename = f"{SILENCE_FILE}_{i:03d}.wav"
-            filepath = ITUNES_DIR / filename
-            if filepath.exists():
-                files_to_delete.append(filepath)
+    # Also check for these files in iTunes directory
+    for output_file in files_to_delete[:]:  # Copy list to iterate
+        itunes_file = ITUNES_DIR / output_file.name
+        if itunes_file.exists():
+            files_to_delete.append(itunes_file)
     
     if not files_to_delete:
         print("No physical files found to delete.")
@@ -185,36 +149,24 @@ def main() -> None:
     print("="*60 + "\n")
     
     print("This script will:")
-    print("  1. Delete physical .wav files from disk")
-    print("  2. Remove iTunes/Music library database entries")
-    print("  3. Delete playlist from iTunes/Music library")
-    print("  4. Delete generated playlist file\n")
+    print("  1. Delete physical .wav files from output directory")
+    print("  2. Delete physical .wav files from iTunes directory")
+    print("  3. Remove iTunes/Music library database entries")
+    print("  4. Delete playlist from iTunes/Music library")
+    print("  5. Delete generated playlist file\n")
     
-    # Build list of all track names based on samples_ratio
-    tracks_to_remove = []
+    # Get list of files from output directory
+    output_files = get_output_files()
     
-    # Add Breathing tracks (first ratio number)
-    for i in range(1, BREATHING_COPIES + 1):
-        tracks_to_remove.append(f"{BREATHING_STEM}_{i:03d}")
+    if not output_files:
+        print("No files found in output directory.")
+        print("Nothing to clean up.\n")
+        return
     
-    # Add other canonical tracks (second ratio number)
-    for stem in OTHER_STEMS:
-        for i in range(1, OTHER_COPIES + 1):
-            tracks_to_remove.append(f"{stem}_{i:03d}")
+    # Build track names (without .wav extension)
+    tracks_to_remove = [f.stem for f in output_files]
     
-    # Add Living tracks (third ratio number)
-    if LIVING_COPIES == 1:
-        tracks_to_remove.append(LIVING_FILE)
-    else:
-        for i in range(1, LIVING_COPIES + 1):
-            tracks_to_remove.append(f"{LIVING_FILE}_{i:03d}")
-    
-    # Add Silence tracks (fourth ratio number)
-    if SILENCE_COPIES > 0:
-        for i in range(1, SILENCE_COPIES + 1):
-            tracks_to_remove.append(f"{SILENCE_FILE}_{i:03d}")
-    
-    print(f"Total items to process: {len(tracks_to_remove)}\n")
+    print(f"Found {len(output_files)} file(s) to process\n")
     
     # Confirm
     response = input("Continue with cleanup? (yes/no): ").strip().lower()
