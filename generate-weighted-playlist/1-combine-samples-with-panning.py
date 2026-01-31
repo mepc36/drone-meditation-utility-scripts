@@ -29,6 +29,8 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 # Calculate beat length from BPM
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
+MIN_SAMPLES_PER_COMBINATION = config.get("min_samples_per_combination", 1)
+MAX_SAMPLES_PER_COMBINATION = config.get("max_samples_per_combination", 3)
 
 
 # -------------------------------------------------------------------
@@ -146,6 +148,22 @@ def resample_audio(audio: np.ndarray, original_rate: int, target_rate: int) -> n
         return resampled
 
 
+def normalize_to_rms(audio: np.ndarray, target_rms: float = 0.15) -> np.ndarray:
+    """
+    Normalize audio to a target RMS (Root Mean Square) level.
+    This ensures consistent perceived loudness across all samples.
+    """
+    current_rms = np.sqrt(np.mean(audio ** 2))
+    if current_rms > 0:
+        gain = target_rms / current_rms
+        # Apply safety limiter to prevent clipping
+        max_val = np.abs(audio * gain).max()
+        if max_val > 0.95:
+            gain = 0.95 / max_val * gain
+        return audio * gain
+    return audio
+
+
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
                        sample_rate: int) -> np.ndarray:
     """
@@ -174,10 +192,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         else:
             mixed = mixed + stereo
     
-    # Normalize to prevent clipping
-    max_val = np.abs(mixed).max()
-    if max_val > 0:
-        mixed = mixed / max_val * 0.95  # Leave headroom
+    # Normalize to consistent RMS level for similar perceived loudness
+    mixed = normalize_to_rms(mixed, target_rms=0.15)
     
     return mixed
 
@@ -187,8 +203,8 @@ def generate_unique_combination(all_sample_names: list[str]) -> tuple[list[str],
     Generate a random unique combination.
     Returns (sample_names, pan_assignments)
     """
-    # Decide how many samples (1-3)
-    num_samples = random.randint(1, 3)
+    # Decide how many samples (configured range)
+    num_samples = random.randint(MIN_SAMPLES_PER_COMBINATION, MAX_SAMPLES_PER_COMBINATION)
     
     # Make sure we don't try to sample more than available
     num_samples = min(num_samples, len(all_sample_names))
