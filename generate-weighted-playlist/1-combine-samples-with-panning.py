@@ -38,6 +38,12 @@ NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
 MIN_SAMPLES_PER_COMBINATION = config.get("min_samples_per_combination", 1)
 MAX_SAMPLES_PER_COMBINATION = config.get("max_samples_per_combination", 3)
 
+# Parse panning_pattern_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 stereo-pair)
+panning_pattern_parts = [int(x) for x in config.get("panning_pattern_ratio", "1:1:1").split(":")]
+CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
+NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
+STEREO_PAIR_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
+
 
 # -------------------------------------------------------------------
 # Helpers
@@ -206,24 +212,46 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
 
 def generate_unique_combination(all_sample_names: list[str]) -> tuple[list[str], dict[str, str]]:
     """
-    Generate a random unique combination.
+    Generate a random unique combination using weighted panning patterns.
+    Only allows 3 specific patterns:
+    1. 1 sample, center only
+    2. 1 sample, hard left or hard right
+    3. 2 samples, stereo pair (1 left + 1 right)
     Returns (sample_names, pan_assignments)
     """
-    # Decide how many samples (configured range)
-    num_samples = random.randint(MIN_SAMPLES_PER_COMBINATION, MAX_SAMPLES_PER_COMBINATION)
+    # Build weighted pool of pattern types
+    pattern_pool = (
+        ['center_only'] * CENTER_ONLY_WEIGHT + 
+        ['non_center_only'] * NON_CENTER_ONLY_WEIGHT + 
+        ['stereo_pair'] * STEREO_PAIR_WEIGHT
+    )
     
-    # Make sure we don't try to sample more than available
-    num_samples = min(num_samples, len(all_sample_names))
+    # Select a pattern type
+    pattern_type = random.choice(pattern_pool)
     
-    # Select random samples (no duplicates)
-    sample_names = random.sample(all_sample_names, num_samples)
+    if pattern_type == 'center_only':
+        # Pattern 1: 1 sample, center
+        sample_names = random.sample(all_sample_names, 1)
+        pan_assignments = {sample_names[0]: 'center'}
     
-    # Available pan positions
-    pan_positions = ['left', 'center', 'right']
+    elif pattern_type == 'non_center_only':
+        # Pattern 2: 1 sample, hard left OR hard right
+        sample_names = random.sample(all_sample_names, 1)
+        pan_position = random.choice(['left', 'right'])
+        pan_assignments = {sample_names[0]: pan_position}
     
-    # Assign unique pan positions
-    selected_pans = random.sample(pan_positions, num_samples)
-    pan_assignments = dict(zip(sample_names, selected_pans))
+    else:  # stereo_pair
+        # Pattern 3: 2 samples, one left and one right
+        if len(all_sample_names) < 2:
+            # Fallback to center if we don't have enough samples
+            sample_names = random.sample(all_sample_names, 1)
+            pan_assignments = {sample_names[0]: 'center'}
+        else:
+            sample_names = random.sample(all_sample_names, 2)
+            pan_assignments = {
+                sample_names[0]: 'left',
+                sample_names[1]: 'right'
+            }
     
     return sample_names, pan_assignments
 
