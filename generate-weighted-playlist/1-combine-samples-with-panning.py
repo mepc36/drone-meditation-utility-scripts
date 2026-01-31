@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# TODO:
+# - add silences
+# - add a config optino to make a small subset of samples be a longer pause
+# - level out volume of samples
+
+
 """
 1-combine-samples-with-panning.py
 
