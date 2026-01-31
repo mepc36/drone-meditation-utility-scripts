@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""
+1-combine-samples-with-panning.py
+
+Creates unique stereo combinations of audio samples with random panning.
+Reads source files from ./input/audio/ and writes combined files to ./output/audio/final-sample-versions/
+"""
+
+import json
+from pathlib import Path
+import random
+import subprocess
+import numpy as np
+import soundfile as sf
+
+
+# -------------------------------------------------------------------
+# CONFIG: Load from input/config/config.json
+# -------------------------------------------------------------------
+CONFIG_PATH = Path("./input/config/config.json")
+
+with open(CONFIG_PATH, 'r') as f:
+    config = json.load(f)
+
+# Input/output locations
+INPUT_AUDIO_DIR = Path("./input/audio")
+OUTPUT_DIR = Path("./output/audio/final-sample-versions")
+
+# Calculate beat length from BPM
+BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
+NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
+
+
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
+def get_available_samples() -> list[str]:
+    """Get all .wav files from input directory (without extension)."""
+    if not INPUT_AUDIO_DIR.exists():
+        raise FileNotFoundError(
+            f"Input audio directory not found: {INPUT_AUDIO_DIR}\n"
+            "Please create ./input/audio/ and place your audio files there."
+        )
+    
+    wav_files = list(INPUT_AUDIO_DIR.glob("*.wav"))
+    if not wav_files:
+        raise FileNotFoundError(
+            f"No .wav files found in {INPUT_AUDIO_DIR}\n"
+            "Please place audio files in ./input/audio/"
+        )
+    
+    # Return sample names without .wav extension
+    return [f.stem for f in wav_files]
+
+
+def ensure_input_files_exist() -> None:
+    """Verify input audio directory and files exist."""
+    # Just check that we have at least some files
+    get_available_samples()
+
+
+def reset_output_dir() -> None:
+    """Clear and recreate the output directory."""
+    import shutil
+    if OUTPUT_DIR.exists():
+        shutil.rmtree(OUTPUT_DIR)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_audio(name: str) -> tuple[np.ndarray, int]:
+    """Load audio file and return (audio_data, sample_rate)."""
+    filepath = INPUT_AUDIO_DIR / f"{name}.wav"
+    audio_data, sample_rate = sf.read(filepath)
+    return audio_data, sample_rate
+
+
+def apply_pan(audio: np.ndarray, pan_position: str) -> np.ndarray:
+    """
+    Apply panning to mono or stereo audio.
+    pan_position: 'left', 'center', or 'right'
+    Returns stereo audio.
+    """
+    # Convert to mono if stereo
+    if audio.ndim == 2:
+        audio = np.mean(audio, axis=1)
+    
+    # Create stereo output
+    if pan_position == 'left':
+        left = audio
+        right = np.zeros_like(audio)
+    elif pan_position == 'right':
+        left = np.zeros_like(audio)
+        right = audio
+    else:  # center
+        left = audio
+        right = audio
+    
+    return np.column_stack([left, right])
+
+
+def pad_to_length(audio: np.ndarray, sample_rate: int, target_length_seconds: float) -> np.ndarray:
+    """
+    Pad audio to exact target length with silence.
+    If audio is longer, truncate it.
+    """
+    target_samples = int(target_length_seconds * sample_rate)
+    current_samples = len(audio)
+    
+    if current_samples == target_samples:
+        return audio
+    elif current_samples > target_samples:
+        return audio[:target_samples]
+    else:
+        padding_samples = target_samples - current_samples
+        if audio.ndim == 1:
+            silence = np.zeros(padding_samples)
+        else:
+            silence = np.zeros((padding_samples, audio.shape[1]))
+        return np.concatenate([audio, silence])
+
+
+def resample_audio(audio: np.ndarray, original_rate: int, target_rate: int) -> np.ndarray:
+    """
+    Resample audio from original_rate to target_rate using linear interpolation.
+    Works with both mono and stereo audio.
+    """
+    if original_rate == target_rate:
+        return audio
+    
+    # Calculate new length
+    duration = len(audio) / original_rate
+    new_length = int(duration * target_rate)
+    
+    # Create index arrays for interpolation
+    old_indices = np.linspace(0, len(audio) - 1, len(audio))
+    new_indices = np.linspace(0, len(audio) - 1, new_length)
+    
+    if audio.ndim == 1:
+        # Mono
+        return np.interp(new_indices, old_indices, audio)
+    else:
+        # Stereo - resample each channel
+        resampled = np.zeros((new_length, audio.shape[1]))
+        for ch in range(audio.shape[1]):
+            resampled[:, ch] = np.interp(new_indices, old_indices, audio[:, ch])
+        return resampled
+
+
+def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
+                       sample_rate: int) -> np.ndarray:
+    """
+    Create a stereo mix of samples with their pan positions.
+    Returns padded stereo audio.
+    """
+    # Load and pan each sample
+    mixed = None
+    
+    for name in sample_names:
+        audio, sr = load_audio(name)
+        
+        # Resample if needed
+        if sr != sample_rate:
+            audio = resample_audio(audio, sr, sample_rate)
+        
+        # Apply panning
+        stereo = apply_pan(audio, pan_assignments[name])
+        
+        # Pad to beat length before mixing
+        stereo = pad_to_length(stereo, sample_rate, BEAT_LENGTH_SECONDS)
+        
+        # Mix (sum)
+        if mixed is None:
+            mixed = stereo
+        else:
+            mixed = mixed + stereo
+    
+    # Normalize to prevent clipping
+    max_val = np.abs(mixed).max()
+    if max_val > 0:
+        mixed = mixed / max_val * 0.95  # Leave headroom
+    
+    return mixed
+
+
+def generate_unique_combination(all_sample_names: list[str]) -> tuple[list[str], dict[str, str]]:
+    """
+    Generate a random unique combination.
+    Returns (sample_names, pan_assignments)
+    """
+    # Decide how many samples (1-3)
+    num_samples = random.randint(1, 3)
+    
+    # Make sure we don't try to sample more than available
+    num_samples = min(num_samples, len(all_sample_names))
+    
+    # Select random samples (no duplicates)
+    sample_names = random.sample(all_sample_names, num_samples)
+    
+    # Available pan positions
+    pan_positions = ['left', 'center', 'right']
+    
+    # Assign unique pan positions
+    selected_pans = random.sample(pan_positions, num_samples)
+    pan_assignments = dict(zip(sample_names, selected_pans))
+    
+    return sample_names, pan_assignments
+
+
+def format_filename(sample_names: list[str], pan_assignments: dict[str, str], index: int) -> str:
+    """
+    Format filename as: left_center_right_NNN.wav
+    Only includes samples that are present, in pan order.
+    """
+    # Create list of (pan_position, sample_name) tuples
+    pan_order = {'left': 0, 'center': 1, 'right': 2}
+    samples_by_pan = [(pan_assignments[name], name) for name in sample_names]
+    
+    # Sort by pan position (left -> center -> right)
+    samples_by_pan.sort(key=lambda x: pan_order[x[0]])
+    
+    # Extract sorted sample names
+    sorted_names = [name.lower() for _, name in samples_by_pan]
+    
+    # Build filename
+    name_part = "_".join(sorted_names)
+    return f"{name_part}_{index:03d}.wav"
+
+
+def import_folder_to_music(folder: Path) -> str:
+    """Import entire folder to iTunes/Music in one operation."""
+    script = f'''
+tell application "Music"
+    add (POSIX file "{folder.resolve()}/")
+end tell
+'''
+    try:
+        result = subprocess.run(
+            ['osascript', '-e', script],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        return f"Error: {e.stderr}"
+
+
+# -------------------------------------------------------------------
+# Main
+# -------------------------------------------------------------------
+def main() -> None:
+    print("\nCombine Samples with Random Panning\n")
+    print(f"BPM: {config['bpm']}")
+    
+    # Get all available samples from input directory
+    all_sample_names = get_available_samples()
+    print(f"Found {len(all_sample_names)} sample(s) in input directory:")
+    for name in all_sample_names:
+        print(f"  - {name}")
+    print()
+    
+    reset_output_dir()
+    
+    print("Generating unique combinations...\n")
+    
+    # Track combinations to ensure uniqueness
+    seen_combinations = set()
+    created_count = 0
+    attempts = 0
+    max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
+    
+    # Get sample rate from first file
+    first_audio, sample_rate = load_audio(all_sample_names[0])
+    
+    while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
+        attempts += 1
+        
+        # Generate combination
+        sample_names, pan_assignments = generate_unique_combination(all_sample_names)
+        
+        # Create unique key for this combination
+        combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
+        
+        # Check if we've seen this exact combination before
+        if combo_key in seen_combinations:
+            continue
+        
+        seen_combinations.add(combo_key)
+        created_count += 1
+        
+        # Create the audio
+        combined_audio = create_combination(sample_names, pan_assignments, sample_rate)
+        
+        # Generate filename
+        filename = format_filename(sample_names, pan_assignments, created_count)
+        output_path = OUTPUT_DIR / filename
+        
+        # Save
+        sf.write(output_path, combined_audio, sample_rate)
+        
+        if created_count % 10 == 0 or created_count == NUM_UNIQUE_SAMPLES:
+            print(f"  Created {created_count}/{NUM_UNIQUE_SAMPLES} samples...")
+    
+    if created_count < NUM_UNIQUE_SAMPLES:
+        print(f"\nWarning: Only created {created_count} unique combinations.")
+        print("Consider reducing num_unique_samples in config.json")
+    else:
+        print(f"\nComplete! Created {created_count} unique samples.")
+    
+    print(f"  Output: {OUTPUT_DIR.resolve()}")
+    
+    # Import to iTunes
+    print("\n" + "="*60)
+    print("Importing entire folder to iTunes/Music...")
+    print("This may take a moment...\n")
+    
+    result = import_folder_to_music(OUTPUT_DIR)
+    
+    print(f"Import complete!")
+    print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
+    print(f"  Total files: {created_count}")
+    print(f"\nNext: Run 3-import-duplicate-padded-samples-into-itunes-playlist.py\n")
+
+
+if __name__ == "__main__":
+    main()
