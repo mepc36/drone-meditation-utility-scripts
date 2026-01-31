@@ -10,9 +10,6 @@ This project creates weighted meditation playlists from audio samples using a mu
 
 - Python 3.x
 - macOS with Apple Music/iTunes
-- Required Python packages:
-  - numpy
-  - soundfile
 
 ### Setup
 
@@ -24,7 +21,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install required packages
-pip install numpy soundfile
+pip install -r requirements.txt
 
 # Place your audio files in:
 ./input/audio/
@@ -91,13 +88,13 @@ Pads audio samples with silence to make them all the same length.
 Creates weighted duplicates of each padded audio file based on the samples ratio.
 
 - **Input:** Padded audio from `./output/audio/padded-audio-samples/`
-- **Output:** Numbered duplicates in `./output/audio/duplicated-padded-samples/`
+- **Output:** Numbered duplicates in `./output/audio/final-sample-versions/`
 
 ### 3-import-duplicate-padded-samples-into-itunes-playlist.py
 
 Generates an M3U playlist file and imports the entire folder into Apple Music.
 
-- **Input:** Duplicated files from `./output/audio/duplicated-padded-samples/`
+- **Input:** Final sample versions from `./output/audio/final-sample-versions/`
 - **Output:** M3U playlist in `./output/playlists/` and tracks imported to Music app
 
 ### 4-clean-up-itunes-playlist-tracks-and-files.py
@@ -125,7 +122,7 @@ generate-weighted-playlist/
 ├── output/
 │   ├── audio/
 │   │   ├── padded-audio-samples/ # Step 1 output
-│   │   └── duplicated-padded-samples/ # Step 2 output
+│   │   └── final-sample-versions/ # Step 2 output
 │   └── playlists/                # Step 3 output
 └── *.py                          # Pipeline scripts
 ```
