@@ -48,8 +48,11 @@ STEREO_PAIR_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
 # -------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------
-def get_available_samples() -> list[str]:
-    """Get all .wav files from input directory (without extension)."""
+def get_available_samples() -> dict[str, list[str]]:
+    """Get all .wav files from input directory grouped by sound type.
+    Expects filenames like: name_soundtype.wav (e.g., thinking_kick.wav)
+    Returns dict mapping sound_type -> list of sample names (without extension).
+    """
     if not INPUT_AUDIO_DIR.exists():
         raise FileNotFoundError(
             f"Input audio directory not found: {INPUT_AUDIO_DIR}\n"
@@ -63,14 +66,32 @@ def get_available_samples() -> list[str]:
             "Please place audio files in ./input/audio/"
         )
     
-    # Return sample names without .wav extension
-    return [f.stem for f in wav_files]
+    # Group samples by sound type
+    samples_by_type = {}
+    for f in wav_files:
+        stem = f.stem  # filename without extension
+        # Split on underscore and get [1] as sound type
+        parts = stem.split('_')
+        if len(parts) >= 2:
+            sound_type = parts[1]
+            if sound_type not in samples_by_type:
+                samples_by_type[sound_type] = []
+            samples_by_type[sound_type].append(stem)
+        else:
+            # Fallback: if no underscore, use the whole name as sound type
+            if stem not in samples_by_type:
+                samples_by_type[stem] = []
+            samples_by_type[stem].append(stem)
+    
+    return samples_by_type
 
 
 def ensure_input_files_exist() -> None:
     """Verify input audio directory and files exist."""
-    # Just check that we have at least some files
-    get_available_samples()
+    # Just check that we have at least some samples
+    samples_by_type = get_available_samples()
+    if not samples_by_type:
+        raise FileNotFoundError("No valid samples found")
 
 
 def reset_output_dir() -> None:
@@ -210,15 +231,19 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     return mixed
 
 
-def generate_unique_combination(all_sample_names: list[str]) -> tuple[list[str], dict[str, str]]:
-    """
-    Generate a random unique combination using weighted panning patterns.
+def generate_unique_combination(samples_by_type: dict[str, list[str]]) -> tuple[list[str], dict[str, str]]:
+    """Generate a random unique combination using weighted panning patterns.
+    Only combines samples with the same sound type.
     Only allows 3 specific patterns:
     1. 1 sample, center only
     2. 1 sample, hard left or hard right
     3. 2 samples, stereo pair (1 left + 1 right)
     Returns (sample_names, pan_assignments)
     """
+    # First, randomly select a sound type
+    sound_type = random.choice(list(samples_by_type.keys()))
+    available_samples = samples_by_type[sound_type]
+    
     # Build weighted pool of pattern types
     pattern_pool = (
         ['center_only'] * CENTER_ONLY_WEIGHT + 
@@ -231,23 +256,23 @@ def generate_unique_combination(all_sample_names: list[str]) -> tuple[list[str],
     
     if pattern_type == 'center_only':
         # Pattern 1: 1 sample, center
-        sample_names = random.sample(all_sample_names, 1)
+        sample_names = random.sample(available_samples, 1)
         pan_assignments = {sample_names[0]: 'center'}
     
     elif pattern_type == 'non_center_only':
         # Pattern 2: 1 sample, hard left OR hard right
-        sample_names = random.sample(all_sample_names, 1)
+        sample_names = random.sample(available_samples, 1)
         pan_position = random.choice(['left', 'right'])
         pan_assignments = {sample_names[0]: pan_position}
     
     else:  # stereo_pair
         # Pattern 3: 2 samples, one left and one right
-        if len(all_sample_names) < 2:
-            # Fallback to center if we don't have enough samples
-            sample_names = random.sample(all_sample_names, 1)
+        if len(available_samples) < 2:
+            # Fallback to center if we don't have enough samples of this type
+            sample_names = random.sample(available_samples, 1)
             pan_assignments = {sample_names[0]: 'center'}
         else:
-            sample_names = random.sample(all_sample_names, 2)
+            sample_names = random.sample(available_samples, 2)
             pan_assignments = {
                 sample_names[0]: 'left',
                 sample_names[1]: 'right'
@@ -302,11 +327,14 @@ def main() -> None:
     print("\nCombine Samples with Random Panning\n")
     print(f"BPM: {config['bpm']}")
     
-    # Get all available samples from input directory
-    all_sample_names = get_available_samples()
-    print(f"Found {len(all_sample_names)} sample(s) in input directory:")
-    for name in all_sample_names:
-        print(f"  - {name}")
+    # Get all available samples from input directory, grouped by sound type
+    samples_by_type = get_available_samples()
+    total_samples = sum(len(samples) for samples in samples_by_type.values())
+    print(f"Found {total_samples} sample(s) in {len(samples_by_type)} sound type(s):")
+    for sound_type, samples in sorted(samples_by_type.items()):
+        print(f"  {sound_type}: {len(samples)} samples")
+        for sample in sorted(samples):
+            print(f"    - {sample}")
     print()
     
     reset_output_dir()
@@ -320,13 +348,14 @@ def main() -> None:
     max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
     
     # Get sample rate from first file
-    first_audio, sample_rate = load_audio(all_sample_names[0])
+    first_sample_name = list(samples_by_type.values())[0][0]
+    first_audio, sample_rate = load_audio(first_sample_name)
     
     while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
         attempts += 1
         
         # Generate combination
-        sample_names, pan_assignments = generate_unique_combination(all_sample_names)
+        sample_names, pan_assignments = generate_unique_combination(samples_by_type)
         
         # Create unique key for this combination
         combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
