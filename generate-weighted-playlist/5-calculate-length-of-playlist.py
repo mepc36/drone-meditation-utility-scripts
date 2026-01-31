@@ -38,7 +38,8 @@ SILENCE_COUNT = ratio_parts[3] if len(ratio_parts) > 3 else 0
 NUM_OTHER_ACTIVITIES = len(config["canonical_files"]) - 1
 
 # Sample lengths
-DESIRED_SAMPLE_LENGTH = config["desired_sample_length_seconds"]
+# Calculate beat length from BPM: 60 seconds / BPM = seconds per beat
+DESIRED_SAMPLE_LENGTH = 60.0 / config["bpm"]
 LIVING_SAMPLE_LENGTH = config["living_sample_length_seconds"]
 
 
