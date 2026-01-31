@@ -28,7 +28,8 @@ INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_DIR = Path("./output/audio/padded-audio-samples")
 
 # Desired length from config (in seconds)
-DESIRED_LENGTH_SECONDS = config["desired_sample_length_seconds"]
+# Calculate beat length from BPM: 60 seconds / BPM = seconds per beat
+DESIRED_LENGTH_SECONDS = 60.0 / config["bpm"]
 LIVING_LENGTH_SECONDS = config["living_sample_length_seconds"]
 
 # Canonical file names
