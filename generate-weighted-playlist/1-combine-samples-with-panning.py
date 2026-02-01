@@ -3,6 +3,7 @@
 # - add silences
 # - add a config optino to make a small subset of samples be a longer pause
 # - level out volume of samples
+# - make all samples start and end at the exact same time
 
 
 """
