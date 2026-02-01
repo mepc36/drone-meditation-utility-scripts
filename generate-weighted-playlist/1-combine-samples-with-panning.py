@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-# TODO:
-# - add silences
-# - add a config optino to make a small subset of samples be a longer pause
-# - level out volume of samples
-# - make all samples start and end at the exact same time
+
+""" 
+TODO:
+
+DEFINITELY:
+- make all samples have the exact same length
+- make volume of panned samples equal to volume of centered samples
+- find a way make a small subset of samples be a longer pause
+- make centered samples more common proportionally
+
+MAYBE:
+- add silences??? (or is this unnecessary now??)
+- add subset of rhythmically different samples (like samples that repeat 1 sample multiple times?)
+"""
 
 
 """
