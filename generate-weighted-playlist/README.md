@@ -2,7 +2,7 @@
 
 ## Summary
 
-This project creates weighted meditation playlists from audio samples using a multi-stage pipeline. It pads audio files to consistent lengths, duplicates them according to specified ratios, imports them into Apple Music, generates M3U playlists, and provides cleanup utilities. The playlist ends when a rare "Living" sample plays, creating variable-length meditation sessions based on probability.
+This project creates weighted meditation playlists from audio samples using a multi-stage pipeline. It combines audio samples with stereo panning effects, imports them into Apple Music, generates M3U playlists, and provides cleanup utilities. The system creates unique stereo combinations with randomized panning patterns for an immersive listening experience.
 
 ## Installation
 
@@ -40,115 +40,135 @@ deactivate
 
 Edit [input/config/config.json](input/config/config.json) to customize:
 
-- `samples_ratio`: Duplication ratio as "Breathing:Others:Living:Silence" (e.g., "8:2:1:10")
-- `desired_sample_length_seconds`: Target length for most samples (default: 7)
-- `living_sample_length_seconds`: Length of the Living sample (default: 300)
-- `canonical_files`: Array of activity names (Breathing, Being, Feeling, etc.)
+- `num_unique_samples`: Number of unique sample combinations to generate (default: 100)
+- `min_samples_per_combination`: Minimum samples per combination (default: 1)
+- `max_samples_per_combination`: Maximum samples per combination (default: 3)
+- `center_to_noncenter_to_dualpan_ratio`: Ratio of panning patterns as "Center:NonCenter:DualPan" (e.g., "1:4:2")
+- `samples_to_silence_ratio`: Ratio of samples to silence as "Samples:Silence" (e.g., "12:1")
+- `bpm`: Beats per minute for rhythm calculation (default: 52)
+- `silent_samples_length_millisec`: Length of silence samples in milliseconds (default: 12500)
+- `source_dir`: Path to source audio files for import
 - `itunes_dir`: Path where iTunes/Music imports files
 - `playlist_name`: Name of the generated playlist
 
-## Usage
-
-Activate the virtual environment before running scripts:
+### Run All Scripts (Recommended)
 
 ```bash
-source .venv/bin/activate
+# Run the complete pipeline
+python3 run-all.py
 ```
 
-Run scripts in sequence:
+This executes the full workflow:
+1. Cleans up previous files (script 3)
+2. Combines samples with panning (script 1)
+3. Imports to Music and creates playlist (script 2)
+
+### Run Scripts Individually
 
 ```bash
-# 1. Pad audio files with silence
-python3 1-pad-samples-with-silence.py
+# 1. Combine audio samples with stereo panning
+python3 1-combine-samples-with-panning.py
 
-# 2. Create weighted duplicates
-python3 2-duplicate-padded-samples.py
+# 2. Import samples to Music and generate playlist
+python3 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
-# 3. Generate playlist and import to Music
-python3 3-import-duplicate-padded-samples-into-itunes-playlist.py
+# 3. Clean up files and library entries (optional)
+python3 3-clean-up-itunes-playlist-tracks-and-files.py
+```
 
-# 4. Clean up files and library entries (optional)
-python3 4-clean-up-itunes-playlist-tracks-and-files.py
+### Utility Scripts
 
-# 5. Calculate expected session length (utility)
-python3 5-calculate-length-of-playlist.py
+```bash
+# Calculate expected session length
+python3 utility_scripts/5-calculate-length-of-playlist.py
 ```
 
 ## Scripts
 
-### 1-pad-samples-with-silence.py
+### 1-combine-samples-with-panning.py
 
-Pads audio samples with silence to make them all the same length.
+Creates unique stereo combinations of audio samples with randomized panning patterns. This is the main generation script that produces the final audio samples.
 
 - **Input:** Audio files from `./input/audio/`
-- **Output:** Padded audio files in `./output/audio/padded-audio-samples/`
+- **Output:** Combined stereo audio files in `./output/audio/final-sample-versions/`
+- **Features:**
+  - Combines 1-3 samples per output file (configurable)
+  - Three panning patterns: center-only, non-center-only (hard left/right), and dualpan (2 different samples)
+  - Generates silence samples based on configured ratio
+  - All samples normalized to consistent beat length
+  - Supports SOLO samples (isolated, can pan left/center/right, can repeat)
+  - Supports ONCE samples (isolated, centered only, appear only once in entire playlist)
+  - Groups samples by sound type for coherent combinations
+  - Automatic RMS normalization for consistent volume across all outputs
+  - Random sample selection within each sound type category
 
-### 2-duplicate-padded-samples.py
+### 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
-Creates weighted duplicates of each padded audio file based on the samples ratio.
-
-- **Input:** Padded audio from `./output/audio/padded-audio-samples/`
-- **Output:** Numbered duplicates in `./output/audio/final-sample-versions/`
-
-### 3-import-duplicate-padded-samples-into-itunes-playlist.py
-
-Generates an M3U playlist file and imports the entire folder into Apple Music.
+Imports generated audio files into Apple Music and creates an M3U playlist file.
 
 - **Input:** Final sample versions from `./output/audio/final-sample-versions/`
-- **Output:** M3U playlist in `./output/playlists/` and tracks imported to Music app
+- **Output:** 
+  - M3U playlist in `./output/playlists/`
+  - Tracks imported to Music app at configured `itunes_dir`
+- **Features:**
+  - Automatically deletes existing playlist before creating new one (prevents duplicates)
+  - Batch imports entire output folder in single operation for efficiency
+  - Generates M3U playlist file with references to all imported tracks
+  - Verifies files exist in iTunes directory after import
+  - Auto-opens playlist in Music app when complete
+  - Displays import statistics and next steps
 
-### 4-clean-up-itunes-playlist-tracks-and-files.py
+### 3-clean-up-itunes-playlist-tracks-and-files.py
 
-Removes all generated files and library entries to start fresh.
+Complete cleanup utility that removes all generated files and library entries. Run this when you want to start fresh.
 
 - **Input:** Generated audio files and Music library entries
-- **Output:** Deleted physical files, removed library entries, and deleted playlist
+- **Output:** 
+  - Deleted physical files from output directory
+  - Deleted physical files from iTunes import directory
+  - Removed library entries from Music app database
+  - Deleted playlist file and removed playlist from Music
+- **Features:**
+  - Four-step cleanup process: physical files, iTunes directory, library entries, playlist
+  - Batch processing of library entries (50 tracks at a time) for efficiency
+  - Comprehensive error reporting with detailed statistics
+  - AppleScript integration for safe Music library manipulation
+  - Handles missing files gracefully (no errors if already deleted)
+  - Progress indicators for long-running operations
+- **Warning:** This is destructive - only run when you want to delete everything
 
-### 5-calculate-length-of-playlist.py
+## Utility Scripts
 
-Calculates the expected duration of a listening session using geometric distribution.
+### utility_scripts/5-calculate-length-of-playlist.py
+
+Statistical utility that calculates expected playlist duration based on geometric distribution.
 
 - **Input:** Configuration from `config.json`
 - **Output:** Statistical analysis of expected session duration printed to console
+- **Features:**
+  - Calculates expected session length using geometric probability
+  - Provides standard deviation and confidence intervals
+  - Displays track count breakdown by type
+  - Shows human-readable duration formats (hours, minutes, seconds)
+  - Models random shuffle behavior with replacement
+
 
 ## Project Structure
 
 ```
 generate-weighted-playlist/
 ├── input/
-│   ├── audio/                    # Source audio files
+│   ├── audio/                    # Source audio files (.wav)
 │   └── config/
 │       └── config.json           # Configuration settings
 ├── output/
 │   ├── audio/
-│   │   ├── padded-audio-samples/ # Step 1 output
-│   │   └── final-sample-versions/ # Step 2 output
-│   └── playlists/                # Step 3 output
-└── *.py                          # Pipeline scripts
+│   │   └── final-sample-versions/ # Script 1 output
+│   └── playlists/                # Script 2 output (M3U files)
+├── utility_scripts/
+│   └── 5-calculate-length-of-playlist.py
+├── 1-combine-samples-with-panning.py
+├── 2-import-duplicate-padded-samples-into-itunes-playlist.py
+├── 3-clean-up-itunes-playlist-tracks-and-files.py
+└── run-all.py                     # Runs complete pipeline
 ```
-
-## How It Works
-
-1. **Padding**: All audio samples are padded with silence to match `desired_sample_length_seconds` (except Living, which uses `living_sample_length_seconds`)
-
-2. **Duplication**: Files are duplicated according to the `samples_ratio`. For example, "8:2:1:10" means:
-   - Breathing: 8 copies
-   - Each other activity (Being, Feeling, etc.): 2 copies each
-   - Living: 1 copy
-   - Silence: 10 copies
-
-3. **Import**: All duplicated files are imported into Apple Music, and an M3U playlist is created with references to these files
-
-4. **Playback**: When shuffled, the playlist plays random samples until the rare Living sample appears, ending the session
-
-5. **Cleanup**: Script 4 removes all generated files and library entries when you want to regenerate or start over
-
-6. **Statistics**: Script 5 calculates expected session duration based on geometric probability (probability of selecting Living from total tracks)
-
-## Notes
-
-- The Living sample represents completion and should be rare in the playlist
-- Silence samples provide meditation pauses between activities
-- Use shuffle mode in Apple Music for varied playback
-- Session duration varies based on when Living is randomly selected
-- Script 4 is destructive - only run when you want to delete everything and start fresh
