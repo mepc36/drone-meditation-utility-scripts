@@ -57,8 +57,6 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
 SILENCE_LENGTH_SECONDS = config["silent_samples_length_millisec"] / 1000.0
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
-MIN_SAMPLES_PER_COMBINATION = config.get("min_samples_per_combination", 1)
-MAX_SAMPLES_PER_COMBINATION = config.get("max_samples_per_combination", 3)
 
 # Parse center_to_noncenter_to_dualpan_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 dualpan)
 panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_ratio", "1:1:1").split(":")]
