@@ -15,8 +15,6 @@ DEFINITELY:
 - add at least 2 very long samples that end the song
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-- add rule that we must have at least 1 combination of any 2 samples that share the same word
--- e.g. -- "pain" by 50 Cent and "pain" by Eve
 
 MAYBE:
 - add subset of rhythmically different samples
