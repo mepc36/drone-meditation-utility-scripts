@@ -288,18 +288,27 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     return mixed
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]]) -> tuple[list[str], dict[str, str]]:
+def generate_unique_combination(samples_by_type: dict[str, list[str]], used_solo_samples: set[str]) -> tuple[list[str], dict[str, str]]:
     """Generate a random unique combination using weighted panning patterns.
     Only combines samples with the same sound type.
     Only allows 3 specific patterns:
     1. 1 sample, center only
     2. 1 sample, hard left or hard right
     3. 2 samples, stereo pair (1 left + 1 right)
+    
+    SOLO samples can only be used once across all combinations.
     Returns (sample_names, pan_assignments)
     """
     # First, randomly select a sound type
     sound_type = random.choice(list(samples_by_type.keys()))
     available_samples = samples_by_type[sound_type]
+    
+    # For SOLO samples, filter out already-used ones
+    if sound_type.lower() == 'solo':
+        available_samples = [s for s in available_samples if s not in used_solo_samples]
+        # If no SOLO samples left, return None to signal retry
+        if not available_samples:
+            return None, None
     
     # Build weighted pool of pattern types
     pattern_pool = (
@@ -414,6 +423,7 @@ def main() -> None:
     
     # Track combinations to ensure uniqueness
     seen_combinations = set()
+    used_solo_samples = set()  # Track SOLO samples that have been used (can only appear once)
     created_count = 0
     attempts = 0
     max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
@@ -426,7 +436,11 @@ def main() -> None:
         attempts += 1
         
         # Generate combination
-        sample_names, pan_assignments = generate_unique_combination(samples_by_type)
+        sample_names, pan_assignments = generate_unique_combination(samples_by_type, used_solo_samples)
+        
+        # Check if combination generation failed (e.g., no more SOLO samples available)
+        if sample_names is None:
+            continue
         
         # Create unique key for this combination
         combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
@@ -436,6 +450,17 @@ def main() -> None:
             continue
         
         seen_combinations.add(combo_key)
+        
+        # Mark SOLO samples as used (they can only appear once)
+        for name in sample_names:
+            # Check if this sample is from the SOLO sound type
+            parts = name.split('_')
+            if len(parts) >= 2:
+                sound_type_with_suffix = parts[1]
+                sound_type = sound_type_with_suffix.split('.')[0]
+                if sound_type.lower() == 'solo':
+                    used_solo_samples.add(name)
+        
         created_count += 1
         
         # Create the audio
