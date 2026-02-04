@@ -8,7 +8,7 @@ DEFINITELY:
 - make volume of panned samples equal to volume of centered samples
 - find a way make a small subset of samples be a longer pause
 - make centered samples more common
-- add silences (just some)
+- add silences (just a few)
 - make some samples show up only once.
 - use a great number of samples, but have 4 or 5 endings rather than just 1.
 
