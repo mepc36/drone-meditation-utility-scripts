@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" 
+r""" 
 TODO:
 
 CD:
@@ -8,30 +8,21 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-- make all samples have the exact same length
 - make volume of panned samples equal to volume of centered samples
-- find a way make a small subset of samples be a longer pause
-- make centered samples more common
-- add silences (just a few)
-- make some samples show up only once.
 - use a great number of samples, but have 4 or 5 endings rather than just 1.
-
-BUGS:
-- When a sample with the same name already exists in the unknown album on disk, the import done in script 3- will not overwrite it
+- add rule that we must have at least 1 combination of any 2 samples that share the same word
+-- e.g. -- "pain" by 50 Cent and "pain" by Eve
+- add at least 2 very long samples that end the song
+-- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
+-- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
+- add rule that we must have at least 1 combination of any 2 samples that share the same word
+-- e.g. -- "pain" by 50 Cent and "pain" by Eve
 
 MAYBE:
 - add subset of rhythmically different samples
 -- e.g., samples that repeat 1 sample multiple times
-- add two longer samples that both can end the song
--- make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
--- play with numerology (make one of them last for 3:33, make the other last for 6:66)
 - add tinnitus to one (or many) samples?
-- add rule that we must have at least 1 combination of any 2 samples that share the same word
--- e.g. -- "pain" by 50 Cent and "pain" by Eve
-- create a throughline throughout the piece by using a recurring word, like "yo"
 
-PROBABLY NOT:
-- add silences??? (or is this unnecessary now??)
 """
 
 
@@ -523,7 +514,7 @@ def main() -> None:
     print(f"Import complete!")
     print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
     print(f"  Total files: {total_files}")
-    print(f"\nNext: Run 3-import-duplicate-padded-samples-into-itunes-playlist.py\n")
+    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
 if __name__ == "__main__":
