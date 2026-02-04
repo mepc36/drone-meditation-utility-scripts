@@ -23,18 +23,22 @@ CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
+# Extract config sections
+pad_config = config["pad_samples_config"]
+shared_config = config["shared_config"]
+
 # Input/output locations
 INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_DIR = Path("./output/audio/padded-audio-samples")
 
 # Desired length from config (in seconds)
 # Calculate beat length from BPM: 60 seconds / BPM = seconds per beat
-DESIRED_LENGTH_SECONDS = 60.0 / config["bpm"]
-LIVING_LENGTH_SECONDS = config["living_sample_length_seconds"]
+DESIRED_LENGTH_SECONDS = 60.0 / shared_config["bpm"]
+LIVING_LENGTH_SECONDS = pad_config["living_sample_length_seconds"]
 
 # Canonical file names
-CANONICAL_FILES = [f"{name}.wav" for name in config["canonical_files"]]
-LIVING_FILE = f"{config['living_file']}.wav"
+CANONICAL_FILES = [f"{name}.wav" for name in pad_config["canonical_files"]]
+LIVING_FILE = f"{pad_config['living_file']}.wav"
 
 
 # -------------------------------------------------------------------

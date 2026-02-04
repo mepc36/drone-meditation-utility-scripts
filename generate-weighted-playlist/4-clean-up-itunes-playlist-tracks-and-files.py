@@ -21,11 +21,14 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
-ITUNES_DIR = Path(config["itunes_dir"])
+# Extract config sections
+shared_config = config["shared_config"]
+
+ITUNES_DIR = Path(shared_config["itunes_dir"])
 OUTPUT_AUDIO_DIR = Path("./output/audio/final-sample-versions")
 
 # Playlist location and name
-PLAYLIST_NAME = config["playlist_name"]
+PLAYLIST_NAME = shared_config["playlist_name"]
 PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
 
 

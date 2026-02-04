@@ -27,20 +27,24 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
+# Extract config sections
+pad_config = config["pad_samples_config"]
+shared_config = config["shared_config"]
+
 # Parse samples_ratio (e.g., "48:4:1:4")
-ratio_parts = [int(x) for x in config["samples_ratio"].split(":")]
+ratio_parts = [int(x) for x in shared_config["samples_ratio"].split(":")]
 BREATHING_COUNT = ratio_parts[0]
 OTHER_COUNT = ratio_parts[1]  # Per activity
 LIVING_COUNT = ratio_parts[2]  # Should always be 1
 SILENCE_COUNT = ratio_parts[3] if len(ratio_parts) > 3 else 0
 
 # Number of "other" canonical activities (excluding Breathing)
-NUM_OTHER_ACTIVITIES = len(config["canonical_files"]) - 1
+NUM_OTHER_ACTIVITIES = len(pad_config["canonical_files"]) - 1
 
 # Sample lengths
 # Calculate beat length from BPM: 60 seconds / BPM = seconds per beat
-DESIRED_SAMPLE_LENGTH = 60.0 / config["bpm"]
-LIVING_SAMPLE_LENGTH = config["living_sample_length_seconds"]
+DESIRED_SAMPLE_LENGTH = 60.0 / shared_config["bpm"]
+LIVING_SAMPLE_LENGTH = pad_config["living_sample_length_seconds"]
 
 
 # -------------------------------------------------------------------
@@ -134,7 +138,7 @@ def main() -> None:
     print("="*60 + "\n")
     
     print("Playlist Configuration:")
-    print(f"  Samples ratio: {config['samples_ratio']}")
+    print(f"  Samples ratio: {shared_config['samples_ratio']}")
     print(f"    → {BREATHING_COUNT} Breathing samples")
     print(f"    → {OTHER_COUNT} copies × {NUM_OTHER_ACTIVITIES} other activities = {OTHER_COUNT * NUM_OTHER_ACTIVITIES} samples")
     print(f"    → {LIVING_COUNT} Living sample")

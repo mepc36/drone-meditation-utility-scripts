@@ -25,11 +25,15 @@ CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
+# Extract config sections
+pad_config = config["pad_samples_config"]
+shared_config = config["shared_config"]
+
 # Read from padded samples output directory
 SOURCE_DIR = Path("./output/audio/padded-audio-samples")
 
 # Parse samples_ratio (e.g., "8:4:1:4" means 8:4:1:4)
-ratio_parts = [int(x) for x in config["samples_ratio"].split(":")]
+ratio_parts = [int(x) for x in shared_config["samples_ratio"].split(":")]
 BREATHING_COPIES = ratio_parts[0]  # First number for Breathing
 OTHER_CANONICAL_COPIES = ratio_parts[1]  # Second number for other 6 activities
 LIVING_COPIES = ratio_parts[2]  # Third number for Living
@@ -37,8 +41,8 @@ SILENCE_COPIES = ratio_parts[3] if len(ratio_parts) > 3 else 0  # Fourth number 
 
 # Canonical file names
 BREATHING_FILE = "Breathing.wav"
-OTHER_CANONICAL_FILES = [f"{name}.wav" for name in config["canonical_files"][1:]]  # Skip Breathing
-LIVING_FILE = f"{config['living_file']}.wav"
+OTHER_CANONICAL_FILES = [f"{name}.wav" for name in pad_config["canonical_files"][1:]]  # Skip Breathing
+LIVING_FILE = f"{pad_config['living_file']}.wav"
 SILENCE_FILE = "Silence.wav"
 
 # Output locations (relative to where you run the script)

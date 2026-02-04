@@ -18,15 +18,18 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
+# Extract config sections
+shared_config = config["shared_config"]
+
 # Source directory with final samples
 SOURCE_AUDIO_DIR = Path("./output/audio/final-sample-versions")
 
 # iTunes import location where files will be copied
-ITUNES_DIR = Path(config["itunes_dir"])
+ITUNES_DIR = Path(shared_config["itunes_dir"])
 
 # Output locations
 OUTPUT_DIR = Path("./output")
-PLAYLIST_NAME = config["playlist_name"]
+PLAYLIST_NAME = shared_config["playlist_name"]
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / f"{PLAYLIST_NAME}.m3u"
 
 

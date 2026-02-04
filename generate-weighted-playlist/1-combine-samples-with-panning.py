@@ -54,18 +54,22 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
+# Extract config sections
+combine_config = config["combine_samples_config"]
+shared_config = config["shared_config"]
+
 # Input/output locations
 INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
-BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
-NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
-MIN_SAMPLES_PER_COMBINATION = config.get("min_samples_per_combination", 1)
-MAX_SAMPLES_PER_COMBINATION = config.get("max_samples_per_combination", 3)
+BEAT_LENGTH_SECONDS = 60.0 / shared_config["bpm"]
+NUM_UNIQUE_SAMPLES = combine_config["num_unique_samples"]
+MIN_SAMPLES_PER_COMBINATION = combine_config.get("min_samples_per_combination", 1)
+MAX_SAMPLES_PER_COMBINATION = combine_config.get("max_samples_per_combination", 3)
 
 # Parse panning_pattern_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 stereo-pair)
-panning_pattern_parts = [int(x) for x in config.get("panning_pattern_ratio", "1:1:1").split(":")]
+panning_pattern_parts = [int(x) for x in combine_config.get("panning_pattern_ratio", "1:1:1").split(":")]
 CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
 NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
 STEREO_PAIR_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
@@ -351,7 +355,7 @@ end tell
 # -------------------------------------------------------------------
 def main() -> None:
     print("\nCombine Samples with Random Panning\n")
-    print(f"BPM: {config['bpm']}")
+    print(f"BPM: {shared_config['bpm']}")
     
     # Get all available samples from input directory, grouped by sound type
     samples_by_type = get_available_samples()
