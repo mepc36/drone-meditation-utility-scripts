@@ -171,11 +171,7 @@ def main() -> None:
     
     print(f"Found {len(output_files)} file(s) to process\n")
     
-    # Confirm
-    response = input("Continue with cleanup? (yes/no): ").strip().lower()
-    if response not in ('yes', 'y'):
-        print("Cancelled.\n")
-        return
+    print("Starting cleanup (no confirmation required)...\n")
     
     # Step 1: Delete physical files
     print("\n" + "-"*60)
