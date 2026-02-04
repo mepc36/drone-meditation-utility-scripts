@@ -582,6 +582,19 @@ def main() -> None:
     print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1')}")
     print(f"  Realized ratio: {realized_ratio}")
     
+    # Calculate perfect ratio scaled to match realized first value
+    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1').split(':')]
+    realized_parts = [int(x) for x in realized_ratio.split(':')]
+    scale_factor = realized_parts[0] / config_ratio_parts[0] if config_ratio_parts[0] != 0 else 1
+    perfect_ratio_parts = [int(x * scale_factor) for x in config_ratio_parts]
+    perfect_ratio = ':'.join([str(x) for x in perfect_ratio_parts])
+    print(f"  Perfect ratio: {perfect_ratio}")
+    
+    # Calculate differential (perfect - realized): shows what's needed to reach perfect
+    differential = [perfect_ratio_parts[i] - realized_parts[i] for i in range(len(realized_parts))]
+    differential_str = ':'.join([f"{'+' if d > 0 else ''}{d}" for d in differential])
+    print(f"  Differential: {differential_str}")
+    
     # Generate silence files based on samples_to_silence_ratio
     if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
         # Calculate number of silence files needed
