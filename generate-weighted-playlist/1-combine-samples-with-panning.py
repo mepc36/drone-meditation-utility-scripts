@@ -53,7 +53,6 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
-SILENCE_LENGTH_SECONDS = config["silent_samples_length_millisec"] / 1000.0
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
 
 # Parse center_to_noncenter_to_dualpan_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 dualpan)
@@ -66,6 +65,19 @@ DUALPAN_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
 silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_ratio", "1:0").split(":")]
 SAMPLES_COUNT = silence_ratio_parts[0]
 SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
+
+# Parse silence lengths and their weights (e.g., "2000:10000" with "8:1")
+silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
+SILENCE_LENGTHS_SECONDS = [ms / 1000.0 for ms in silence_lengths_ms]
+silence_weights = [int(x) for x in config.get("silence_lengths_ratio", "1").split(":")]
+SILENCE_LENGTH_WEIGHTS = silence_weights
+
+# Validate that lengths and weights match
+if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
+    raise ValueError(
+        f"Error: silence_lengths_millisec and silence_lengths_ratio must have the same number of values.\n"
+        f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_WEIGHTS)} weights."
+    )
 
 
 # -------------------------------------------------------------------
@@ -370,14 +382,15 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
     return f"{name_part}_{index:03d}.wav"
 
 
-def create_silence_file(sample_rate: int, index: int) -> None:
-    """Create a complete silence file using configured silence length."""
-    silence_samples = int(SILENCE_LENGTH_SECONDS * sample_rate)
+def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
+    """Create a complete silence file with specified length."""
+    silence_samples = int(length_seconds * sample_rate)
     # Create stereo silence
     silence_audio = np.zeros((silence_samples, 2))
     
-    # Generate filename: silence_NNN.wav
-    filename = f"silence_{index:03d}.wav"
+    # Generate filename: silence_LENGTHms_NNN.wav (e.g., silence_2000ms_001.wav)
+    length_ms = int(length_seconds * 1000)
+    filename = f"silence_{length_ms}ms_{index:03d}.wav"
     output_path = OUTPUT_DIR / filename
     
     # Save
@@ -595,17 +608,44 @@ def main() -> None:
     
     # Generate silence files based on samples_to_silence_ratio
     if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
-        # Calculate number of silence files needed
+        # Calculate total number of silence files needed
         num_silence_files = int((created_count / SAMPLES_COUNT) * SILENCE_COUNT)
         
         print(f"\nGenerating silence files...")
         print(f"  Ratio: {SAMPLES_COUNT}:{SILENCE_COUNT} (samples:silence)")
-        print(f"  Creating {num_silence_files} silence files...")
+        print(f"  Total silence files to create: {num_silence_files}")
         
-        for i in range(1, num_silence_files + 1):
-            create_silence_file(sample_rate, i)
-            if i % 10 == 0 or i == num_silence_files:
-                print(f"    Created {i}/{num_silence_files} silence files...")
+        # Calculate distribution of silence files across different lengths based on weights
+        total_weight = sum(SILENCE_LENGTH_WEIGHTS)
+        silence_counts_by_length = []
+        remaining_files = num_silence_files
+        
+        for i, weight in enumerate(SILENCE_LENGTH_WEIGHTS):
+            if i == len(SILENCE_LENGTH_WEIGHTS) - 1:
+                # Last length gets remaining files to ensure we hit exact total
+                count = remaining_files
+            else:
+                count = int((num_silence_files * weight) / total_weight)
+                remaining_files -= count
+            silence_counts_by_length.append(count)
+        
+        # Display distribution
+        print(f"  Silence length distribution:")
+        for length_sec, count in zip(SILENCE_LENGTHS_SECONDS, silence_counts_by_length):
+            length_ms = int(length_sec * 1000)
+            print(f"    {length_ms}ms: {count} files")
+        
+        # Create silence files with appropriate lengths
+        file_counter = 1
+        for length_idx, (length_sec, count) in enumerate(zip(SILENCE_LENGTHS_SECONDS, silence_counts_by_length)):
+            length_ms = int(length_sec * 1000)
+            for i in range(count):
+                create_silence_file(sample_rate, length_sec, file_counter)
+                file_counter += 1
+                if file_counter % 10 == 1 or file_counter == num_silence_files + 1:
+                    print(f"    Created {file_counter - 1}/{num_silence_files} silence files...", end="\r")
+        
+        print(f"    Created {num_silence_files}/{num_silence_files} silence files...")
         
         total_files = created_count + num_silence_files
         print(f"\nTotal files created: {total_files} ({created_count} samples + {num_silence_files} silence)")
