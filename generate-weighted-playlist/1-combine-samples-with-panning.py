@@ -58,29 +58,25 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
-# Extract config sections
-combine_config = config["combine_samples_config"]
-shared_config = config["shared_config"]
-
 # Input/output locations
 INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
-BEAT_LENGTH_SECONDS = 60.0 / shared_config["bpm"]
-SILENCE_LENGTH_SECONDS = shared_config["silent_samples_length_millisec"] / 1000.0
-NUM_UNIQUE_SAMPLES = combine_config["num_unique_samples"]
-MIN_SAMPLES_PER_COMBINATION = combine_config.get("min_samples_per_combination", 1)
-MAX_SAMPLES_PER_COMBINATION = combine_config.get("max_samples_per_combination", 3)
+BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
+SILENCE_LENGTH_SECONDS = config["silent_samples_length_millisec"] / 1000.0
+NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
+MIN_SAMPLES_PER_COMBINATION = config.get("min_samples_per_combination", 1)
+MAX_SAMPLES_PER_COMBINATION = config.get("max_samples_per_combination", 3)
 
-# Parse panning_pattern_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 stereo-pair)
-panning_pattern_parts = [int(x) for x in combine_config.get("panning_pattern_ratio", "1:1:1").split(":")]
+# Parse center_to_noncenter_to_dualpan_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 dualpan)
+panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_ratio", "1:1:1").split(":")]
 CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
 NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
-STEREO_PAIR_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
+DUALPAN_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
 
 # Parse samples_to_silence_ratio (e.g., "4:1" means 4 samples : 1 silence)
-silence_ratio_parts = [int(x) for x in combine_config.get("samples_to_silence_ratio", "1:0").split(":")]
+silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_ratio", "1:0").split(":")]
 SAMPLES_COUNT = silence_ratio_parts[0]
 SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
 
@@ -328,7 +324,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         pattern_pool = (
             ['center_only'] * CENTER_ONLY_WEIGHT + 
             ['non_center_only'] * NON_CENTER_ONLY_WEIGHT + 
-            ['stereo_pair'] * STEREO_PAIR_WEIGHT
+            ['stereo_pair'] * DUALPAN_WEIGHT
         )
     
     # Select a pattern type
@@ -419,7 +415,7 @@ end tell
 # -------------------------------------------------------------------
 def main() -> None:
     print("\nCombine Samples with Random Panning\n")
-    print(f"BPM: {shared_config['bpm']}")
+    print(f"BPM: {config['bpm']}")
     
     # Get all available samples from input directory, grouped by sound type
     samples_by_type = get_available_samples()

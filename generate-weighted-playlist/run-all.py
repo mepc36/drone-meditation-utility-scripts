@@ -4,9 +4,9 @@
 run-all.py
 
 Runs the complete pipeline:
-1. 4-clean-up-itunes-playlist-tracks-and-files.py - Clean up old files
+1. 3-clean-up-itunes-playlist-tracks-and-files.py - Clean up old files
 2. 1-combine-samples-with-panning.py - Generate combined samples
-3. 3-import-duplicate-padded-samples-into-itunes-playlist.py - Import to iTunes
+3. 2-import-duplicate-padded-samples-into-itunes-playlist.py - Import to iTunes
 """
 
 import subprocess
@@ -44,9 +44,9 @@ def main() -> None:
     print("="*70)
     
     scripts = [
-        ("4-clean-up-itunes-playlist-tracks-and-files.py", "Step 1: Clean up old files"),
+        ("3-clean-up-itunes-playlist-tracks-and-files.py", "Step 1: Clean up old files"),
         ("1-combine-samples-with-panning.py", "Step 2: Combine samples with panning"),
-        ("3-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Import to iTunes playlist")
+        ("2-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Import to iTunes playlist")
     ]
     
     for script_name, description in scripts:

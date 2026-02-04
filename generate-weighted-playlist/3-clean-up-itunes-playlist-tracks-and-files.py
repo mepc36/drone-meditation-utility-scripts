@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-remove-from-itunes-library.py
+3-clean-up-itunes-playlist-tracks-and-files.py
 
 Complete cleanup script for audio files:
 1. Deletes physical .wav files from local output directory
@@ -21,14 +21,11 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
-# Extract config sections
-shared_config = config["shared_config"]
-
-ITUNES_DIR = Path(shared_config["itunes_dir"])
+ITUNES_DIR = Path(config["itunes_dir"])
 OUTPUT_AUDIO_DIR = Path("./output/audio/final-sample-versions")
 
 # Playlist location and name
-PLAYLIST_NAME = shared_config["playlist_name"]
+PLAYLIST_NAME = config["playlist_name"]
 PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
 
 
