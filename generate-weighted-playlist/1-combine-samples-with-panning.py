@@ -3,6 +3,10 @@
 """ 
 TODO:
 
+CD:
+
+cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
+
 DEFINITELY:
 - make all samples have the exact same length
 - make volume of panned samples equal to volume of centered samples
@@ -64,6 +68,7 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
 BEAT_LENGTH_SECONDS = 60.0 / shared_config["bpm"]
+SILENCE_LENGTH_SECONDS = shared_config["silent_samples_length_millisec"] / 1000.0
 NUM_UNIQUE_SAMPLES = combine_config["num_unique_samples"]
 MIN_SAMPLES_PER_COMBINATION = combine_config.get("min_samples_per_combination", 1)
 MAX_SAMPLES_PER_COMBINATION = combine_config.get("max_samples_per_combination", 3)
@@ -85,7 +90,7 @@ SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
 # -------------------------------------------------------------------
 def get_available_samples() -> dict[str, list[str]]:
     """Get all .wav files from input directory grouped by sound type.
-    Expects filenames like: name_soundtype.wav (e.g., thinking_kick.wav)
+    Expects filenames like: name_soundtype.N.wav (e.g., thinking_kick.1.wav)
     Returns dict mapping sound_type -> list of sample names (without extension).
     """
     if not INPUT_AUDIO_DIR.exists():
@@ -105,18 +110,23 @@ def get_available_samples() -> dict[str, list[str]]:
     samples_by_type = {}
     for f in wav_files:
         stem = f.stem  # filename without extension
-        # Split on underscore and get [1] as sound type
+        # Split on underscore and get [1] as sound type with suffix
         parts = stem.split('_')
         if len(parts) >= 2:
-            sound_type = parts[1]
+            # Extract sound type by removing numeric suffix after dot
+            # e.g., "kick.1" -> "kick", "snare.6" -> "snare"
+            sound_type_with_suffix = parts[1]
+            sound_type = sound_type_with_suffix.split('.')[0]
+            
             if sound_type not in samples_by_type:
                 samples_by_type[sound_type] = []
             samples_by_type[sound_type].append(stem)
         else:
             # Fallback: if no underscore, use the whole name as sound type
-            if stem not in samples_by_type:
-                samples_by_type[stem] = []
-            samples_by_type[stem].append(stem)
+            fallback_type = stem.split('.')[0]
+            if fallback_type not in samples_by_type:
+                samples_by_type[fallback_type] = []
+            samples_by_type[fallback_type].append(stem)
     
     return samples_by_type
 
@@ -146,21 +156,30 @@ def load_audio(name: str) -> tuple[np.ndarray, int]:
 
 def apply_pan(audio: np.ndarray, pan_position: str) -> np.ndarray:
     """
-    Apply panning to mono or stereo audio.
+    Apply equal-power panning to mono or stereo audio.
     pan_position: 'left', 'center', or 'right'
-    Returns stereo audio.
+    Returns stereo audio with consistent perceived loudness.
+    
+    Uses equal-power panning curve to maintain constant power (L² + R² = 1):
+    - Left: L=√2, R=0.0 (boosted by +3dB)
+    - Center: L=1.0, R=1.0 (full volume)
+    - Right: L=0.0, R=√2 (boosted by +3dB)
     """
     # Convert to mono if stereo
     if audio.ndim == 2:
         audio = np.mean(audio, axis=1)
     
+    # Equal-power panning gains
+    # Left/right are boosted by √2 (~1.414) to match power of center signals
+    HARD_PAN_GAIN = np.sqrt(2)  # ≈ 1.4142
+    
     # Create stereo output
     if pan_position == 'left':
-        left = audio
+        left = audio * HARD_PAN_GAIN
         right = np.zeros_like(audio)
     elif pan_position == 'right':
         left = np.zeros_like(audio)
-        right = audio
+        right = audio * HARD_PAN_GAIN
     else:  # center
         left = audio
         right = audio
@@ -248,6 +267,9 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         if sr != sample_rate:
             audio = resample_audio(audio, sr, sample_rate)
         
+        # Normalize individual sample to consistent loudness before mixing
+        audio = normalize_to_rms(audio, target_rms=0.15)
+        
         # Apply panning
         stereo = apply_pan(audio, pan_assignments[name])
         
@@ -260,7 +282,7 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         else:
             mixed = mixed + stereo
     
-    # Normalize to consistent RMS level for similar perceived loudness
+    # Normalize final mix to consistent RMS level
     mixed = normalize_to_rms(mixed, target_rms=0.15)
     
     return mixed
@@ -337,8 +359,8 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
 
 
 def create_silence_file(sample_rate: int, index: int) -> None:
-    """Create a complete silence file with the same length as a beat."""
-    silence_samples = int(BEAT_LENGTH_SECONDS * sample_rate)
+    """Create a complete silence file using configured silence length."""
+    silence_samples = int(SILENCE_LENGTH_SECONDS * sample_rate)
     # Create stereo silence
     silence_audio = np.zeros((silence_samples, 2))
     

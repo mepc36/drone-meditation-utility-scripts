@@ -35,6 +35,7 @@ OUTPUT_DIR = Path("./output/audio/padded-audio-samples")
 # Calculate beat length from BPM: 60 seconds / BPM = seconds per beat
 DESIRED_LENGTH_SECONDS = 60.0 / shared_config["bpm"]
 LIVING_LENGTH_SECONDS = pad_config["living_sample_length_seconds"]
+SILENCE_LENGTH_SECONDS = shared_config["silent_samples_length_millisec"] / 1000.0
 
 # Canonical file names
 CANONICAL_FILES = [f"{name}.wav" for name in pad_config["canonical_files"]]
@@ -151,10 +152,10 @@ def main() -> None:
     print(f"  Creating Silence.wav...")
     silence_path = OUTPUT_DIR / "Silence.wav"
     sample_rate = 44100  # Standard CD quality
-    silence_samples = int(DESIRED_LENGTH_SECONDS * sample_rate)
+    silence_samples = int(SILENCE_LENGTH_SECONDS * sample_rate)
     silence_audio = np.zeros(silence_samples)
     sf.write(silence_path, silence_audio, sample_rate)
-    print(f"    Created {DESIRED_LENGTH_SECONDS:.2f}s of silence")
+    print(f"    Created {SILENCE_LENGTH_SECONDS:.2f}s of silence")
     print(f"    Saved to {silence_path.name}")
     
     print(f"\nPadding complete!")
