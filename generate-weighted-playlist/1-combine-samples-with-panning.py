@@ -288,7 +288,7 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     return mixed
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]], used_solo_samples: set[str]) -> tuple[list[str], dict[str, str]]:
+def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str]) -> tuple[list[str], dict[str, str]]:
     """Generate a random unique combination using weighted panning patterns.
     Only combines samples with the same sound type.
     Only allows 3 specific patterns:
@@ -296,26 +296,40 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_solo
     2. 1 sample, hard left or hard right
     3. 2 samples, stereo pair (1 left + 1 right)
     
-    SOLO samples can only be used once across all combinations.
+    ONCE samples (subset of SOLO): isolated, centered, appear once
+    SOLO samples: isolated, can pan left/center/right, can repeat
+    Regular samples: can be combined, use all patterns
+    
     Returns (sample_names, pan_assignments)
     """
     # First, randomly select a sound type
     sound_type = random.choice(list(samples_by_type.keys()))
     available_samples = samples_by_type[sound_type]
     
-    # For SOLO samples, filter out already-used ones
-    if sound_type.lower() == 'solo':
-        available_samples = [s for s in available_samples if s not in used_solo_samples]
-        # If no SOLO samples left, return None to signal retry
+    # For ONCE samples, filter out already-used ones
+    if sound_type.lower() == 'once':
+        available_samples = [s for s in available_samples if s not in used_once_samples]
+        # If no ONCE samples left, return None to signal retry
         if not available_samples:
             return None, None
     
-    # Build weighted pool of pattern types
-    pattern_pool = (
-        ['center_only'] * CENTER_ONLY_WEIGHT + 
-        ['non_center_only'] * NON_CENTER_ONLY_WEIGHT + 
-        ['stereo_pair'] * STEREO_PAIR_WEIGHT
-    )
+    # Build weighted pool of pattern types based on sound type
+    if sound_type.lower() == 'once':
+        # ONCE: always isolated and centered
+        pattern_pool = ['center_only']
+    elif sound_type.lower() == 'solo':
+        # SOLO: isolated but can pan left/center/right (exclude stereo_pair)
+        pattern_pool = (
+            ['center_only'] * CENTER_ONLY_WEIGHT + 
+            ['non_center_only'] * NON_CENTER_ONLY_WEIGHT
+        )
+    else:
+        # Regular samples: use all patterns
+        pattern_pool = (
+            ['center_only'] * CENTER_ONLY_WEIGHT + 
+            ['non_center_only'] * NON_CENTER_ONLY_WEIGHT + 
+            ['stereo_pair'] * STEREO_PAIR_WEIGHT
+        )
     
     # Select a pattern type
     pattern_type = random.choice(pattern_pool)
@@ -423,7 +437,7 @@ def main() -> None:
     
     # Track combinations to ensure uniqueness
     seen_combinations = set()
-    used_solo_samples = set()  # Track SOLO samples that have been used (can only appear once)
+    used_once_samples = set()  # Track ONCE samples that have been used (can only appear once)
     created_count = 0
     attempts = 0
     max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
@@ -436,9 +450,9 @@ def main() -> None:
         attempts += 1
         
         # Generate combination
-        sample_names, pan_assignments = generate_unique_combination(samples_by_type, used_solo_samples)
+        sample_names, pan_assignments = generate_unique_combination(samples_by_type, used_once_samples)
         
-        # Check if combination generation failed (e.g., no more SOLO samples available)
+        # Check if combination generation failed (e.g., no more ONCE samples available)
         if sample_names is None:
             continue
         
@@ -451,15 +465,15 @@ def main() -> None:
         
         seen_combinations.add(combo_key)
         
-        # Mark SOLO samples as used (they can only appear once)
+        # Mark ONCE samples as used (they can only appear once)
         for name in sample_names:
-            # Check if this sample is from the SOLO sound type
+            # Check if this sample is from the ONCE sound type
             parts = name.split('_')
             if len(parts) >= 2:
                 sound_type_with_suffix = parts[1]
                 sound_type = sound_type_with_suffix.split('.')[0]
-                if sound_type.lower() == 'solo':
-                    used_solo_samples.add(name)
+                if sound_type.lower() == 'once':
+                    used_once_samples.add(name)
         
         created_count += 1
         
