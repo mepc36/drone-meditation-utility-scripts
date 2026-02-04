@@ -273,7 +273,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     return mixed
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str]) -> tuple[list[str], dict[str, str]]:
+def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
+                               center_quota: int, noncenter_quota: int, dualpan_quota: int) -> tuple[list[str], dict[str, str]]:
     """Generate a random unique combination using weighted panning patterns.
     Only combines samples with the same sound type.
     Only allows 3 specific patterns:
@@ -298,23 +299,28 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         if not available_samples:
             return None, None
     
-    # Build weighted pool of pattern types based on sound type
+    # Build pattern pool based on sound type and remaining quotas
     if sound_type.lower() == 'once':
         # ONCE: always isolated and centered
         pattern_pool = ['center_only']
     elif sound_type.lower() == 'solo':
         # SOLO: isolated but can pan left/center/right (exclude stereo_pair)
+        # Use quotas to ensure exact ratio
         pattern_pool = (
-            ['center_only'] * CENTER_ONLY_WEIGHT + 
-            ['non_center_only'] * NON_CENTER_ONLY_WEIGHT
+            ['center_only'] * center_quota + 
+            ['non_center_only'] * noncenter_quota
         )
     else:
-        # Regular samples: use all patterns
+        # Regular samples: use all patterns with quotas
         pattern_pool = (
-            ['center_only'] * CENTER_ONLY_WEIGHT + 
-            ['non_center_only'] * NON_CENTER_ONLY_WEIGHT + 
-            ['stereo_pair'] * DUALPAN_WEIGHT
+            ['center_only'] * center_quota + 
+            ['non_center_only'] * noncenter_quota + 
+            ['stereo_pair'] * dualpan_quota
         )
+    
+    # If pool is empty (all quotas exhausted), return None
+    if not pattern_pool:
+        return None, None
     
     # Select a pattern type
     pattern_type = random.choice(pattern_pool)
@@ -417,6 +423,36 @@ def main() -> None:
     print()
     
     reset_output_dir()
+    # Count ONCE samples and calculate adjusted ratio
+    once_samples_count = len(samples_by_type.get('once', []))
+    print(f"Found {once_samples_count} ONCE samples (always centered)\n")
+    
+    # Calculate how many samples will use each pattern based on ratio
+    total_ratio_parts = CENTER_ONLY_WEIGHT + NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
+    center_quota = int(NUM_UNIQUE_SAMPLES * CENTER_ONLY_WEIGHT / total_ratio_parts)
+    noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / total_ratio_parts)
+    dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / total_ratio_parts)
+    
+    # Validate: ONCE samples cannot exceed center quota
+    if once_samples_count > center_quota:
+        raise ValueError(
+            f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
+            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_ratio')}' allocates {center_quota} center slots "
+            f"out of {NUM_UNIQUE_SAMPLES} total samples.\n"
+            f"Either:\n"
+            f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
+            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_ratio, or\n"
+            f"  3. Increase num_unique_samples to {int(once_samples_count * total_ratio_parts / CENTER_ONLY_WEIGHT)} or more"
+        )
+    
+    # Adjust quotas: ONCE samples consume center quota
+    remaining_center_quota = max(0, center_quota - once_samples_count)
+    
+    # Calculate adjusted weights for non-ONCE samples
+    # If we've used up all center quota, set center weight to 0
+    adjusted_center_weight = remaining_center_quota
+    adjusted_noncenter_weight = noncenter_quota
+    adjusted_dualpan_weight = dualpan_quota
     
     print("Generating unique combinations...\n")
     
@@ -427,6 +463,16 @@ def main() -> None:
     attempts = 0
     max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
     
+    # Quota-based generation: track how many of each pattern we still need
+    center_quota_remaining = adjusted_center_weight
+    noncenter_quota_remaining = adjusted_noncenter_weight
+    dualpan_quota_remaining = adjusted_dualpan_weight
+    
+    # Track panning distribution
+    center_count = 0
+    noncenter_count = 0
+    dualpan_count = 0
+    
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     first_audio, sample_rate = load_audio(first_sample_name)
@@ -434,8 +480,11 @@ def main() -> None:
     while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
         attempts += 1
         
-        # Generate combination
-        sample_names, pan_assignments = generate_unique_combination(samples_by_type, used_once_samples)
+        # Generate combination with remaining quotas
+        sample_names, pan_assignments = generate_unique_combination(
+            samples_by_type, used_once_samples,
+            center_quota_remaining, noncenter_quota_remaining, dualpan_quota_remaining
+        )
         
         # Check if combination generation failed (e.g., no more ONCE samples available)
         if sample_names is None:
@@ -462,6 +511,19 @@ def main() -> None:
         
         created_count += 1
         
+        # Track panning pattern and update quotas
+        pan_positions = list(pan_assignments.values())
+        if len(pan_positions) == 1:
+            if pan_positions[0] == 'center':
+                center_count += 1
+                center_quota_remaining = max(0, center_quota_remaining - 1)
+            else:  # left or right
+                noncenter_count += 1
+                noncenter_quota_remaining = max(0, noncenter_quota_remaining - 1)
+        else:  # 2 samples (stereo pair)
+            dualpan_count += 1
+            dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
+        
         # Create the audio
         combined_audio = create_combination(sample_names, pan_assignments, sample_rate)
         
@@ -482,6 +544,43 @@ def main() -> None:
         print(f"\nComplete! Created {created_count} unique samples.")
     
     print(f"  Output: {OUTPUT_DIR.resolve()}")
+    
+    # Display panning distribution
+    from math import gcd
+    def gcd_three(a, b, c):
+        return gcd(gcd(a, b), c)
+    
+    if center_count > 0 and noncenter_count > 0 and dualpan_count > 0:
+        ratio_gcd = gcd_three(center_count, noncenter_count, dualpan_count)
+    elif center_count > 0 and noncenter_count > 0:
+        ratio_gcd = gcd(center_count, noncenter_count)
+    elif center_count > 0 and dualpan_count > 0:
+        ratio_gcd = gcd(center_count, dualpan_count)
+    elif noncenter_count > 0 and dualpan_count > 0:
+        ratio_gcd = gcd(noncenter_count, dualpan_count)
+    else:
+        ratio_gcd = 1
+    
+    realized_ratio = f"{center_count//ratio_gcd}:{noncenter_count//ratio_gcd}:{dualpan_count//ratio_gcd}"
+    
+    # Calculate percentage differences from target
+    target_center_pct = (center_quota / created_count) * 100
+    target_noncenter_pct = (noncenter_quota / created_count) * 100
+    target_dualpan_pct = (dualpan_quota / created_count) * 100
+    
+    actual_center_pct = (center_count / created_count) * 100
+    actual_noncenter_pct = (noncenter_count / created_count) * 100
+    actual_dualpan_pct = (dualpan_count / created_count) * 100
+    
+    center_diff = actual_center_pct - target_center_pct
+    noncenter_diff = actual_noncenter_pct - target_noncenter_pct
+    dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+    
+    deviation_ratio = f"{center_diff:+.3f}%:{noncenter_diff:+.3f}%:{dualpan_diff:+.3f}%"
+    
+    print(f"\nPanning Distribution:")
+    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1')}")
+    print(f"  Realized ratio: {realized_ratio}")
     
     # Generate silence files based on samples_to_silence_ratio
     if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
