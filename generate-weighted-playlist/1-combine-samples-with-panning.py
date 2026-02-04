@@ -7,11 +7,24 @@ DEFINITELY:
 - make all samples have the exact same length
 - make volume of panned samples equal to volume of centered samples
 - find a way make a small subset of samples be a longer pause
-- make centered samples more common proportionally
+- make centered samples more common
+
+BUGS:
+- When a sample with the same name already exists in the unknown album on disk, the import done in script 3- will not overwrite it
 
 MAYBE:
+- add subset of rhythmically different samples
+-- e.g., samples that repeat 1 sample multiple times
+- add two longer samples that both can end the song
+-- make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
+-- play with numerology (make one of them last for 3:33, make the other last for 6:66)
+- add tinnitus to one (or many) samples?
+- add rule that we must have at least 1 combination of any 2 samples that share the same word
+-- e.g. -- "pain" by 50 Cent and "pain" by Eve
+- create a throughline throughout the piece by using a recurring word, like "yo"
+
+PROBABLY NOT:
 - add silences??? (or is this unnecessary now??)
-- add subset of rhythmically different samples (like samples that repeat 1 sample multiple times?)
 """
 
 
