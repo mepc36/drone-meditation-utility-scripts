@@ -72,6 +72,11 @@ SILENCE_LENGTHS_SECONDS = [ms / 1000.0 for ms in silence_lengths_ms]
 silence_weights = [int(x) for x in config.get("silence_lengths_ratio", "1").split(":")]
 SILENCE_LENGTH_WEIGHTS = silence_weights
 
+# Parse padded centered samples config
+PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
+PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
+PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0)
+
 # Validate that lengths and weights match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
     raise ValueError(
@@ -247,13 +252,22 @@ def normalize_to_rms(audio: np.ndarray, target_rms: float = 0.15) -> np.ndarray:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int) -> np.ndarray:
+                       sample_rate: int, use_padded_length: bool = False) -> np.ndarray:
     """
     Create a stereo mix of samples with their pan positions.
     Returns padded stereo audio.
+    
+    Args:
+        sample_names: List of sample names to combine
+        pan_assignments: Dictionary mapping sample names to pan positions
+        sample_rate: Sample rate for the output
+        use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
     """
     # Load and pan each sample
     mixed = None
+    
+    # Determine target length
+    target_length = PADDED_CENTERED_LENGTH_SECONDS if use_padded_length else BEAT_LENGTH_SECONDS
     
     for name in sample_names:
         audio, sr = load_audio(name)
@@ -268,8 +282,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         # Apply panning
         stereo = apply_pan(audio, pan_assignments[name])
         
-        # Pad to beat length before mixing
-        stereo = pad_to_length(stereo, sample_rate, BEAT_LENGTH_SECONDS)
+        # Pad to target length before mixing
+        stereo = pad_to_length(stereo, sample_rate, target_length)
         
         # Mix (sum)
         if mixed is None:
@@ -488,6 +502,11 @@ def main() -> None:
     first_sample_name = list(samples_by_type.values())[0][0]
     first_audio, sample_rate = load_audio(first_sample_name)
     
+    # Calculate how many centered samples should be padded
+    num_padded_centered = int(center_quota * PADDED_CENTERED_PERCENT)
+    padded_centered_count = 0
+    centered_created_count = 0
+    
     while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
         attempts += 1
         
@@ -524,10 +543,20 @@ def main() -> None:
         
         # Track panning pattern and update quotas
         pan_positions = list(pan_assignments.values())
+        is_centered = False
+        use_padded_length = False
+        
         if len(pan_positions) == 1:
             if pan_positions[0] == 'center':
+                is_centered = True
                 center_count += 1
+                centered_created_count += 1
                 center_quota_remaining = max(0, center_quota_remaining - 1)
+                
+                # Decide if this centered sample should be padded
+                if padded_centered_count < num_padded_centered:
+                    use_padded_length = True
+                    padded_centered_count += 1
             else:  # left or right
                 noncenter_count += 1
                 noncenter_quota_remaining = max(0, noncenter_quota_remaining - 1)
@@ -536,7 +565,7 @@ def main() -> None:
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
         # Create the audio
-        combined_audio = create_combination(sample_names, pan_assignments, sample_rate)
+        combined_audio = create_combination(sample_names, pan_assignments, sample_rate, use_padded_length)
         
         # Generate filename
         filename = format_filename(sample_names, pan_assignments, created_count)
@@ -605,6 +634,15 @@ def main() -> None:
     differential = [perfect_ratio_parts[i] - realized_parts[i] for i in range(len(realized_parts))]
     differential_str = ':'.join([f"{'+' if d > 0 else ''}{d}" for d in differential])
     print(f"  Differential: {differential_str}")
+    
+    # Display padded centered samples info
+    if padded_centered_count > 0:
+        padded_pct = (padded_centered_count / center_count) * 100 if center_count > 0 else 0
+        target_padded_pct = PADDED_CENTERED_PERCENT * 100
+        print(f"\nPadded Centered Samples:")
+        print(f"  Target: {target_padded_pct:.1f}% of centered samples")
+        print(f"  Realized: {padded_centered_count}/{center_count} = {padded_pct:.1f}%")
+        print(f"  Length: {PADDED_CENTERED_LENGTH_MS}ms ({PADDED_CENTERED_LENGTH_SECONDS:.2f}s)")
     
     # Generate silence files based on samples_to_silence_ratio
     if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
