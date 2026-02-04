@@ -74,6 +74,11 @@ CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
 NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
 STEREO_PAIR_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
 
+# Parse samples_to_silence_ratio (e.g., "4:1" means 4 samples : 1 silence)
+silence_ratio_parts = [int(x) for x in combine_config.get("samples_to_silence_ratio", "1:0").split(":")]
+SAMPLES_COUNT = silence_ratio_parts[0]
+SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
+
 
 # -------------------------------------------------------------------
 # Helpers
@@ -331,6 +336,20 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
     return f"{name_part}_{index:03d}.wav"
 
 
+def create_silence_file(sample_rate: int, index: int) -> None:
+    """Create a complete silence file with the same length as a beat."""
+    silence_samples = int(BEAT_LENGTH_SECONDS * sample_rate)
+    # Create stereo silence
+    silence_audio = np.zeros((silence_samples, 2))
+    
+    # Generate filename: silence_NNN.wav
+    filename = f"silence_{index:03d}.wav"
+    output_path = OUTPUT_DIR / filename
+    
+    # Save
+    sf.write(output_path, silence_audio, sample_rate)
+
+
 def import_folder_to_music(folder: Path) -> str:
     """Import entire folder to iTunes/Music in one operation."""
     script = f'''
@@ -418,6 +437,25 @@ def main() -> None:
     
     print(f"  Output: {OUTPUT_DIR.resolve()}")
     
+    # Generate silence files based on samples_to_silence_ratio
+    if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
+        # Calculate number of silence files needed
+        num_silence_files = int((created_count / SAMPLES_COUNT) * SILENCE_COUNT)
+        
+        print(f"\nGenerating silence files...")
+        print(f"  Ratio: {SAMPLES_COUNT}:{SILENCE_COUNT} (samples:silence)")
+        print(f"  Creating {num_silence_files} silence files...")
+        
+        for i in range(1, num_silence_files + 1):
+            create_silence_file(sample_rate, i)
+            if i % 10 == 0 or i == num_silence_files:
+                print(f"    Created {i}/{num_silence_files} silence files...")
+        
+        total_files = created_count + num_silence_files
+        print(f"\nTotal files created: {total_files} ({created_count} samples + {num_silence_files} silence)")
+    else:
+        total_files = created_count
+    
     # Import to iTunes
     print("\n" + "="*60)
     print("Importing entire folder to iTunes/Music...")
@@ -427,7 +465,7 @@ def main() -> None:
     
     print(f"Import complete!")
     print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
-    print(f"  Total files: {created_count}")
+    print(f"  Total files: {total_files}")
     print(f"\nNext: Run 3-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
