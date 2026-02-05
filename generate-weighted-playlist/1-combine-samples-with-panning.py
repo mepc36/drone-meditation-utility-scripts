@@ -16,9 +16,9 @@ DEFINITELY:
 - add at least 2 very long samples that end the song
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-- Make -45 degrees and +45 degrees acceptable panning positions
 - Add configs to vary volumes between loud/medium/soft
 - Add solo piano/hi hat/bass kick/string/etc. sounds
+- make some percent samples half the duration of the BPM (control both byh config)
 
 MAYBE:
 - add subset of rhythmically different samples
@@ -87,6 +87,11 @@ if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
         f"Error: silence_lengths_millisec and silence_lengths_ratio must have the same number of values.\n"
         f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_WEIGHTS)} weights."
     )
+
+# Panning range constants for non-center samples
+# Left side uses negative values, right side uses positive values
+NON_CENTER_PAN_MIN = 0.25  # Minimum distance from center (applies to both sides)
+NON_CENTER_PAN_MAX = 0.75  # Maximum distance from center (applies to both sides)
 
 
 # -------------------------------------------------------------------
@@ -158,16 +163,17 @@ def load_audio(name: str) -> tuple[np.ndarray, int]:
     return audio_data, sample_rate
 
 
-def apply_pan(audio: np.ndarray, pan_position: str) -> np.ndarray:
+def apply_pan(audio: np.ndarray, pan_position) -> np.ndarray:
     """
     Apply equal-power panning to mono or stereo audio.
-    pan_position: 'left', 'center', or 'right'
+    pan_position: 'center', or numeric value from -1.0 (hard left) to 1.0 (hard right)
     Returns stereo audio with consistent perceived loudness.
     
     Uses equal-power panning curve to maintain constant power (L² + R² = 1):
-    - Left: L=√2, R=0.0 (boosted by +3dB)
-    - Center: L=1.0, R=1.0 (full volume)
-    - Right: L=0.0, R=√2 (boosted by +3dB)
+    - -1.0 (hard left): L=√2, R=0.0 (boosted by +3dB)
+    - 0.0 (center): L=1.0, R=1.0 (full volume)
+    - 1.0 (hard right): L=0.0, R=√2 (boosted by +3dB)
+    - Intermediate values use cosine/sine panning curve
     """
     # Convert to mono if stereo
     if audio.ndim == 2:
@@ -178,15 +184,22 @@ def apply_pan(audio: np.ndarray, pan_position: str) -> np.ndarray:
     HARD_PAN_GAIN = np.sqrt(2)  # ≈ 1.4142
     
     # Create stereo output
-    if pan_position == 'left':
-        left = audio * HARD_PAN_GAIN
-        right = np.zeros_like(audio)
-    elif pan_position == 'right':
-        left = np.zeros_like(audio)
-        right = audio * HARD_PAN_GAIN
-    else:  # center
+    if pan_position == 'center':
         left = audio
         right = audio
+    else:
+        # Numeric pan position: use equal-power panning curve
+        # Convert pan (-1 to 1) to angle (0 to π/2)
+        # -1 = hard left (0°), 0 = center (45°), 1 = hard right (90°)
+        pan_value = float(pan_position)
+        angle = (pan_value + 1.0) * np.pi / 4.0  # Maps [-1,1] to [0, π/2]
+        
+        # Equal-power panning using sin/cos
+        left_gain = np.cos(angle) * HARD_PAN_GAIN
+        right_gain = np.sin(angle) * HARD_PAN_GAIN
+        
+        left = audio * left_gain
+        right = audio * right_gain
     
     return np.column_stack([left, right])
 
@@ -299,12 +312,12 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
 
 
 def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
-                               center_quota: int, noncenter_quota: int, dualpan_quota: int) -> tuple[list[str], dict[str, str]]:
+                               center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int) -> tuple[list[str], dict[str, str]]:
     """Generate a random unique combination using weighted panning patterns.
     Only combines samples with the same sound type.
     Only allows 3 specific patterns:
     1. 1 sample, center only
-    2. 1 sample, hard left or hard right
+    2. 1 sample, left or right (quota-based for 50/50 distribution)
     3. 2 samples, stereo pair (1 left + 1 right)
     
     ONCE samples (subset of SOLO): isolated, centered, appear once
@@ -330,16 +343,18 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         pattern_pool = ['center_only']
     elif sound_type.lower() == 'solo':
         # SOLO: isolated but can pan left/center/right (exclude stereo_pair)
-        # Use quotas to ensure exact ratio
+        # Use quotas to ensure exact ratio and left/right balance
         pattern_pool = (
             ['center_only'] * center_quota + 
-            ['non_center_only'] * noncenter_quota
+            ['left_only'] * left_quota +
+            ['right_only'] * right_quota
         )
     else:
         # Regular samples: use all patterns with quotas
         pattern_pool = (
             ['center_only'] * center_quota + 
-            ['non_center_only'] * noncenter_quota + 
+            ['left_only'] * left_quota +
+            ['right_only'] * right_quota +
             ['stereo_pair'] * dualpan_quota
         )
     
@@ -355,10 +370,18 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         sample_names = random.sample(available_samples, 1)
         pan_assignments = {sample_names[0]: 'center'}
     
-    elif pattern_type == 'non_center_only':
-        # Pattern 2: 1 sample, hard left OR hard right
+    elif pattern_type == 'left_only':
+        # Pattern 2a: 1 sample, panned left
+        # Pan range: -NON_CENTER_PAN_MAX to -NON_CENTER_PAN_MIN (left side)
         sample_names = random.sample(available_samples, 1)
-        pan_position = random.choice(['left', 'right'])
+        pan_position = random.uniform(-NON_CENTER_PAN_MAX, -NON_CENTER_PAN_MIN)
+        pan_assignments = {sample_names[0]: pan_position}
+    
+    elif pattern_type == 'right_only':
+        # Pattern 2b: 1 sample, panned right
+        # Pan range: NON_CENTER_PAN_MIN to NON_CENTER_PAN_MAX (right side)
+        sample_names = random.sample(available_samples, 1)
+        pan_position = random.uniform(NON_CENTER_PAN_MIN, NON_CENTER_PAN_MAX)
         pan_assignments = {sample_names[0]: pan_position}
     
     else:  # stereo_pair
@@ -369,9 +392,10 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
             pan_assignments = {sample_names[0]: 'center'}
         else:
             sample_names = random.sample(available_samples, 2)
+            # For stereo pairs, use hard panning for clear separation
             pan_assignments = {
-                sample_names[0]: 'left',
-                sample_names[1]: 'right'
+                sample_names[0]: -1.0,
+                sample_names[1]: 1.0
             }
     
     return sample_names, pan_assignments
@@ -383,11 +407,23 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
     Only includes samples that are present, in pan order.
     """
     # Create list of (pan_position, sample_name) tuples
-    pan_order = {'left': 0, 'center': 1, 'right': 2}
-    samples_by_pan = [(pan_assignments[name], name) for name in sample_names]
+    samples_by_pan = []
+    for name in sample_names:
+        pan = pan_assignments[name]
+        # Convert pan to numeric value for sorting
+        if pan == 'center':
+            pan_value = 0.0
+        elif pan == 'left':
+            pan_value = -1.0
+        elif pan == 'right':
+            pan_value = 1.0
+        else:
+            # Already numeric
+            pan_value = float(pan)
+        samples_by_pan.append((pan_value, name))
     
     # Sort by pan position (left -> center -> right)
-    samples_by_pan.sort(key=lambda x: pan_order[x[0]])
+    samples_by_pan.sort(key=lambda x: x[0])
     
     # Extract sorted sample names
     sorted_names = [name.lower() for _, name in samples_by_pan]
@@ -459,6 +495,10 @@ def main() -> None:
     noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / total_ratio_parts)
     dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / total_ratio_parts)
     
+    # Split noncenter quota evenly between left and right for 50/50 distribution
+    left_quota = noncenter_quota // 2
+    right_quota = noncenter_quota - left_quota  # Gives right any remainder for odd numbers
+    
     # Validate: ONCE samples cannot exceed center quota
     if once_samples_count > center_quota:
         raise ValueError(
@@ -477,7 +517,8 @@ def main() -> None:
     # Calculate adjusted weights for non-ONCE samples
     # If we've used up all center quota, set center weight to 0
     adjusted_center_weight = remaining_center_quota
-    adjusted_noncenter_weight = noncenter_quota
+    adjusted_left_weight = left_quota
+    adjusted_right_weight = right_quota
     adjusted_dualpan_weight = dualpan_quota
     
     print("Generating unique combinations...\n")
@@ -491,12 +532,14 @@ def main() -> None:
     
     # Quota-based generation: track how many of each pattern we still need
     center_quota_remaining = adjusted_center_weight
-    noncenter_quota_remaining = adjusted_noncenter_weight
+    left_quota_remaining = adjusted_left_weight
+    right_quota_remaining = adjusted_right_weight
     dualpan_quota_remaining = adjusted_dualpan_weight
     
     # Track panning distribution
     center_count = 0
-    noncenter_count = 0
+    left_count = 0
+    right_count = 0
     dualpan_count = 0
     
     # Get sample rate from first file
@@ -514,7 +557,7 @@ def main() -> None:
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
-            center_quota_remaining, noncenter_quota_remaining, dualpan_quota_remaining
+            center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining
         )
         
         # Check if combination generation failed (e.g., no more ONCE samples available)
@@ -558,9 +601,14 @@ def main() -> None:
                 if padded_centered_count < num_padded_centered:
                     use_padded_length = True
                     padded_centered_count += 1
-            else:  # left or right
-                noncenter_count += 1
-                noncenter_quota_remaining = max(0, noncenter_quota_remaining - 1)
+            else:  # left or right (numeric pan value)
+                pan_value = float(pan_positions[0])
+                if pan_value < 0:  # left side
+                    left_count += 1
+                    left_quota_remaining = max(0, left_quota_remaining - 1)
+                else:  # right side
+                    right_count += 1
+                    right_quota_remaining = max(0, right_quota_remaining - 1)
         else:  # 2 samples (stereo pair)
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
@@ -588,17 +636,18 @@ def main() -> None:
     
     # Display panning distribution
     from math import gcd
-    def gcd_three(a, b, c):
-        return gcd(gcd(a, b), c)
+    from functools import reduce
     
-    if center_count > 0 and noncenter_count > 0 and dualpan_count > 0:
-        ratio_gcd = gcd_three(center_count, noncenter_count, dualpan_count)
-    elif center_count > 0 and noncenter_count > 0:
-        ratio_gcd = gcd(center_count, noncenter_count)
-    elif center_count > 0 and dualpan_count > 0:
-        ratio_gcd = gcd(center_count, dualpan_count)
-    elif noncenter_count > 0 and dualpan_count > 0:
-        ratio_gcd = gcd(noncenter_count, dualpan_count)
+    noncenter_count = left_count + right_count
+    
+    def gcd_multiple(*args):
+        """Calculate GCD of multiple numbers."""
+        return reduce(gcd, args)
+    
+    # Calculate GCD for ratio display
+    counts = [c for c in [center_count, noncenter_count, dualpan_count] if c > 0]
+    if len(counts) > 1:
+        ratio_gcd = gcd_multiple(*counts)
     else:
         ratio_gcd = 1
     
@@ -635,6 +684,16 @@ def main() -> None:
     differential = [perfect_ratio_parts[i] - realized_parts[i] for i in range(len(realized_parts))]
     differential_str = ':'.join([f"{'+' if d > 0 else ''}{d}" for d in differential])
     print(f"  Differential: {differential_str}")
+    
+    # Display left/right distribution for non-center samples
+    if noncenter_count > 0:
+        left_pct = (left_count / noncenter_count) * 100
+        right_pct = (right_count / noncenter_count) * 100
+        print(f"\nLeft/Right Distribution (non-center samples only):")
+        print(f"  Target: 50.0% left : 50.0% right")
+        print(f"  Realized: {left_count}:{right_count} = {left_pct:.1f}% : {right_pct:.1f}%")
+        diff = left_count - right_count
+        print(f"  Differential: {diff:+d} (left - right)")
     
     # Display padded centered samples info
     if padded_centered_count > 0:
