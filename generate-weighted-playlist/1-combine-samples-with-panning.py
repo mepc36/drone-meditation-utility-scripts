@@ -8,13 +8,16 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
+- set rules to prevent using 2 of the same (or similar) panning positions??
+- always make noncentered samples fully loud?
+- add a third volume tier???
 - make samples more similar lengths (e.g., politics is too long)
 - make volume of panned samples equal to volume of centered samples
 - use a large number of samples, but have 4 or 5 endings rather than just 1.
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 - Add solo piano/hi hat/bass kick/string/etc. sounds
-- Make some percent samples half the duration of the BPM
+- add endings
 
 MAYBE:
 - add rule that we must have at least 1 combination of any 2 samples that share the same word
@@ -85,7 +88,7 @@ DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat le
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
-NON_CENTER_PAN_MIN = 0.4  # Minimum distance from center (applies to both sides)
+NON_CENTER_PAN_MIN = 0.35  # Minimum distance from center (applies to both sides)
 NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
 
 # Validate that lengths and weights match
@@ -308,7 +311,7 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False) -> tuple[np.ndarray, int]:
+                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
     Returns (padded stereo audio, volume_level_index).
@@ -320,6 +323,7 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         volume_pool: Pool of remaining volume level indices to choose from (quota-based)
         use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
         use_double_time: If True, pad to DOUBLE_TIMED_BEAT_LENGTH_SECONDS (half beat length)
+        is_centered: If True, sample is centered and should use centered volume pool
     """
     # Load and pan each sample
     mixed = None
@@ -606,10 +610,19 @@ def main() -> None:
         quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
         volume_quotas.append(quota)
     
-    # Build initial volume pool with indices repeated by quota
-    volume_pool = []
-    for idx, quota in enumerate(volume_quotas):
-        volume_pool.extend([idx] * quota)
+    # Calculate centered sample volume quota from first volume level's quota
+    centered_volume_quota = center_quota  # All centered samples use first volume level
+    
+    # Adjust first volume level quota for non-centered samples
+    adjusted_volume_quotas = volume_quotas.copy()
+    adjusted_volume_quotas[0] = max(0, volume_quotas[0] - centered_volume_quota)
+    
+    # Build separate volume pools for centered and non-centered samples
+    centered_volume_pool = [0] * centered_volume_quota  # All indices point to first volume level
+    
+    non_centered_volume_pool = []
+    for idx, quota in enumerate(adjusted_volume_quotas):
+        non_centered_volume_pool.extend([idx] * quota)
     
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
@@ -692,12 +705,17 @@ def main() -> None:
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
-        # Create the audio
-        combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
-        
-        # Remove used volume index from pool (quota-based)
-        if volume_idx in volume_pool:
-            volume_pool.remove(volume_idx)
+        # Create the audio with appropriate volume pool
+        if is_centered:
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, centered_volume_pool, use_padded_length, use_double_time, is_centered=True)
+            # Remove used volume index from centered pool
+            if volume_idx in centered_volume_pool:
+                centered_volume_pool.remove(volume_idx)
+        else:
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, non_centered_volume_pool, use_padded_length, use_double_time, is_centered=False)
+            # Remove used volume index from non-centered pool
+            if volume_idx in non_centered_volume_pool:
+                non_centered_volume_pool.remove(volume_idx)
         
         # Track volume level
         volume_counts[volume_idx] += 1
