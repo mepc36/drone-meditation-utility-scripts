@@ -610,19 +610,23 @@ def main() -> None:
         quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
         volume_quotas.append(quota)
     
-    # Calculate centered sample volume quota from first volume level's quota
+    # Calculate volume quotas for different panning types
     centered_volume_quota = center_quota  # All centered samples use first volume level
+    non_centered_volume_quota = noncenter_quota  # All non-centered samples use last volume level
+    last_volume_idx = len(volume_levels_db) - 1
     
-    # Adjust first volume level quota for non-centered samples
+    # Adjust volume quotas to account for centered and non-centered samples
     adjusted_volume_quotas = volume_quotas.copy()
-    adjusted_volume_quotas[0] = max(0, volume_quotas[0] - centered_volume_quota)
+    adjusted_volume_quotas[0] = max(0, volume_quotas[0] - centered_volume_quota)  # Remove centered from first
+    adjusted_volume_quotas[last_volume_idx] = max(0, volume_quotas[last_volume_idx] - non_centered_volume_quota)  # Remove non-centered from last
     
-    # Build separate volume pools for centered and non-centered samples
+    # Build separate volume pools for centered, non-centered, and dualpan samples
     centered_volume_pool = [0] * centered_volume_quota  # All indices point to first volume level
+    non_centered_volume_pool = [last_volume_idx] * non_centered_volume_quota  # All indices point to last volume level
     
-    non_centered_volume_pool = []
+    dualpan_volume_pool = []
     for idx, quota in enumerate(adjusted_volume_quotas):
-        non_centered_volume_pool.extend([idx] * quota)
+        dualpan_volume_pool.extend([idx] * quota)
     
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
@@ -674,6 +678,8 @@ def main() -> None:
         # Track panning pattern and update quotas
         pan_positions = list(pan_assignments.values())
         is_centered = False
+        is_non_centered = False
+        is_dualpan = False
         use_padded_length = False
         use_double_time = False
         
@@ -694,6 +700,7 @@ def main() -> None:
                     use_padded_length = True
                     padded_centered_count += 1
             else:  # left or right (numeric pan value)
+                is_non_centered = True
                 pan_value = float(pan_positions[0])
                 if pan_value < 0:  # left side
                     left_count += 1
@@ -702,6 +709,7 @@ def main() -> None:
                     right_count += 1
                     right_quota_remaining = max(0, right_quota_remaining - 1)
         else:  # 2 samples (stereo pair)
+            is_dualpan = True
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
@@ -711,9 +719,16 @@ def main() -> None:
             # Remove used volume index from centered pool
             if volume_idx in centered_volume_pool:
                 centered_volume_pool.remove(volume_idx)
-        else:
+        elif is_non_centered:
             combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, non_centered_volume_pool, use_padded_length, use_double_time, is_centered=False)
             # Remove used volume index from non-centered pool
+            if volume_idx in non_centered_volume_pool:
+                non_centered_volume_pool.remove(volume_idx)
+        else:  # is_dualpan
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, dualpan_volume_pool, use_padded_length, use_double_time, is_centered=False)
+            # Remove used volume index from dualpan pool
+            if volume_idx in dualpan_volume_pool:
+                dualpan_volume_pool.remove(volume_idx)
             if volume_idx in non_centered_volume_pool:
                 non_centered_volume_pool.remove(volume_idx)
         
