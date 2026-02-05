@@ -36,20 +36,10 @@ To deactivate the virtual environment when finished:
 deactivate
 ```
 
-## Configuration
+### Key Features
 
-Edit [input/config/config.json](input/config/config.json) to customize:
-
-- `num_unique_samples`: Number of unique sample combinations to generate (default: 100)
-- `min_samples_per_combination`: Minimum samples per combination (default: 1)
-- `max_samples_per_combination`: Maximum samples per combination (default: 3)
-- `center_to_noncenter_to_dualpan_ratio`: Ratio of panning patterns as "Center:NonCenter:DualPan" (e.g., "1:4:2")
-- `samples_to_silence_ratio`: Ratio of samples to silence as "Samples:Silence" (e.g., "12:1")
-- `bpm`: Beats per minute for rhythm calculation (default: 52)
-- `silent_samples_length_millisec`: Length of silence samples in milliseconds (default: 12500)
-- `source_dir`: Path to source audio files for import
-- `itunes_dir`: Path where iTunes/Music imports files
-- `playlist_name`: Name of the generated playlist
+- **Variable-length silences**: Configure multiple silence durations with weighted ratios for dynamic variety
+- **Padded centered samples**: Add extended silence padding to a percentage of centered samples for deeper meditation moments
 
 ### Run All Scripts (Recommended)
 
@@ -94,7 +84,8 @@ Creates unique stereo combinations of audio samples with randomized panning patt
 - **Features:**
   - Combines 1-3 samples per output file (configurable)
   - Three panning patterns: center-only, non-center-only (hard left/right), and dualpan (2 different samples)
-  - Generates silence samples based on configured ratio
+  - Generates silence samples with variable lengths based on configured ratios
+  - Supports padded centered samples with extended silence for deeper meditation moments
   - All samples normalized to consistent beat length
   - Supports SOLO samples (isolated, can pan left/center/right, can repeat)
   - Supports ONCE samples (isolated, centered only, appear only once in entire playlist)
@@ -171,4 +162,54 @@ generate-weighted-playlist/
 ├── 2-import-duplicate-padded-samples-into-itunes-playlist.py
 ├── 3-clean-up-itunes-playlist-tracks-and-files.py
 └── run-all.py                     # Runs complete pipeline
+```
+
+## Configuration
+
+Below is an example configuration with detailed explanations:
+
+```json
+{
+  // Name of the generated playlist
+  "playlist_name": "My Meditation Playlist",
+  
+  // Path to source audio files for import
+  "source_dir": "/path/to/source/audio",
+  
+  // Path where iTunes/Music imports files
+  "itunes_dir": "/path/to/itunes/import",
+  
+  // Beats per minute for rhythm calculation
+  "bpm": 52,
+  
+  // Total number of unique sample combinations to generate
+  "num_unique_samples": 200,
+  
+  // Ratio of audio samples to silence samples
+  "samples_to_silence_ratio": "14:1",
+  
+  // Comma-separated silence durations in milliseconds (supports multiple values)
+  "silence_lengths_millisec": "2000:10000",
+  
+  // Comma-separated ratios for each silence length (must match count of silence_lengths_millisec)
+  "silence_lengths_ratio": "8:1",
+  
+  // Comma-separated volume levels in dB (e.g., "0:-5:-10" for loud:medium:soft)
+  "loud_medium_soft_values": "0:-5",
+  
+  // Comma-separated ratios for each volume level (must match count of loud_medium_soft_values)
+  "loud_medium_soft_ratio": "5:11",
+  
+  // Ratio of panning patterns (Center:NonCenter:DualPan)
+  "center_to_noncenter_to_dualpan_ratio": "3:11:7",
+  
+  // Percentage of centered samples to pad with silence (0-100)
+  "padded_centered_samples_percent": 10,
+  
+  // Duration for padded centered samples in milliseconds
+  "padded_centered_samples_length_millisec": 20000,
+  
+  // Percentage of samples to play at double-time (half beat length, 0-100)
+  "double_timed_samples_percent": 25
+}
 ```

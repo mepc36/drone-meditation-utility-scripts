@@ -108,6 +108,22 @@ end tell
     return "deleted" in result.lower()
 
 
+def stop_music_playback() -> bool:
+    """Stop Music/iTunes playback if currently playing."""
+    script = '''
+tell application "Music"
+    if player state is playing then
+        pause
+        return "stopped"
+    else
+        return "not_playing"
+    end if
+end tell
+'''
+    result = run_applescript(script)
+    return "stopped" in result.lower()
+
+
 def remove_tracks_batch(track_names: list[str]) -> int:
     """Remove multiple tracks in a single AppleScript call. Returns count of successful deletions."""
     # Build delete commands for each track
@@ -147,6 +163,13 @@ def main() -> None:
     print("\n" + "="*60)
     print("Complete Cleanup: Delete Files & Remove from iTunes Library")
     print("="*60 + "\n")
+    
+    # Stop music playback first
+    print("Checking Music playback status...")
+    if stop_music_playback():
+        print("✓ Stopped Music playback\n")
+    else:
+        print("✓ Music not currently playing\n")
     
     print("This script will:")
     print("  1. Delete physical .wav files from output directory")
