@@ -83,6 +83,11 @@ PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 1
 DOUBLE_TIMED_PERCENT = config.get("double_timed_samples_percent", 0.0) / 100.0
 DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat length
 
+# Panning range constants for non-center samples
+# Left side uses negative values, right side uses positive values
+NON_CENTER_PAN_MIN = 0.4  # Minimum distance from center (applies to both sides)
+NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
+
 # Validate that lengths and weights match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
     raise ValueError(
@@ -100,11 +105,6 @@ if len(volume_levels_db) != len(volume_weights):
         f"Error: loud_medium_soft_values and loud_medium_soft_ratio must have the same number of values.\n"
         f"Got {len(volume_levels_db)} volume levels but {len(volume_weights)} weights."
     )
-
-# Panning range constants for non-center samples
-# Left side uses negative values, right side uses positive values
-NON_CENTER_PAN_MIN = 0.25  # Minimum distance from center (applies to both sides)
-NON_CENTER_PAN_MAX = 0.75  # Maximum distance from center (applies to both sides)
 
 
 # -------------------------------------------------------------------
