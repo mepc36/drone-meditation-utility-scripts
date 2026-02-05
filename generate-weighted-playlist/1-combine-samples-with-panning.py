@@ -11,15 +11,14 @@ DEFINITELY:
 - make samples more similar lengths (e.g., politics is too long)
 - make volume of panned samples equal to volume of centered samples
 - use a large number of samples, but have 4 or 5 endings rather than just 1.
-- add rule that we must have at least 1 combination of any 2 samples that share the same word
--- e.g. -- "pain" by 50 Cent and "pain" by Eve
-- add at least 2 very long samples that end the song
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 - Add solo piano/hi hat/bass kick/string/etc. sounds
-- make some percent samples half the duration of the BPM (control both byh config)
+- Make some percent samples half the duration of the BPM
 
 MAYBE:
+- add rule that we must have at least 1 combination of any 2 samples that share the same word
+-- e.g. -- "pain" by 50 Cent and "pain" by Eve
 - add subset of rhythmically different samples
 -- e.g., samples that repeat 1 sample multiple times
 - add tinnitus to one (or many) samples?
@@ -79,6 +78,10 @@ SILENCE_LENGTH_WEIGHTS = silence_weights
 PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
 PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
 PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 100.0
+
+# Parse double-timed samples config
+DOUBLE_TIMED_PERCENT = config.get("double_timed_samples_percent", 0.0) / 100.0
+DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat length
 
 # Validate that lengths and weights match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
@@ -290,32 +293,22 @@ def apply_volume_db(audio: np.ndarray, db_reduction: float) -> np.ndarray:
     return audio * gain
 
 
-def select_volume_level() -> tuple[float, int]:
+def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
     """
-    Randomly select a volume level based on weighted ratios.
+    Select a volume level from the remaining quota pool.
     Returns (db_reduction, level_index)
-    Handles edge cases where some weights are 0.
     """
-    # Filter out volume levels with 0 weight
-    valid_options = [(db, idx) for idx, (db, weight) in enumerate(zip(volume_levels_db, volume_weights)) if weight > 0]
-    
-    if not valid_options:
-        # Fallback: if all weights are 0, use the first volume level
+    if not volume_pool:
+        # Fallback: if pool is empty, use the first volume level
         return volume_levels_db[0], 0
     
-    # Build weighted pool
-    weighted_pool = []
-    for db, idx in valid_options:
-        weight = volume_weights[idx]
-        weighted_pool.extend([idx] * weight)
-    
-    # Select random index
-    selected_idx = random.choice(weighted_pool)
+    # Select random index from pool
+    selected_idx = random.choice(volume_pool)
     return volume_levels_db[selected_idx], selected_idx
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, use_padded_length: bool = False) -> tuple[np.ndarray, int]:
+                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
     Returns (padded stereo audio, volume_level_index).
@@ -324,10 +317,20 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         sample_names: List of sample names to combine
         pan_assignments: Dictionary mapping sample names to pan positions
         sample_rate: Sample rate for the output
+        volume_pool: Pool of remaining volume level indices to choose from (quota-based)
         use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
+        use_double_time: If True, pad to DOUBLE_TIMED_BEAT_LENGTH_SECONDS (half beat length)
     """
     # Load and pan each sample
     mixed = None
+    
+    # Determine target length based on flags
+    if use_double_time:
+        target_length = DOUBLE_TIMED_BEAT_LENGTH_SECONDS
+    elif use_padded_length:
+        target_length = PADDED_CENTERED_LENGTH_SECONDS
+    else:
+        target_length = BEAT_LENGTH_SECONDS
     
     for name in sample_names:
         audio, sr = load_audio(name)
@@ -342,8 +345,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         # Apply panning
         stereo = apply_pan(audio, pan_assignments[name])
         
-        # Pad to BEAT_LENGTH_SECONDS to ensure all samples have consistent length
-        stereo = pad_to_length(stereo, sample_rate, BEAT_LENGTH_SECONDS)
+        # Pad to target length
+        stereo = pad_to_length(stereo, sample_rate, target_length)
         
         # Mix (sum)
         if mixed is None:
@@ -354,8 +357,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     # Normalize final mix to consistent RMS level
     mixed = normalize_to_rms(mixed, target_rms=0.15)
     
-    # Select and apply volume level
-    db_reduction, volume_idx = select_volume_level()
+    # Select and apply volume level from quota pool
+    db_reduction, volume_idx = select_volume_level_from_pool(volume_pool)
     mixed = apply_volume_db(mixed, db_reduction)
     
     return mixed, volume_idx
@@ -595,6 +598,19 @@ def main() -> None:
     # Track volume level distribution
     volume_counts = [0] * len(volume_levels_db)
     
+    # Initialize volume quota pool (quota-based selection)
+    # Calculate how many samples should use each volume level
+    total_volume_weight = sum(volume_weights)
+    volume_quotas = []
+    for weight in volume_weights:
+        quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
+        volume_quotas.append(quota)
+    
+    # Build initial volume pool with indices repeated by quota
+    volume_pool = []
+    for idx, quota in enumerate(volume_quotas):
+        volume_pool.extend([idx] * quota)
+    
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     first_audio, sample_rate = load_audio(first_sample_name)
@@ -603,6 +619,10 @@ def main() -> None:
     num_padded_centered = int(center_quota * PADDED_CENTERED_PERCENT)
     padded_centered_count = 0
     centered_created_count = 0
+    
+    # Calculate how many samples should be double-timed
+    num_double_timed = int(NUM_UNIQUE_SAMPLES * DOUBLE_TIMED_PERCENT)
+    double_timed_count = 0
     
     while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
         attempts += 1
@@ -642,6 +662,12 @@ def main() -> None:
         pan_positions = list(pan_assignments.values())
         is_centered = False
         use_padded_length = False
+        use_double_time = False
+        
+        # Decide if this sample should be double-timed (applies to all panning types)
+        if double_timed_count < num_double_timed:
+            use_double_time = True
+            double_timed_count += 1
         
         if len(pan_positions) == 1:
             if pan_positions[0] == 'center':
@@ -650,8 +676,8 @@ def main() -> None:
                 centered_created_count += 1
                 center_quota_remaining = max(0, center_quota_remaining - 1)
                 
-                # Decide if this centered sample should be padded
-                if padded_centered_count < num_padded_centered:
+                # Decide if this centered sample should be padded (only if NOT double-timed)
+                if not use_double_time and padded_centered_count < num_padded_centered:
                     use_padded_length = True
                     padded_centered_count += 1
             else:  # left or right (numeric pan value)
@@ -667,7 +693,11 @@ def main() -> None:
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
         # Create the audio
-        combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, use_padded_length)
+        combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
+        
+        # Remove used volume index from pool (quota-based)
+        if volume_idx in volume_pool:
+            volume_pool.remove(volume_idx)
         
         # Track volume level
         volume_counts[volume_idx] += 1
@@ -759,6 +789,16 @@ def main() -> None:
         print(f"  Target: {target_padded_pct:.1f}% of centered samples")
         print(f"  Realized: {padded_centered_count}/{center_count} = {padded_pct:.1f}%")
         print(f"  Length: {PADDED_CENTERED_LENGTH_MS}ms ({PADDED_CENTERED_LENGTH_SECONDS:.2f}s)")
+    
+    # Display double-timed samples info
+    if double_timed_count > 0:
+        double_timed_pct = (double_timed_count / created_count) * 100 if created_count > 0 else 0
+        target_double_timed_pct = DOUBLE_TIMED_PERCENT * 100
+        print(f"\nDouble-Timed Samples:")
+        print(f"  Target: {target_double_timed_pct:.1f}% of all samples")
+        print(f"  Realized: {double_timed_count}/{created_count} = {double_timed_pct:.1f}%")
+        print(f"  BPM: {config['bpm'] * 2} (double-time)")
+        print(f"  Length: {DOUBLE_TIMED_BEAT_LENGTH_SECONDS:.3f}s (half of {BEAT_LENGTH_SECONDS:.3f}s)")
     
     # Display volume distribution
     print(f"\nVolume Distribution:")
