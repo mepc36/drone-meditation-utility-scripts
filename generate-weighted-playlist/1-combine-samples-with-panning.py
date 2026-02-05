@@ -91,6 +91,9 @@ DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat le
 NON_CENTER_PAN_MIN = 0.35  # Minimum distance from center (applies to both sides)
 NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
 
+# Number of segments for statistical balancing of panning distribution
+PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
+
 # Validate that lengths and weights match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
     raise ValueError(
@@ -368,8 +371,58 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     return mixed, volume_idx
 
 
+def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
+    """
+    Select a panning position using statistical balancing to ensure even distribution.
+    
+    Args:
+        side: Either 'left' or 'right'
+        pan_history: List of previously used panning values (absolute values, 0.35 to 1.0)
+    
+    Returns:
+        Pan position (negative for left, positive for right)
+    """
+    # Define the range for this side (always work with positive values)
+    range_min = NON_CENTER_PAN_MIN
+    range_max = NON_CENTER_PAN_MAX
+    
+    if not pan_history:
+        # No history yet, pick random position
+        position = random.uniform(range_min, range_max)
+    else:
+        # Divide range into segments
+        segment_size = (range_max - range_min) / PAN_DISTRIBUTION_SEGMENTS
+        
+        # Count how many samples fall into each segment
+        segment_counts = [0] * PAN_DISTRIBUTION_SEGMENTS
+        for pan_val in pan_history:
+            # Convert to segment index
+            segment_idx = int((pan_val - range_min) / segment_size)
+            # Clamp to valid range (handle edge case where pan_val == range_max)
+            segment_idx = min(segment_idx, PAN_DISTRIBUTION_SEGMENTS - 1)
+            segment_counts[segment_idx] += 1
+        
+        # Find minimum count (most sparse segments)
+        min_count = min(segment_counts)
+        
+        # Get indices of all segments with minimum count
+        sparse_segments = [i for i, count in enumerate(segment_counts) if count == min_count]
+        
+        # Randomly select one of the sparse segments
+        selected_segment = random.choice(sparse_segments)
+        
+        # Generate random position within that segment
+        segment_start = range_min + (selected_segment * segment_size)
+        segment_end = segment_start + segment_size
+        position = random.uniform(segment_start, segment_end)
+    
+    # Apply sign based on side
+    return -position if side == 'left' else position
+
+
 def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
-                               center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int) -> tuple[list[str], dict[str, str]]:
+                               center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
+                               left_pan_history: list[float], right_pan_history: list[float]) -> tuple[list[str], dict[str, str]]:
     """Generate a random unique combination using weighted panning patterns.
     Only combines samples with the same sound type.
     Only allows 3 specific patterns:
@@ -429,16 +482,16 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     
     elif pattern_type == 'left_only':
         # Pattern 2a: 1 sample, panned left
-        # Pan range: -NON_CENTER_PAN_MAX to -NON_CENTER_PAN_MIN (left side)
+        # Use statistical balancing to ensure even distribution
         sample_names = random.sample(available_samples, 1)
-        pan_position = random.uniform(-NON_CENTER_PAN_MAX, -NON_CENTER_PAN_MIN)
+        pan_position = select_balanced_pan_position('left', left_pan_history)
         pan_assignments = {sample_names[0]: pan_position}
     
     elif pattern_type == 'right_only':
         # Pattern 2b: 1 sample, panned right
-        # Pan range: NON_CENTER_PAN_MIN to NON_CENTER_PAN_MAX (right side)
+        # Use statistical balancing to ensure even distribution
         sample_names = random.sample(available_samples, 1)
-        pan_position = random.uniform(NON_CENTER_PAN_MIN, NON_CENTER_PAN_MAX)
+        pan_position = select_balanced_pan_position('right', right_pan_history)
         pan_assignments = {sample_names[0]: pan_position}
     
     else:  # stereo_pair
@@ -599,6 +652,10 @@ def main() -> None:
     right_count = 0
     dualpan_count = 0
     
+    # Track pan position histories for statistical balancing (store absolute values)
+    left_pan_history = []  # Stores positive values (0.35 to 1.0)
+    right_pan_history = []  # Stores positive values (0.35 to 1.0)
+    
     # Track volume level distribution
     volume_counts = [0] * len(volume_levels_db)
     
@@ -647,7 +704,8 @@ def main() -> None:
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
-            center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining
+            center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+            left_pan_history, right_pan_history
         )
         
         # Check if combination generation failed (e.g., no more ONCE samples available)
@@ -705,9 +763,13 @@ def main() -> None:
                 if pan_value < 0:  # left side
                     left_count += 1
                     left_quota_remaining = max(0, left_quota_remaining - 1)
+                    # Track absolute value in history
+                    left_pan_history.append(abs(pan_value))
                 else:  # right side
                     right_count += 1
                     right_quota_remaining = max(0, right_quota_remaining - 1)
+                    # Track absolute value in history
+                    right_pan_history.append(abs(pan_value))
         else:  # 2 samples (stereo pair)
             is_dualpan = True
             dualpan_count += 1
