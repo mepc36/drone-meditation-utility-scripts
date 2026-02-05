@@ -18,6 +18,7 @@ DEFINITELY:
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 - Make -45 degrees and +45 degrees acceptable panning positions
 - Add configs to vary volumes between loud/medium/soft
+- Add solo piano/hi hat/bass kick/string/etc. sounds
 
 MAYBE:
 - add subset of rhythmically different samples
