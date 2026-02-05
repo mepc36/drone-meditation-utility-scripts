@@ -269,9 +269,6 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     # Load and pan each sample
     mixed = None
     
-    # Determine target length
-    target_length = PADDED_CENTERED_LENGTH_SECONDS if use_padded_length else BEAT_LENGTH_SECONDS
-    
     for name in sample_names:
         audio, sr = load_audio(name)
         
@@ -285,8 +282,8 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         # Apply panning
         stereo = apply_pan(audio, pan_assignments[name])
         
-        # Pad to target length before mixing
-        stereo = pad_to_length(stereo, sample_rate, target_length)
+        # Pad to BEAT_LENGTH_SECONDS to ensure all samples have consistent length
+        stereo = pad_to_length(stereo, sample_rate, BEAT_LENGTH_SECONDS)
         
         # Mix (sum)
         if mixed is None:
