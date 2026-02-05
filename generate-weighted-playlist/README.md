@@ -170,27 +170,46 @@ Below is an example configuration with detailed explanations:
 
 ```json
 {
-  // Total number of unique sample combinations to generate
-  "num_unique_samples": 200,
-  // Ratio of panning patterns (Center:NonCenter:DualPan)
-  "center_to_noncenter_to_dualpan_ratio": "3:11:7",
-  // Ratio of audio samples to silence samples
-  "samples_to_silence_ratio": "14:1",
-  // Comma-separated silence durations in milliseconds (supports multiple values)
-  "silence_lengths_millisec": "2000",
-  // Comma-separated ratios for each silence length (must match count of silence_lengths_millisec)
-  "silence_lengths_ratio": "8",
-  // Duration for padded centered samples in milliseconds
-  "padded_centered_samples_length_millisec": 20000,
-  // Percentage of centered samples to pad with silence (0.0-1.0)
-  "padded_centered_samples_percent": 0.1,
-  // Beats per minute for rhythm calculation
-  "bpm": 52,
+  // Name of the generated playlist
+  "playlist_name": "My Meditation Playlist",
+  
   // Path to source audio files for import
   "source_dir": "/path/to/source/audio",
+  
   // Path where iTunes/Music imports files
   "itunes_dir": "/path/to/itunes/import",
-  // Name of the generated playlist
-  "playlist_name": "My Meditation Playlist"
+  
+  // Beats per minute for rhythm calculation
+  "bpm": 52,
+  
+  // Total number of unique sample combinations to generate
+  "num_unique_samples": 200,
+  
+  // Ratio of audio samples to silence samples
+  "samples_to_silence_ratio": "14:1",
+  
+  // Comma-separated silence durations in milliseconds (supports multiple values)
+  "silence_lengths_millisec": "2000:10000",
+  
+  // Comma-separated ratios for each silence length (must match count of silence_lengths_millisec)
+  "silence_lengths_ratio": "8:1",
+  
+  // Comma-separated volume levels in dB (e.g., "0:-5:-10" for loud:medium:soft)
+  "loud_medium_soft_values": "0:-5",
+  
+  // Comma-separated ratios for each volume level (must match count of loud_medium_soft_values)
+  "loud_medium_soft_ratio": "5:11",
+  
+  // Ratio of panning patterns (Center:NonCenter:DualPan)
+  "center_to_noncenter_to_dualpan_ratio": "3:11:7",
+  
+  // Percentage of centered samples to pad with silence (0-100)
+  "padded_centered_samples_percent": 10,
+  
+  // Duration for padded centered samples in milliseconds
+  "padded_centered_samples_length_millisec": 20000,
+  
+  // Percentage of samples to play at double-time (half beat length, 0-100)
+  "double_timed_samples_percent": 25
 }
 ```
