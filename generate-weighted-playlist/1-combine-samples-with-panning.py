@@ -8,13 +8,16 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
+- make samples more similar lengths (e.g., politics is too long)
 - make volume of panned samples equal to volume of centered samples
-- use a great number of samples, but have 4 or 5 endings rather than just 1.
+- use a large number of samples, but have 4 or 5 endings rather than just 1.
 - add rule that we must have at least 1 combination of any 2 samples that share the same word
 -- e.g. -- "pain" by 50 Cent and "pain" by Eve
 - add at least 2 very long samples that end the song
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
+- Make -45 degrees and +45 degrees acceptable panning positions
+- Add configs to vary volumes between loud/medium/soft
 
 MAYBE:
 - add subset of rhythmically different samples
@@ -75,7 +78,7 @@ SILENCE_LENGTH_WEIGHTS = silence_weights
 # Parse padded centered samples config
 PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
 PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
-PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0)
+PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 100.0
 
 # Validate that lengths and weights match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
