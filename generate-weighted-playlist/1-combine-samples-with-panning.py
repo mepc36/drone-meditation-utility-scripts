@@ -16,7 +16,6 @@ DEFINITELY:
 - add at least 2 very long samples that end the song
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-- Add configs to vary volumes between loud/medium/soft
 - Add solo piano/hi hat/bass kick/string/etc. sounds
 - make some percent samples half the duration of the BPM (control both byh config)
 
@@ -86,6 +85,17 @@ if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
     raise ValueError(
         f"Error: silence_lengths_millisec and silence_lengths_ratio must have the same number of values.\n"
         f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_WEIGHTS)} weights."
+    )
+
+# Parse volume levels and their weights (e.g., "0:-5:-10" with "1:4:1")
+volume_levels_db = [float(x) for x in config.get("loud_medium_soft_values", "0").split(":")]
+volume_weights = [int(x) for x in config.get("loud_medium_soft_ratio", "1").split(":")]
+
+# Validate that volume levels and weights match
+if len(volume_levels_db) != len(volume_weights):
+    raise ValueError(
+        f"Error: loud_medium_soft_values and loud_medium_soft_ratio must have the same number of values.\n"
+        f"Got {len(volume_levels_db)} volume levels but {len(volume_weights)} weights."
     )
 
 # Panning range constants for non-center samples
@@ -268,11 +278,47 @@ def normalize_to_rms(audio: np.ndarray, target_rms: float = 0.15) -> np.ndarray:
     return audio
 
 
+def apply_volume_db(audio: np.ndarray, db_reduction: float) -> np.ndarray:
+    """
+    Apply a dB reduction to audio.
+    db_reduction: negative number for reduction, 0 for no change
+    Formula: gain = 10^(dB/20)
+    """
+    if db_reduction == 0:
+        return audio
+    gain = 10 ** (db_reduction / 20)
+    return audio * gain
+
+
+def select_volume_level() -> tuple[float, int]:
+    """
+    Randomly select a volume level based on weighted ratios.
+    Returns (db_reduction, level_index)
+    Handles edge cases where some weights are 0.
+    """
+    # Filter out volume levels with 0 weight
+    valid_options = [(db, idx) for idx, (db, weight) in enumerate(zip(volume_levels_db, volume_weights)) if weight > 0]
+    
+    if not valid_options:
+        # Fallback: if all weights are 0, use the first volume level
+        return volume_levels_db[0], 0
+    
+    # Build weighted pool
+    weighted_pool = []
+    for db, idx in valid_options:
+        weight = volume_weights[idx]
+        weighted_pool.extend([idx] * weight)
+    
+    # Select random index
+    selected_idx = random.choice(weighted_pool)
+    return volume_levels_db[selected_idx], selected_idx
+
+
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, use_padded_length: bool = False) -> np.ndarray:
+                       sample_rate: int, use_padded_length: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
-    Returns padded stereo audio.
+    Returns (padded stereo audio, volume_level_index).
     
     Args:
         sample_names: List of sample names to combine
@@ -308,7 +354,11 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     # Normalize final mix to consistent RMS level
     mixed = normalize_to_rms(mixed, target_rms=0.15)
     
-    return mixed
+    # Select and apply volume level
+    db_reduction, volume_idx = select_volume_level()
+    mixed = apply_volume_db(mixed, db_reduction)
+    
+    return mixed, volume_idx
 
 
 def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
@@ -542,6 +592,9 @@ def main() -> None:
     right_count = 0
     dualpan_count = 0
     
+    # Track volume level distribution
+    volume_counts = [0] * len(volume_levels_db)
+    
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     first_audio, sample_rate = load_audio(first_sample_name)
@@ -614,7 +667,10 @@ def main() -> None:
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
         # Create the audio
-        combined_audio = create_combination(sample_names, pan_assignments, sample_rate, use_padded_length)
+        combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, use_padded_length)
+        
+        # Track volume level
+        volume_counts[volume_idx] += 1
         
         # Generate filename
         filename = format_filename(sample_names, pan_assignments, created_count)
@@ -703,6 +759,35 @@ def main() -> None:
         print(f"  Target: {target_padded_pct:.1f}% of centered samples")
         print(f"  Realized: {padded_centered_count}/{center_count} = {padded_pct:.1f}%")
         print(f"  Length: {PADDED_CENTERED_LENGTH_MS}ms ({PADDED_CENTERED_LENGTH_SECONDS:.2f}s)")
+    
+    # Display volume distribution
+    print(f"\nVolume Distribution:")
+    print(f"  Config ratio: {config.get('loud_medium_soft_ratio', '1')}")
+    print(f"  Config values: {config.get('loud_medium_soft_values', '0')} dB")
+    
+    # Calculate realized ratio
+    from math import gcd
+    from functools import reduce
+    
+    def gcd_multiple(*args):
+        """Calculate GCD of multiple numbers."""
+        return reduce(gcd, args)
+    
+    non_zero_counts = [c for c in volume_counts if c > 0]
+    if len(non_zero_counts) > 1:
+        vol_ratio_gcd = gcd_multiple(*non_zero_counts)
+    elif len(non_zero_counts) == 1:
+        vol_ratio_gcd = non_zero_counts[0]
+    else:
+        vol_ratio_gcd = 1
+    
+    realized_vol_ratio = ':'.join([str(c // vol_ratio_gcd) for c in volume_counts])
+    print(f"  Realized ratio: {realized_vol_ratio}")
+    
+    # Display counts for each level
+    for idx, (db_val, count) in enumerate(zip(volume_levels_db, volume_counts)):
+        pct = (count / created_count) * 100 if created_count > 0 else 0
+        print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
     
     # Generate silence files based on samples_to_silence_ratio
     if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
