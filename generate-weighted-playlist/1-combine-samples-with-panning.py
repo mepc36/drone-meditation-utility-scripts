@@ -58,22 +58,37 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
 
-# Parse center_to_noncenter_to_dualpan_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 dualpan)
-panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_ratio", "1:1:1").split(":")]
-CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
-NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
-DUALPAN_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
+# Parse center_to_noncenter_to_dualpan_percents (e.g., "16:58:26" means 16% center-only : 58% non-center-only : 26% dualpan)
+panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_percents", "33:33:34").split(":")]
+if sum(panning_pattern_parts) != 100:
+    raise ValueError(
+        f"Error: center_to_noncenter_to_dualpan_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, panning_pattern_parts))} = {sum(panning_pattern_parts)}"
+    )
+CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # Percentage, center
+NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # Percentage, hard left or right
+DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right
 
-# Parse samples_to_silence_ratio (e.g., "4:1" means 4 samples : 1 silence)
-silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_ratio", "1:0").split(":")]
-SAMPLES_COUNT = silence_ratio_parts[0]
-SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
+# Parse samples_to_silence_percents (e.g., "87:13" means 87% samples : 13% silence)
+silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
+if sum(silence_ratio_parts) != 100:
+    raise ValueError(
+        f"Error: samples_to_silence_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, silence_ratio_parts))} = {sum(silence_ratio_parts)}"
+    )
+SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of samples
+SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence
 
-# Parse silence lengths and their weights (e.g., "2000:10000" with "8:1")
+# Parse silence lengths and their percentages (e.g., "2000:10000" with "86:14" means 86% are 2000ms, 14% are 10000ms)
 silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
 SILENCE_LENGTHS_SECONDS = [ms / 1000.0 for ms in silence_lengths_ms]
-silence_weights = [int(x) for x in config.get("silence_lengths_ratio", "1").split(":")]
-SILENCE_LENGTH_WEIGHTS = silence_weights
+silence_percentages = [int(x) for x in config.get("silence_lengths_percents", "100").split(":")]
+if sum(silence_percentages) != 100:
+    raise ValueError(
+        f"Error: silence_lengths_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, silence_percentages))} = {sum(silence_percentages)}"
+    )
+SILENCE_LENGTH_PERCENTAGES = silence_percentages
 
 # Parse padded centered samples config
 PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
@@ -98,22 +113,28 @@ NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
 
-# Validate that lengths and weights match
-if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
+# Validate that lengths and percentages match
+if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
     raise ValueError(
-        f"Error: silence_lengths_millisec and silence_lengths_ratio must have the same number of values.\n"
-        f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_WEIGHTS)} weights."
+        f"Error: silence_lengths_millisec and silence_lengths_percents must have the same number of values.\n"
+        f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_PERCENTAGES)} percentages."
     )
 
-# Parse volume levels and their weights (e.g., "0:-5:-10" with "1:4:1")
+# Parse volume levels and their percentages (e.g., "0:-5:-10" with "20:52:28" means 20% loud, 52% medium, 28% soft)
 volume_levels_db = [float(x) for x in config.get("loud_medium_soft_values", "0").split(":")]
-volume_weights = [int(x) for x in config.get("loud_medium_soft_ratio", "1").split(":")]
+volume_percentages = [int(x) for x in config.get("loud_medium_soft_percents", "100").split(":")]
 
-# Validate that volume levels and weights match
-if len(volume_levels_db) != len(volume_weights):
+if sum(volume_percentages) != 100:
     raise ValueError(
-        f"Error: loud_medium_soft_values and loud_medium_soft_ratio must have the same number of values.\n"
-        f"Got {len(volume_levels_db)} volume levels but {len(volume_weights)} weights."
+        f"Error: loud_medium_soft_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, volume_percentages))} = {sum(volume_percentages)}"
+    )
+
+# Validate that volume levels and percentages match
+if len(volume_levels_db) != len(volume_percentages):
+    raise ValueError(
+        f"Error: loud_medium_soft_values and loud_medium_soft_percents must have the same number of values.\n"
+        f"Got {len(volume_levels_db)} volume levels but {len(volume_percentages)} percentages."
     )
 
 
@@ -619,11 +640,10 @@ def main() -> None:
     once_samples_count = len(samples_by_type.get('once', []))
     print(f"Found {once_samples_count} ONCE samples (always centered)\n")
     
-    # Calculate how many samples will use each pattern based on ratio
-    total_ratio_parts = CENTER_ONLY_WEIGHT + NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
-    center_quota = int(NUM_UNIQUE_SAMPLES * CENTER_ONLY_WEIGHT / total_ratio_parts)
-    noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / total_ratio_parts)
-    dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / total_ratio_parts)
+    # Calculate how many samples will use each pattern based on percentages
+    center_quota = int(NUM_UNIQUE_SAMPLES * CENTER_ONLY_WEIGHT / 100)
+    noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
+    dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / 100)
     
     # Handle case where num_unique_samples is very small and all quotas round to 0
     # Distribute remaining samples proportionally
@@ -648,11 +668,11 @@ def main() -> None:
     if once_samples_count > center_quota:
         raise ValueError(
             f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
-            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_ratio')}' allocates {center_quota} center slots "
+            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_percents')}' allocates {center_quota} center slots "
             f"out of {NUM_UNIQUE_SAMPLES} total samples.\n"
             f"Either:\n"
             f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
-            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_ratio, or\n"
+            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_percents, or\n"
             f"  3. Increase num_unique_samples to {int(once_samples_count * total_ratio_parts / CENTER_ONLY_WEIGHT)} or more"
         )
     
@@ -695,11 +715,10 @@ def main() -> None:
     volume_counts = [0] * len(volume_levels_db)
     
     # Initialize volume quota pool (quota-based selection)
-    # Calculate how many samples should use each volume level
-    total_volume_weight = sum(volume_weights)
+    # Calculate how many samples should use each volume level based on percentages
     volume_quotas = []
-    for weight in volume_weights:
-        quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
+    for pct in volume_percentages:
+        quota = int(NUM_UNIQUE_SAMPLES * pct / 100)
         volume_quotas.append(quota)
     
     # Build shared volume pool for all samples (all panning types can have any volume)
@@ -886,11 +905,11 @@ def main() -> None:
     deviation_ratio = f"{center_diff:+.3f}%:{noncenter_diff:+.3f}%:{dualpan_diff:+.3f}%"
     
     print(f"\nPanning Distribution:")
-    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1')}")
+    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_percents', '33:33:34')}")
     print(f"  Realized ratio: {realized_ratio}")
     
     # Calculate perfect ratio scaled to match realized first value
-    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1').split(':')]
+    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_percents', '33:33:34').split(':')]
     realized_parts = [int(x) for x in realized_ratio.split(':')]
     scale_factor = realized_parts[0] / config_ratio_parts[0] if config_ratio_parts[0] != 0 else 1
     perfect_ratio_parts = [int(x * scale_factor) for x in config_ratio_parts]
@@ -951,7 +970,7 @@ def main() -> None:
     
     # Display volume distribution
     print(f"\nVolume Distribution:")
-    print(f"  Config ratio: {config.get('loud_medium_soft_ratio', '1')}")
+    print(f"  Config ratio: {config.get('loud_medium_soft_percents', '100')}")
     print(f"  Config values: {config.get('loud_medium_soft_values', '0')} dB")
     
     # Calculate realized ratio
@@ -978,26 +997,26 @@ def main() -> None:
         pct = (count / created_count) * 100 if created_count > 0 else 0
         print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
     
-    # Generate silence files based on samples_to_silence_ratio
-    if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
-        # Calculate total number of silence files needed
-        num_silence_files = int((created_count / SAMPLES_COUNT) * SILENCE_COUNT)
+    # Generate silence files based on samples_to_silence_percents
+    if SILENCE_PERCENT > 0:
+        # Calculate total files and how many should be silence
+        total_files = int(created_count / (SAMPLES_PERCENT / 100))
+        num_silence_files = total_files - created_count
         
         print(f"\nGenerating silence files...")
-        print(f"  Ratio: {SAMPLES_COUNT}:{SILENCE_COUNT} (samples:silence)")
+        print(f"  Ratio: {SAMPLES_PERCENT}:{SILENCE_PERCENT} (samples:silence percentages)")
         print(f"  Total silence files to create: {num_silence_files}")
         
-        # Calculate distribution of silence files across different lengths based on weights
-        total_weight = sum(SILENCE_LENGTH_WEIGHTS)
+        # Calculate distribution of silence files across different lengths based on percentages
         silence_counts_by_length = []
         remaining_files = num_silence_files
         
-        for i, weight in enumerate(SILENCE_LENGTH_WEIGHTS):
-            if i == len(SILENCE_LENGTH_WEIGHTS) - 1:
+        for i, pct in enumerate(SILENCE_LENGTH_PERCENTAGES):
+            if i == len(SILENCE_LENGTH_PERCENTAGES) - 1:
                 # Last length gets remaining files to ensure we hit exact total
                 count = remaining_files
             else:
-                count = int((num_silence_files * weight) / total_weight)
+                count = int(num_silence_files * pct / 100)
                 remaining_files -= count
             silence_counts_by_length.append(count)
         
