@@ -8,9 +8,6 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-- append config of each sample to each name (panning, volume, etc)
-- set rules to prevent using 2 of the same (or similar) panning positions??
-- add a third volume tier???
 - make samples more similar lengths (e.g., politics is too long)
 - even out volume difference bw panned samples and centered samples
 - use a large number of samples, but have 4 or 5 endings rather than just 1.
