@@ -81,8 +81,14 @@ PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
 PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 100.0
 
 # Parse double-timed samples config
-DOUBLE_TIMED_PERCENT = config.get("double_timed_samples_percent", 0.0) / 100.0
+EIGHTH_NOTE_SAMPLES_PERCENT = config.get("eighth_note_samples_percent", 0.0) / 100.0
 DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat length
+
+# Parse multi-beat duration samples config
+FOUR_BEAT_DURATION_PERCENT = config.get("four_beat_duration_percent", 0.0) / 100.0
+TWO_BEAT_DURATION_PERCENT = config.get("two_beat_duration_percent", 0.0) / 100.0
+FOUR_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 4.0
+TWO_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 2.0
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
@@ -312,7 +318,8 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
+                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, 
+                       use_four_beat: bool = False, use_two_beat: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
     Returns (padded stereo audio, volume_level_index).
@@ -324,13 +331,19 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         volume_pool: Pool of remaining volume level indices to choose from (quota-based)
         use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
         use_double_time: If True, pad to DOUBLE_TIMED_BEAT_LENGTH_SECONDS (half beat length)
+        use_four_beat: If True, pad to FOUR_BEAT_LENGTH_SECONDS (4 beats)
+        use_two_beat: If True, pad to TWO_BEAT_LENGTH_SECONDS (2 beats)
         is_centered: If True, sample is centered and should use centered volume pool
     """
     # Load and pan each sample
     mixed = None
     
-    # Determine target length based on flags
-    if use_double_time:
+    # Determine target length based on flags (priority order)
+    if use_four_beat:
+        target_length = FOUR_BEAT_LENGTH_SECONDS
+    elif use_two_beat:
+        target_length = TWO_BEAT_LENGTH_SECONDS
+    elif use_double_time:
         target_length = DOUBLE_TIMED_BEAT_LENGTH_SECONDS
     elif use_padded_length:
         target_length = PADDED_CENTERED_LENGTH_SECONDS
@@ -612,6 +625,21 @@ def main() -> None:
     noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / total_ratio_parts)
     dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / total_ratio_parts)
     
+    # Handle case where num_unique_samples is very small and all quotas round to 0
+    # Distribute remaining samples proportionally
+    total_allocated = center_quota + noncenter_quota + dualpan_quota
+    remaining_samples = NUM_UNIQUE_SAMPLES - total_allocated
+    if remaining_samples > 0:
+        # Allocate remaining samples based on weights
+        weights = [CENTER_ONLY_WEIGHT, NON_CENTER_ONLY_WEIGHT, DUALPAN_WEIGHT]
+        max_weight_idx = weights.index(max(weights))
+        if max_weight_idx == 0:
+            center_quota += remaining_samples
+        elif max_weight_idx == 1:
+            noncenter_quota += remaining_samples
+        else:
+            dualpan_quota += remaining_samples
+    
     # Split noncenter quota evenly between left and right for 50/50 distribution
     left_quota = noncenter_quota // 2
     right_quota = noncenter_quota - left_quota  # Gives right any remainder for odd numbers
@@ -689,8 +717,14 @@ def main() -> None:
     centered_created_count = 0
     
     # Calculate how many samples should be double-timed
-    num_double_timed = int(NUM_UNIQUE_SAMPLES * DOUBLE_TIMED_PERCENT)
+    num_double_timed = int(NUM_UNIQUE_SAMPLES * EIGHTH_NOTE_SAMPLES_PERCENT)
     double_timed_count = 0
+    
+    # Calculate how many samples should have 4-beat and 2-beat durations
+    num_four_beat = int(NUM_UNIQUE_SAMPLES * FOUR_BEAT_DURATION_PERCENT)
+    num_two_beat = int(NUM_UNIQUE_SAMPLES * TWO_BEAT_DURATION_PERCENT)
+    four_beat_count = 0
+    two_beat_count = 0
     
     while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
         attempts += 1
@@ -734,9 +768,18 @@ def main() -> None:
         is_dualpan = False
         use_padded_length = False
         use_double_time = False
+        use_four_beat = False
+        use_two_beat = False
         
-        # Decide if this sample should be double-timed (applies to all panning types)
-        if double_timed_count < num_double_timed:
+        # Decide beat duration (priority: 4-beat > 2-beat > double-time)
+        # These are mutually exclusive
+        if four_beat_count < num_four_beat:
+            use_four_beat = True
+            four_beat_count += 1
+        elif two_beat_count < num_two_beat:
+            use_two_beat = True
+            two_beat_count += 1
+        elif double_timed_count < num_double_timed:
             use_double_time = True
             double_timed_count += 1
         
@@ -747,8 +790,8 @@ def main() -> None:
                 centered_created_count += 1
                 center_quota_remaining = max(0, center_quota_remaining - 1)
                 
-                # Decide if this centered sample should be padded (only if NOT double-timed)
-                if not use_double_time and padded_centered_count < num_padded_centered:
+                # Decide if this centered sample should be padded (only if NOT using any other duration)
+                if not use_four_beat and not use_two_beat and not use_double_time and padded_centered_count < num_padded_centered:
                     use_padded_length = True
                     padded_centered_count += 1
             else:  # left or right (numeric pan value)
@@ -771,11 +814,11 @@ def main() -> None:
         
         # Create the audio using shared volume pool (all panning types can have any volume)
         if is_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, is_centered=True)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=True)
         elif is_non_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, is_centered=False)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
         else:  # is_dualpan
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, is_centered=False)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
         
         # Remove used volume index from shared pool
         if volume_idx in volume_pool:
@@ -823,17 +866,22 @@ def main() -> None:
     realized_ratio = f"{center_count//ratio_gcd}:{noncenter_count//ratio_gcd}:{dualpan_count//ratio_gcd}"
     
     # Calculate percentage differences from target
-    target_center_pct = (center_quota / created_count) * 100
-    target_noncenter_pct = (noncenter_quota / created_count) * 100
-    target_dualpan_pct = (dualpan_quota / created_count) * 100
-    
-    actual_center_pct = (center_count / created_count) * 100
-    actual_noncenter_pct = (noncenter_count / created_count) * 100
-    actual_dualpan_pct = (dualpan_count / created_count) * 100
-    
-    center_diff = actual_center_pct - target_center_pct
-    noncenter_diff = actual_noncenter_pct - target_noncenter_pct
-    dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+    if created_count > 0:
+        target_center_pct = (center_quota / created_count) * 100
+        target_noncenter_pct = (noncenter_quota / created_count) * 100
+        target_dualpan_pct = (dualpan_quota / created_count) * 100
+        
+        actual_center_pct = (center_count / created_count) * 100
+        actual_noncenter_pct = (noncenter_count / created_count) * 100
+        actual_dualpan_pct = (dualpan_count / created_count) * 100
+        
+        center_diff = actual_center_pct - target_center_pct
+        noncenter_diff = actual_noncenter_pct - target_noncenter_pct
+        dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+    else:
+        target_center_pct = target_noncenter_pct = target_dualpan_pct = 0
+        actual_center_pct = actual_noncenter_pct = actual_dualpan_pct = 0
+        center_diff = noncenter_diff = dualpan_diff = 0
     
     deviation_ratio = f"{center_diff:+.3f}%:{noncenter_diff:+.3f}%:{dualpan_diff:+.3f}%"
     
@@ -876,12 +924,30 @@ def main() -> None:
     # Display double-timed samples info
     if double_timed_count > 0:
         double_timed_pct = (double_timed_count / created_count) * 100 if created_count > 0 else 0
-        target_double_timed_pct = DOUBLE_TIMED_PERCENT * 100
+        target_double_timed_pct = EIGHTH_NOTE_SAMPLES_PERCENT * 100
         print(f"\nDouble-Timed Samples:")
         print(f"  Target: {target_double_timed_pct:.1f}% of all samples")
         print(f"  Realized: {double_timed_count}/{created_count} = {double_timed_pct:.1f}%")
         print(f"  BPM: {config['bpm'] * 2} (double-time)")
         print(f"  Length: {DOUBLE_TIMED_BEAT_LENGTH_SECONDS:.3f}s (half of {BEAT_LENGTH_SECONDS:.3f}s)")
+    
+    # Display 4-beat duration samples info
+    if four_beat_count > 0:
+        four_beat_pct = (four_beat_count / created_count) * 100 if created_count > 0 else 0
+        target_four_beat_pct = FOUR_BEAT_DURATION_PERCENT * 100
+        print(f"\n4-Beat Duration Samples:")
+        print(f"  Target: {target_four_beat_pct:.1f}% of all samples")
+        print(f"  Realized: {four_beat_count}/{created_count} = {four_beat_pct:.1f}%")
+        print(f"  Length: {FOUR_BEAT_LENGTH_SECONDS:.3f}s (4 beats at {config['bpm']} BPM)")
+    
+    # Display 2-beat duration samples info
+    if two_beat_count > 0:
+        two_beat_pct = (two_beat_count / created_count) * 100 if created_count > 0 else 0
+        target_two_beat_pct = TWO_BEAT_DURATION_PERCENT * 100
+        print(f"\n2-Beat Duration Samples:")
+        print(f"  Target: {target_two_beat_pct:.1f}% of all samples")
+        print(f"  Realized: {two_beat_count}/{created_count} = {two_beat_pct:.1f}%")
+        print(f"  Length: {TWO_BEAT_LENGTH_SECONDS:.3f}s (2 beats at {config['bpm']} BPM)")
     
     # Display volume distribution
     print(f"\nVolume Distribution:")
