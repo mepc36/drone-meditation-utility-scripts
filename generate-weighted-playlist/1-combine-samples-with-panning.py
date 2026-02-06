@@ -8,6 +8,7 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
+- cut more samples
 - make samples more similar lengths (e.g., politics is too long)
 - even out volume difference bw panned samples and centered samples
 - use a large number of samples, but have 4 or 5 endings rather than just 1.
