@@ -454,9 +454,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     return sample_names, pan_assignments
 
 
-def format_filename(sample_names: list[str], pan_assignments: dict[str, str], index: int) -> str:
+def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int) -> str:
     """
-    Format filename as: left_center_right_NNN.wav
+    Format filename as: left_center_right_vol_X_pan_Y_NNN.wav
     Only includes samples that are present, in pan order.
     """
     # Create list of (pan_position, sample_name) tuples
@@ -481,9 +481,18 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
     # Extract sorted sample names
     sorted_names = [name.lower() for _, name in samples_by_pan]
     
+    # Calculate average pan position for filename
+    avg_pan = sum(p for p, _ in samples_by_pan) / len(samples_by_pan)
+    
+    # Format volume (remove decimal if it's a whole number, use abs value)
+    vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
+    
+    # Format panning (use absolute value, rounded to 1 decimal)
+    pan_str = f"{abs(avg_pan):.1f}"
+    
     # Build filename
     name_part = "_".join(sorted_names)
-    return f"{name_part}_{index:03d}.wav"
+    return f"{name_part}_vol_{vol_str}_pan_{pan_str}_{index:03d}.wav"
 
 
 def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
@@ -606,7 +615,7 @@ def main() -> None:
         quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
         volume_quotas.append(quota)
     
-    # Build initial volume pool with indices repeated by quota
+    # Build shared volume pool for all samples (all panning types use same distribution)
     volume_pool = []
     for idx, quota in enumerate(volume_quotas):
         volume_pool.extend([idx] * quota)
@@ -661,6 +670,8 @@ def main() -> None:
         # Track panning pattern and update quotas
         pan_positions = list(pan_assignments.values())
         is_centered = False
+        is_non_centered = False
+        is_dualpan = False
         use_padded_length = False
         use_double_time = False
         
@@ -681,6 +692,7 @@ def main() -> None:
                     use_padded_length = True
                     padded_centered_count += 1
             else:  # left or right (numeric pan value)
+                is_non_centered = True
                 pan_value = float(pan_positions[0])
                 if pan_value < 0:  # left side
                     left_count += 1
@@ -689,21 +701,28 @@ def main() -> None:
                     right_count += 1
                     right_quota_remaining = max(0, right_quota_remaining - 1)
         else:  # 2 samples (stereo pair)
+            is_dualpan = True
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
-        # Create the audio
-        combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
+        # Create the audio using shared volume pool (all panning types can have any volume)
+        if is_centered:
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
+        elif is_non_centered:
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
+        else:  # is_dualpan
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time)
         
-        # Remove used volume index from pool (quota-based)
+        # Remove used volume index from shared pool
         if volume_idx in volume_pool:
             volume_pool.remove(volume_idx)
         
         # Track volume level
         volume_counts[volume_idx] += 1
+        volume_db = volume_levels_db[volume_idx]
         
         # Generate filename
-        filename = format_filename(sample_names, pan_assignments, created_count)
+        filename = format_filename(sample_names, pan_assignments, volume_db, created_count)
         output_path = OUTPUT_DIR / filename
         
         # Save
