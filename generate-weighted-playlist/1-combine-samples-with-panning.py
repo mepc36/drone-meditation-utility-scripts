@@ -56,7 +56,7 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
-NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
+NUM_UNIQUE_SAMPLES = config["num_unique_samples"]  # Total files (audio + silence)
 
 # Parse center_to_noncenter_to_dualpan_percents (e.g., "16:58:26" means 16% center-only : 58% non-center-only : 26% dualpan)
 panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_percents", "33:33:34").split(":")]
@@ -78,6 +78,10 @@ if sum(silence_ratio_parts) != 100:
     )
 SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of samples
 SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence
+
+# Calculate how many audio samples vs silence files based on ratio
+NUM_AUDIO_SAMPLES = int(NUM_UNIQUE_SAMPLES * SAMPLES_PERCENT / 100) if SAMPLES_PERCENT > 0 else NUM_UNIQUE_SAMPLES
+NUM_SILENCE_FILES = NUM_UNIQUE_SAMPLES - NUM_AUDIO_SAMPLES
 
 # Parse silence lengths and their percentages (e.g., "2000:10000" with "86:14" means 86% are 2000ms, 14% are 10000ms)
 silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
@@ -641,14 +645,14 @@ def main() -> None:
     print(f"Found {once_samples_count} ONCE samples (always centered)\n")
     
     # Calculate how many samples will use each pattern based on percentages
-    center_quota = int(NUM_UNIQUE_SAMPLES * CENTER_ONLY_WEIGHT / 100)
-    noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
-    dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / 100)
+    center_quota = int(NUM_AUDIO_SAMPLES * CENTER_ONLY_WEIGHT / 100)
+    noncenter_quota = int(NUM_AUDIO_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
+    dualpan_quota = int(NUM_AUDIO_SAMPLES * DUALPAN_WEIGHT / 100)
     
-    # Handle case where num_unique_samples is very small and all quotas round to 0
+    # Handle case where num_audio_samples is very small and all quotas round to 0
     # Distribute remaining samples proportionally
     total_allocated = center_quota + noncenter_quota + dualpan_quota
-    remaining_samples = NUM_UNIQUE_SAMPLES - total_allocated
+    remaining_samples = NUM_AUDIO_SAMPLES - total_allocated
     if remaining_samples > 0:
         # Allocate remaining samples based on weights
         weights = [CENTER_ONLY_WEIGHT, NON_CENTER_ONLY_WEIGHT, DUALPAN_WEIGHT]
@@ -669,11 +673,11 @@ def main() -> None:
         raise ValueError(
             f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
             f"Config ratio '{config.get('center_to_noncenter_to_dualpan_percents')}' allocates {center_quota} center slots "
-            f"out of {NUM_UNIQUE_SAMPLES} total samples.\n"
+            f"out of {NUM_AUDIO_SAMPLES} audio samples.\n"
             f"Either:\n"
             f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
             f"  2. Increase center ratio in center_to_noncenter_to_dualpan_percents, or\n"
-            f"  3. Increase num_unique_samples to {int(once_samples_count * total_ratio_parts / CENTER_ONLY_WEIGHT)} or more"
+            f"  3. Increase num_unique_samples to {int(once_samples_count * 100 / (SAMPLES_PERCENT * CENTER_ONLY_WEIGHT / 100))} or more"
         )
     
     # Adjust quotas: ONCE samples consume center quota
@@ -693,7 +697,7 @@ def main() -> None:
     used_once_samples = set()  # Track ONCE samples that have been used (can only appear once)
     created_count = 0
     attempts = 0
-    max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
+    max_attempts = NUM_AUDIO_SAMPLES * 100  # Prevent infinite loop
     
     # Quota-based generation: track how many of each pattern we still need
     center_quota_remaining = adjusted_center_weight
@@ -718,7 +722,7 @@ def main() -> None:
     # Calculate how many samples should use each volume level based on percentages
     volume_quotas = []
     for pct in volume_percentages:
-        quota = int(NUM_UNIQUE_SAMPLES * pct / 100)
+        quota = int(NUM_AUDIO_SAMPLES * pct / 100)
         volume_quotas.append(quota)
     
     # Build shared volume pool for all samples (all panning types can have any volume)
@@ -736,16 +740,16 @@ def main() -> None:
     centered_created_count = 0
     
     # Calculate how many samples should be double-timed
-    num_double_timed = int(NUM_UNIQUE_SAMPLES * EIGHTH_NOTE_SAMPLES_PERCENT)
+    num_double_timed = int(NUM_AUDIO_SAMPLES * EIGHTH_NOTE_SAMPLES_PERCENT)
     double_timed_count = 0
     
     # Calculate how many samples should have 4-beat and 2-beat durations
-    num_four_beat = int(NUM_UNIQUE_SAMPLES * FOUR_BEAT_DURATION_PERCENT)
-    num_two_beat = int(NUM_UNIQUE_SAMPLES * TWO_BEAT_DURATION_PERCENT)
+    num_four_beat = int(NUM_AUDIO_SAMPLES * FOUR_BEAT_DURATION_PERCENT)
+    num_two_beat = int(NUM_AUDIO_SAMPLES * TWO_BEAT_DURATION_PERCENT)
     four_beat_count = 0
     two_beat_count = 0
     
-    while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
+    while created_count < NUM_AUDIO_SAMPLES and attempts < max_attempts:
         attempts += 1
         
         # Generate combination with remaining quotas
@@ -854,14 +858,14 @@ def main() -> None:
         # Save
         sf.write(output_path, combined_audio, sample_rate)
         
-        if created_count % 10 == 0 or created_count == NUM_UNIQUE_SAMPLES:
-            print(f"  Created {created_count}/{NUM_UNIQUE_SAMPLES} samples...")
+        if created_count % 10 == 0 or created_count == NUM_AUDIO_SAMPLES:
+            print(f"  Created {created_count}/{NUM_AUDIO_SAMPLES} samples...")
     
-    if created_count < NUM_UNIQUE_SAMPLES:
-        print(f"\nWarning: Only created {created_count} unique combinations.")
-        print("Consider reducing num_unique_samples in config.json")
+    if created_count < NUM_AUDIO_SAMPLES:
+        print(f"\nWarning: Only created {created_count} audio samples (expected {NUM_AUDIO_SAMPLES}).")
+        print("Consider reducing num_unique_samples or samples_to_silence_percents in config.json")
     else:
-        print(f"\nComplete! Created {created_count} unique samples.")
+        print(f"\nComplete! Created {created_count} audio samples.")
     
     print(f"  Output: {OUTPUT_DIR.resolve()}")
     
@@ -998,25 +1002,21 @@ def main() -> None:
         print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
     
     # Generate silence files based on samples_to_silence_percents
-    if SILENCE_PERCENT > 0:
-        # Calculate total files and how many should be silence
-        total_files = int(created_count / (SAMPLES_PERCENT / 100))
-        num_silence_files = total_files - created_count
-        
+    if SILENCE_PERCENT > 0 and NUM_SILENCE_FILES > 0:
         print(f"\nGenerating silence files...")
         print(f"  Ratio: {SAMPLES_PERCENT}:{SILENCE_PERCENT} (samples:silence percentages)")
-        print(f"  Total silence files to create: {num_silence_files}")
+        print(f"  Total silence files to create: {NUM_SILENCE_FILES}")
         
         # Calculate distribution of silence files across different lengths based on percentages
         silence_counts_by_length = []
-        remaining_files = num_silence_files
+        remaining_files = NUM_SILENCE_FILES
         
         for i, pct in enumerate(SILENCE_LENGTH_PERCENTAGES):
             if i == len(SILENCE_LENGTH_PERCENTAGES) - 1:
                 # Last length gets remaining files to ensure we hit exact total
                 count = remaining_files
             else:
-                count = int(num_silence_files * pct / 100)
+                count = int(NUM_SILENCE_FILES * pct / 100)
                 remaining_files -= count
             silence_counts_by_length.append(count)
         
@@ -1033,15 +1033,15 @@ def main() -> None:
             for i in range(count):
                 create_silence_file(sample_rate, length_sec, file_counter)
                 file_counter += 1
-                if file_counter % 10 == 1 or file_counter == num_silence_files + 1:
-                    print(f"    Created {file_counter - 1}/{num_silence_files} silence files...", end="\r")
+                if file_counter % 10 == 1 or file_counter == NUM_SILENCE_FILES + 1:
+                    print(f"    Created {file_counter - 1}/{NUM_SILENCE_FILES} silence files...", end="\r")
         
-        print(f"    Created {num_silence_files}/{num_silence_files} silence files...")
+        print(f"    Created {NUM_SILENCE_FILES}/{NUM_SILENCE_FILES} silence files...")
         
-        total_files = created_count + num_silence_files
-        print(f"\nTotal files created: {total_files} ({created_count} samples + {num_silence_files} silence)")
+        total_files_created = created_count + NUM_SILENCE_FILES
+        print(f"\nTotal files created: {total_files_created} ({created_count} samples + {NUM_SILENCE_FILES} silence)")
     else:
-        total_files = created_count
+        total_files_created = created_count
     
     # Import to iTunes
     print("\n" + "="*60)
@@ -1052,7 +1052,10 @@ def main() -> None:
     
     print(f"Import complete!")
     print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
-    print(f"  Total files: {total_files}")
+    print(f"  Total files: {total_files_created}")
+    print(f"  Expected: {NUM_UNIQUE_SAMPLES} (from config)")
+    if total_files_created != NUM_UNIQUE_SAMPLES:
+        print(f"  ⚠️  Mismatch: Created {total_files_created} but config specifies {NUM_UNIQUE_SAMPLES}")
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
