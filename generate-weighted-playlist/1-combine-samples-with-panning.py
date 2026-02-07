@@ -8,8 +8,10 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
+- get rid of the super long silent sample? (or shorten it to 30 or 40 seconds)?
 - cut more samples
-- make samples more similar lengths (e.g., politics is too long)
+- make the samples have more similar lengths to each other 
+-- e.g., "politics" is so long that it gets cut off by the next sample at fast BPMs
 - even out volume difference bw panned samples and centered samples
 - use a large number of samples, but have 4 or 5 endings rather than just 1.
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
