@@ -213,3 +213,7 @@ Below is an example configuration with detailed explanations:
   "double_timed_samples_percent": 25
 }
 ```
+
+## Todos
+
+1. Add setup script to fetch .wav samples from S3 if not exist

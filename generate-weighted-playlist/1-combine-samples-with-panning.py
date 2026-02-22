@@ -8,23 +8,27 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-- get rid of the super long silent sample? (or shorten it to 30 or 40 seconds)?
-- cut more samples
-- make the samples have more similar lengths to each other 
--- e.g., "politics" is so long that it gets cut off by the next sample at fast BPMs
-- even out volume difference bw panned samples and centered samples
-- use a large number of samples, but have 4 or 5 endings rather than just 1.
--- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
--- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-- Add solo piano/hi hat/bass kick/string/etc. sounds
-- add endings
+1. NEXT TIME: RENDER SOME OF THE STRING QUARTET SNIPPETS INTO REAL AUDIO!
+2. Add code to repeat as few of the samples as possible by iterating through them, eliminating each one after it's been used
+3. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
+4. Even out volume difference between panned samples and centered samples
+5. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
+6. Add code so that samples from same song appear together???
 
 MAYBE:
-- add rule that we must have at least 1 combination of any 2 samples that share the same word
+1. add samples that represent endings?
+2 add rule that we must have at least 1 combination of any 2 samples that share the same word
 -- e.g. -- "pain" by 50 Cent and "pain" by Eve
-- add subset of rhythmically different samples
+3. add subset of rhythmically different samples
 -- e.g., samples that repeat 1 sample multiple times
-- add tinnitus to one (or many) samples?
+4. Add solo piano/hi hat/bass kick/string/etc. sounds
+5. get rid of the super long silent sample? (or shorten it to 30 or 40 seconds)?
+6. make the samples have similar lengths to each other 
+-- e.g., "politics" is so long that it gets cut off by the next sample at fast BPMs
+7. Add multiple instances of the same string quartet snippets?
+8. use a large number of samples, but have 4 or 5 endings rather than just 1.
+-- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
+-- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 
 """
 
