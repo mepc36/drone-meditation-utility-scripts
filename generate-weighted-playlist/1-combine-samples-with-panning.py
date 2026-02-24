@@ -14,6 +14,9 @@ DEFINITELY:
 4. Even out volume difference between panned samples and centered samples
 5. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
 6. Add code so that samples from same song appear together???
+7. Check that we have all Dr. Dre production credits for Snoop Dogg/Eminem/50 Cent/etc.
+8. Import the string sample pack from my old computer
+9. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
 
 MAYBE:
 1. add samples that represent endings?
@@ -29,6 +32,7 @@ MAYBE:
 8. use a large number of samples, but have 4 or 5 endings rather than just 1.
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
+9. Use bass guitar strings from "Buck 'Em" as 8th notes?
 
 """
 
