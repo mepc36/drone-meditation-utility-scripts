@@ -12,12 +12,10 @@ DEFINITELY:
 2. Bounce string snippets to audio
 3. Add room noise to string snippets
 4. Import string snippets into playlist.
-5. Rename _stab files with _kick or _snare
-6. Make all samples the same volume
-7. Even out volume difference between panned samples and centered samples
-8. Decide whether we want repetitions of samples or not
-9. Update 1- script to use VLC, not Music app
-10. Rm samples I wrote down on post-it note
+5. Make all samples the same volume
+6. Even out volume difference between panned samples and centered samples
+7. Decide whether we want repetitions of samples or not
+8. Update 1- script to use VLC, not Music app
 
 MAYBE:
 1. add samples that represent endings?
