@@ -8,14 +8,12 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. Standardize names of samples b/c some aren't being used b/c music group is in 2nd position, not 3rd
-2. Bounce string snippets to audio
-3. Add room noise to string snippets
-4. Import string snippets into playlist.
-5. Make all samples the same volume
-6. Even out volume difference between panned samples and centered samples
-7. Decide whether we want repetitions of samples or not
-8. Update 1- script to use VLC, not Music app
+1. Bounce string snippets to audio
+2. Add room noise to string snippets
+3. Import string snippets into playlist.
+4. Make all samples the same volume
+5. Even out volume difference between panned samples and centered samples
+6. Decide whether we want repetitions of samples or not
 
 MAYBE:
 1. add samples that represent endings?
