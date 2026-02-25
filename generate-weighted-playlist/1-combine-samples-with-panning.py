@@ -8,14 +8,16 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. Get rid of samples that don't start right on downbeat, or that have an 8th note impetus
-2. Make stabs combinable with snares or kicks? (do we have to add kickstab and snarestab to make this work?)
-3. Make all samples the same volume
-4. Standardize names of samples b/c some aren't being used b/c music group is in 2nd position, not 3rd
-5. Add strings
-6. Even out volume difference between panned samples and centered samples
-7. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
-8. Add room noise to sampled strings & import the snippets into playlist
+1. Standardize names of samples b/c some aren't being used b/c music group is in 2nd position, not 3rd
+2. Bounce string snippets to audio
+3. Add room noise to string snippets
+4. Import string snippets into playlist.
+5. Rename _stab files with _kick or _snare
+6. Make all samples the same volume
+7. Even out volume difference between panned samples and centered samples
+8. Decide whether we want repetitions of samples or not
+9. Update 1- script to use VLC, not Music app
+10. Rm samples I wrote down on post-it note
 
 MAYBE:
 1. add samples that represent endings?
@@ -31,9 +33,11 @@ MAYBE:
 8. use a large number of samples, but have 4 or 5 endings rather than just 1.
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-9. Use bass guitar strings from "Buck 'Em" as 8th notes?
+9. Use bass guitar strings from "Buck 'Em" as 8th notes???
 10. Add code so that samples from same song appear together???
 11. Use only orchestral stabs in 8th note positions???
+12. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+13. Make all samples last same length of time???
 
 """
 
