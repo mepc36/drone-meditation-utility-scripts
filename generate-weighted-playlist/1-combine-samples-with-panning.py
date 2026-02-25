@@ -8,15 +8,16 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-2. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
-3. Even out volume difference between panned samples and centered samples
-4. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
-5. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
-6. Add "short" sample group
-7. Add "beautiful" sample group
-8. Remove "beautiful" samples from "funny" sample group.
-9. Resample for short samples
-10. Slow the BPM down to 25?
+1. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
+2. Even out volume difference between panned samples and centered samples
+3. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
+4. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+5. Add "short" sample group
+6. Add "beautiful" sample group
+7. Remove "beautiful" samples from "funny" sample group.
+8. Resample for short samples
+9. Slow the BPM down to 44, with lots of 8th note samples?
+10. Make dualpan samples last for same length (truncate them to length of shorter one)
 
 MAYBE:
 1. add samples that represent endings?
