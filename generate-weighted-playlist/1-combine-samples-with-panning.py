@@ -8,15 +8,16 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. NEXT TIME: RENDER SOME OF THE STRING QUARTET SNIPPETS INTO REAL AUDIO!
-2. Add code to repeat as few of the samples as possible by iterating through them, eliminating each one after it's been used
-3. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
-4. Even out volume difference between panned samples and centered samples
-5. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
-6. Add code so that samples from same song appear together???
-7. Check that we have all Dr. Dre production credits for Snoop Dogg/Eminem/50 Cent/etc.
-8. Import the string sample pack from my old computer
-9. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+1. Add code to repeat as few of the samples as possible by iterating through them, eliminating each one after it's been used
+2. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
+3. Even out volume difference between panned samples and centered samples
+4. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
+5. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+6. Add "short" sample group
+7. Add "beautiful" sample group
+8. Remove "beautiful" samples from "funny" sample group.
+9. Resample for short samples
+10. Slow the BPM down to 25?
 
 MAYBE:
 1. add samples that represent endings?
@@ -33,6 +34,7 @@ MAYBE:
 -- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 9. Use bass guitar strings from "Buck 'Em" as 8th notes?
+10. Add code so that samples from same song appear together???
 
 """
 
@@ -177,12 +179,13 @@ def get_available_samples() -> dict[str, list[str]]:
     samples_by_type = {}
     for f in wav_files:
         stem = f.stem  # filename without extension
-        # Split on underscore and get [1] as sound type with suffix
+        # Split on underscore and get [2] as sound type with suffix
+        # e.g., "let-me-blow-ya-mind_oov_stab.1" -> parts[2] = "stab.1" -> "stab"
         parts = stem.split('_')
-        if len(parts) >= 2:
+        if len(parts) >= 3:
             # Extract sound type by removing numeric suffix after dot
-            # e.g., "kick.1" -> "kick", "snare.6" -> "snare"
-            sound_type_with_suffix = parts[1]
+            # e.g., "stab.1" -> "stab", "kick.1" -> "kick"
+            sound_type_with_suffix = parts[2]
             sound_type = sound_type_with_suffix.split('.')[0]
             
             if sound_type not in samples_by_type:
@@ -658,7 +661,20 @@ def main() -> None:
     center_quota = int(NUM_AUDIO_SAMPLES * CENTER_ONLY_WEIGHT / 100)
     noncenter_quota = int(NUM_AUDIO_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
     dualpan_quota = int(NUM_AUDIO_SAMPLES * DUALPAN_WEIGHT / 100)
-    
+
+    # Cap center_quota to the number of unique audio files (each center combo is 1 file = 1 unique slot)
+    if center_quota > total_samples:
+        center_overflow = center_quota - total_samples
+        center_quota = total_samples
+        # Redistribute overflow proportionally to noncenter and dualpan
+        non_center_total_weight = NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
+        if non_center_total_weight > 0:
+            noncenter_quota += int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
+            dualpan_quota += center_overflow - int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
+        else:
+            dualpan_quota += center_overflow
+        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to noncenter/dualpan.\n")
+
     # Handle case where num_audio_samples is very small and all quotas round to 0
     # Distribute remaining samples proportionally
     total_allocated = center_quota + noncenter_quota + dualpan_quota
@@ -786,8 +802,8 @@ def main() -> None:
         for name in sample_names:
             # Check if this sample is from the ONCE sound type
             parts = name.split('_')
-            if len(parts) >= 2:
-                sound_type_with_suffix = parts[1]
+            if len(parts) >= 3:
+                sound_type_with_suffix = parts[2]
                 sound_type = sound_type_with_suffix.split('.')[0]
                 if sound_type.lower() == 'once':
                     used_once_samples.add(name)
