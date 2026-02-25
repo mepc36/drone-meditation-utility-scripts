@@ -8,15 +8,14 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. Even out volume difference between panned samples and centered samples
-2. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
-3. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
-4. Add "short" sample group
-5. Add "beautiful" sample group
-6. Remove "beautiful" samples from "funny" sample group.
-7. Resample for short samples
-8. Make any samples that are part of a dualpan last for same length as each other. Truncate them to length of shorter one. Do this when writing to ./output, not when reading from ./input.
-9. Add room noise to sampled strings & import the snippets into playlist
+1. Get rid of samples that don't start right on downbeat, or that have an 8th note impetus
+2. Make stabs combinable with snares or kicks? (do we have to add kickstab and snarestab to make this work?)
+3. Make all samples the same volume
+4. Standardize names of samples b/c some aren't being used b/c music group is in 2nd position, not 3rd
+5. Add strings
+6. Even out volume difference between panned samples and centered samples
+7. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+8. Add room noise to sampled strings & import the snippets into playlist
 
 MAYBE:
 1. add samples that represent endings?
@@ -34,6 +33,7 @@ MAYBE:
 -- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
 9. Use bass guitar strings from "Buck 'Em" as 8th notes?
 10. Add code so that samples from same song appear together???
+11. Use only orchestral stabs in 8th note positions???
 
 """
 
