@@ -8,16 +8,15 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
-2. Even out volume difference between panned samples and centered samples
-3. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
-4. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
-5. Add "short" sample group
-6. Add "beautiful" sample group
-7. Remove "beautiful" samples from "funny" sample group.
-8. Resample for short samples
-9. Slow the BPM down to 44, with lots of 8th note samples?
-10. Make dualpan samples last for same length (truncate them to length of shorter one)
+1. Even out volume difference between panned samples and centered samples
+2. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
+3. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
+4. Add "short" sample group
+5. Add "beautiful" sample group
+6. Remove "beautiful" samples from "funny" sample group.
+7. Resample for short samples
+8. Make any samples that are part of a dualpan last for same length as each other. Truncate them to length of shorter one. Do this when writing to ./output, not when reading from ./input.
+9. Add room noise to sampled strings & import the snippets into playlist
 
 MAYBE:
 1. add samples that represent endings?
@@ -470,12 +469,23 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     else:
         target_length = BEAT_LENGTH_SECONDS
     
+    # Load and resample all samples first
+    loaded_audio: dict[str, np.ndarray] = {}
     for name in sample_names:
         audio, sr = load_audio(name)
-        
-        # Resample if needed
         if sr != sample_rate:
             audio = resample_audio(audio, sr, sample_rate)
+        loaded_audio[name] = audio
+
+    # For dualpan (stereo pair), truncate both samples to the length of the shorter one
+    if len(sample_names) == 2:
+        min_len = min(len(loaded_audio[n]) for n in sample_names)
+        for name in sample_names:
+            if len(loaded_audio[name]) > min_len:
+                loaded_audio[name] = loaded_audio[name][:min_len]
+
+    for name in sample_names:
+        audio = loaded_audio[name]
         
         # Normalize individual sample to consistent loudness before mixing
         audio = normalize_to_rms(audio, target_rms=0.15)

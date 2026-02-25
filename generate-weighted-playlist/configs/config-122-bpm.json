@@ -1,0 +1,18 @@
+{
+  "padded_centered_samples_percent": 0,
+  "padded_centered_samples_length_millisec": 0,
+  "playlist_name": "Maestro — Meditation",
+  "source_dir": "/Users/martinconnor/Music/Music/Media.localized/Music/Maestro/Maestro — The Playlist",
+  "itunes_dir": "/Users/martinconnor/Music/Music/Media.localized/Music/Unknown Artist/Unknown Album",
+  "bpm": 122,
+  "num_unique_samples": 103,
+  "center_to_noncenter_to_dualpan_percents": "16:58:26",
+  "samples_to_silence_percents": "95:5",
+  "loud_medium_soft_values": "0:-29:-53",
+  "loud_medium_soft_percents": "25:50:25",
+  "silence_lengths_millisec": "3109:12000",
+  "silence_lengths_percents": "85:15",
+  "eighth_note_samples_percent": 0,
+  "four_beat_duration_percent": 0,
+  "two_beat_duration_percent": 50
+}
