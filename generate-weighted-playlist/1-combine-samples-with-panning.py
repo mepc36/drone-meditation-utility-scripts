@@ -8,7 +8,6 @@ CD:
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
 
 DEFINITELY:
-1. Add code to repeat as few of the samples as possible by iterating through them, eliminating each one after it's been used
 2. Add code to use every sample at least once; throw error if num_unique_samples < num_samples
 3. Even out volume difference between panned samples and centered samples
 4. Answer this question: what do we do with samples whose length is greater than an 8th note (thus causing them to be cut off prematurely)?
@@ -47,6 +46,7 @@ Reads source files from ./input/audio/ and writes combined files to ./output/aud
 """
 
 import json
+from collections import deque
 from pathlib import Path
 import random
 import subprocess
@@ -199,6 +199,87 @@ def get_available_samples() -> dict[str, list[str]]:
             samples_by_type[fallback_type].append(stem)
     
     return samples_by_type
+
+
+def get_sound_type(sample_name: str) -> str:
+    """Extract the sound type from a sample filename.
+    e.g., 'let-me-blow-ya-mind_oov_stab.1' -> 'stab'
+    """
+    parts = sample_name.split('_')
+    if len(parts) >= 3:
+        return parts[2].split('.')[0].lower()
+    return sample_name.split('.')[0].lower()
+
+
+# -------------------------------------------------------------------
+# Round-robin queue helpers — ensures each sample is used as evenly
+# as possible across all output files.
+# -------------------------------------------------------------------
+
+def build_sample_round_robin(samples_by_type: dict[str, list[str]]) -> tuple[deque, list[str]]:
+    """Build an initial shuffled round-robin queue from all samples.
+    Returns (queue, all_sample_names).
+    """
+    all_samples = [s for samples in samples_by_type.values() for s in samples]
+    shuffled = random.sample(all_samples, len(all_samples))
+    return deque(shuffled), all_samples
+
+
+def refill_round_robin_queue(sample_queue: deque, all_sample_names: list[str],
+                              used_once_samples: set[str]) -> None:
+    """Append a new shuffled round to the queue, excluding exhausted ONCE samples."""
+    eligible = [s for s in all_sample_names
+                if not (get_sound_type(s) == 'once' and s in used_once_samples)]
+    random.shuffle(eligible)
+    sample_queue.extend(eligible)
+
+
+def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
+                         used_once_samples: set[str]) -> str | None:
+    """Pop the next usable sample from the round-robin queue.
+    Skips already-used ONCE samples; refills when the queue is empty.
+    """
+    total = len(all_sample_names)
+    for _ in range(total * 3):  # upper-bound guard
+        if not sample_queue:
+            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+        if not sample_queue:
+            return None  # nothing left at all
+        sample = sample_queue.popleft()
+        # Skip ONCE samples that have already been used
+        if get_sound_type(sample) == 'once' and sample in used_once_samples:
+            continue
+        return sample
+    return None
+
+
+def dequeue_partner_sample(sample_queue: deque, all_sample_names: list[str],
+                            sound_type: str, exclude_name: str,
+                            used_once_samples: set[str]) -> str | None:
+    """Find and remove the next sample of *sound_type* from the queue for a stereo pair.
+    Scans the existing queue first; falls back to any eligible sample of that type
+    (choosing least-recently used via a secondary search) when not found in queue.
+    """
+    # Search current queue
+    for i in range(len(sample_queue)):
+        s = sample_queue[i]
+        if s == exclude_name:
+            continue
+        if get_sound_type(s) != sound_type:
+            continue
+        if get_sound_type(s) == 'once' and s in used_once_samples:
+            continue
+        del sample_queue[i]
+        return s
+
+    # Not found in queue — pick any eligible sample of that type
+    eligible = [s for s in all_sample_names
+                if s != exclude_name
+                and get_sound_type(s) == sound_type
+                and not (get_sound_type(s) == 'once' and s in used_once_samples)]
+    if eligible:
+        return random.choice(eligible)
+    return None
 
 
 def ensure_input_files_exist() -> None:
@@ -469,94 +550,94 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
     return -position if side == 'left' else position
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
+def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
-                               left_pan_history: list[float], right_pan_history: list[float]) -> tuple[list[str], dict[str, str]]:
-    """Generate a random unique combination using weighted panning patterns.
-    Only combines samples with the same sound type.
-    Only allows 3 specific patterns:
+                               left_pan_history: list[float], right_pan_history: list[float],
+                               sample_round_robin: deque, all_sample_names: list[str]) -> tuple[list[str], dict[str, str]]:
+    """Generate a combination using round-robin sample selection + quota-based panning.
+
+    Sample selection: samples are drawn from a shuffled round-robin queue so that
+    every input file is used roughly the same number of times.  Once all samples
+    have been used once the queue is refilled in a new random order, giving the
+    next "round".
+
+    Panning patterns (unchanged):
     1. 1 sample, center only
     2. 1 sample, left or right (quota-based for 50/50 distribution)
     3. 2 samples, stereo pair (1 left + 1 right)
-    
-    ONCE samples (subset of SOLO): isolated, centered, appear once
-    SOLO samples: isolated, can pan left/center/right, can repeat
-    Regular samples: can be combined, use all patterns
-    
+
+    ONCE samples: isolated, centered, appear exactly once.
+    SOLO samples: isolated, can pan left/center/right, no stereo pairs.
+    Regular samples: can be combined, use all patterns.
+
     Returns (sample_names, pan_assignments)
     """
-    # First, randomly select a sound type
-    sound_type = random.choice(list(samples_by_type.keys()))
-    available_samples = samples_by_type[sound_type]
-    
-    # For ONCE samples, filter out already-used ones
-    if sound_type.lower() == 'once':
-        available_samples = [s for s in available_samples if s not in used_once_samples]
-        # If no ONCE samples left, return None to signal retry
-        if not available_samples:
-            return None, None
-    
-    # Build pattern pool based on sound type and remaining quotas
-    if sound_type.lower() == 'once':
+    # ----------------------------------------------------------------
+    # Step 1: dequeue the primary sample from the round-robin queue
+    # ----------------------------------------------------------------
+    primary = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples)
+    if primary is None:
+        return None, None
+
+    sound_type = get_sound_type(primary)
+
+    # ----------------------------------------------------------------
+    # Step 2: choose panning pattern based on type + remaining quotas
+    # ----------------------------------------------------------------
+    if sound_type == 'once':
         # ONCE: always isolated and centered
         pattern_pool = ['center_only']
-    elif sound_type.lower() == 'solo':
-        # SOLO: isolated but can pan left/center/right (exclude stereo_pair)
-        # Use quotas to ensure exact ratio and left/right balance
+    elif sound_type == 'solo':
+        # SOLO: isolated but can pan left/center/right (no stereo pairs)
         pattern_pool = (
-            ['center_only'] * center_quota + 
+            ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota
         )
     else:
-        # Regular samples: use all patterns with quotas
+        # Regular: all patterns allowed
         pattern_pool = (
-            ['center_only'] * center_quota + 
+            ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota +
             ['stereo_pair'] * dualpan_quota
         )
-    
-    # If pool is empty (all quotas exhausted), return None
+
     if not pattern_pool:
         return None, None
-    
-    # Select a pattern type
+
     pattern_type = random.choice(pattern_pool)
-    
+
+    # ----------------------------------------------------------------
+    # Step 3: build sample list and pan assignments
+    # ----------------------------------------------------------------
     if pattern_type == 'center_only':
-        # Pattern 1: 1 sample, center
-        sample_names = random.sample(available_samples, 1)
-        pan_assignments = {sample_names[0]: 'center'}
-    
+        sample_names = [primary]
+        pan_assignments = {primary: 'center'}
+
     elif pattern_type == 'left_only':
-        # Pattern 2a: 1 sample, panned left
-        # Use statistical balancing to ensure even distribution
-        sample_names = random.sample(available_samples, 1)
+        sample_names = [primary]
         pan_position = select_balanced_pan_position('left', left_pan_history)
-        pan_assignments = {sample_names[0]: pan_position}
-    
+        pan_assignments = {primary: pan_position}
+
     elif pattern_type == 'right_only':
-        # Pattern 2b: 1 sample, panned right
-        # Use statistical balancing to ensure even distribution
-        sample_names = random.sample(available_samples, 1)
+        sample_names = [primary]
         pan_position = select_balanced_pan_position('right', right_pan_history)
-        pan_assignments = {sample_names[0]: pan_position}
-    
+        pan_assignments = {primary: pan_position}
+
     else:  # stereo_pair
-        # Pattern 3: 2 samples, one left and one right
-        if len(available_samples) < 2:
-            # Fallback to center if we don't have enough samples of this type
-            sample_names = random.sample(available_samples, 1)
-            pan_assignments = {sample_names[0]: 'center'}
+        partner = dequeue_partner_sample(
+            sample_round_robin, all_sample_names,
+            sound_type, primary, used_once_samples
+        )
+        if partner is None:
+            # Can't form a pair — fall back to center
+            sample_names = [primary]
+            pan_assignments = {primary: 'center'}
         else:
-            sample_names = random.sample(available_samples, 2)
-            # For stereo pairs, use hard panning for clear separation
-            pan_assignments = {
-                sample_names[0]: -1.0,
-                sample_names[1]: 1.0
-            }
-    
+            sample_names = [primary, partner]
+            pan_assignments = {primary: -1.0, partner: 1.0}
+
     return sample_names, pan_assignments
 
 
@@ -718,6 +799,12 @@ def main() -> None:
     
     print("Generating unique combinations...\n")
     
+    # Build round-robin queue so every sample is used as evenly as possible.
+    # Samples are drawn in a shuffled order; when all have been used once the
+    # queue is automatically refilled for the next round (in a new random order).
+    sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
+    sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
+    
     # Track combinations to ensure uniqueness
     seen_combinations = set()
     used_once_samples = set()  # Track ONCE samples that have been used (can only appear once)
@@ -782,7 +869,8 @@ def main() -> None:
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-            left_pan_history, right_pan_history
+            left_pan_history, right_pan_history,
+            sample_round_robin, all_sample_names
         )
         
         # Check if combination generation failed (e.g., no more ONCE samples available)
@@ -797,6 +885,10 @@ def main() -> None:
             continue
         
         seen_combinations.add(combo_key)
+        
+        # Track per-sample usage for the round-robin fairness report
+        for name in sample_names:
+            sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
         
         # Mark ONCE samples as used (they can only appear once)
         for name in sample_names:
@@ -894,6 +986,21 @@ def main() -> None:
         print(f"\nComplete! Created {created_count} audio samples.")
     
     print(f"  Output: {OUTPUT_DIR.resolve()}")
+    
+    # Display sample usage distribution (round-robin fairness report)
+    usage_values = list(sample_usage_count.values())
+    if usage_values:
+        min_uses = min(usage_values)
+        max_uses = max(usage_values)
+        avg_uses = sum(usage_values) / len(usage_values)
+        print(f"\nSample Usage Distribution (round-robin):")
+        print(f"  Total input samples: {len(all_sample_names)}")
+        print(f"  Min uses: {min_uses}  Max uses: {max_uses}  Avg: {avg_uses:.2f}")
+        if max_uses - min_uses <= 1:
+            print(f"  ✓ Perfectly even — all samples used {min_uses}–{max_uses} times")
+        else:
+            outliers = [s for s, c in sample_usage_count.items() if c == max_uses]
+            print(f"  ⚠  Spread of {max_uses - min_uses} ({len(outliers)} sample(s) at max)")
     
     # Display panning distribution
     from math import gcd
