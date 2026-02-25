@@ -641,9 +641,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     return sample_names, pan_assignments
 
 
-def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int) -> str:
+def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int, beat_suffix: str = "1beat") -> str:
     """
-    Format filename as: left_center_right_vol_X_pan_Y_NNN.wav
+    Format filename as: left_center_right_vol_X_pan_Y_NNN_Xbeat.wav
     Only includes samples that are present, in pan order.
     """
     # Create list of (pan_position, sample_name) tuples
@@ -679,7 +679,7 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], vo
     
     # Build filename
     name_part = "_".join(sorted_names)
-    return f"{name_part}_vol_{vol_str}_pan_{pan_str}_{index:03d}.wav"
+    return f"{name_part}_vol_{vol_str}_pan_{pan_str}_{index:03d}_{beat_suffix}.wav"
 
 
 def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
@@ -970,7 +970,15 @@ def main() -> None:
         volume_db = volume_levels_db[volume_idx]
         
         # Generate filename
-        filename = format_filename(sample_names, pan_assignments, volume_db, created_count)
+        if use_four_beat:
+            beat_suffix = "4beat"
+        elif use_two_beat:
+            beat_suffix = "2beat"
+        elif use_double_time:
+            beat_suffix = "halfbeat"
+        else:
+            beat_suffix = "1beat"
+        filename = format_filename(sample_names, pan_assignments, volume_db, created_count, beat_suffix)
         output_path = OUTPUT_DIR / filename
         
         # Save
