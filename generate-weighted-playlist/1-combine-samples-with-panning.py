@@ -710,23 +710,6 @@ def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> 
     sf.write(output_path, silence_audio, sample_rate)
 
 
-def import_folder_to_music(folder: Path) -> str:
-    """Import entire folder to iTunes/Music in one operation."""
-    script = f'''
-tell application "Music"
-    add (POSIX file "{folder.resolve()}/")
-end tell
-'''
-    try:
-        result = subprocess.run(
-            ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.stderr}"
 
 
 # -------------------------------------------------------------------
@@ -1197,19 +1180,6 @@ def main() -> None:
     else:
         total_files_created = created_count
     
-    # Import to iTunes
-    print("\n" + "="*60)
-    print("Importing entire folder to iTunes/Music...")
-    print("This may take a moment...\n")
-    
-    result = import_folder_to_music(OUTPUT_DIR)
-    
-    print(f"Import complete!")
-    print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
-    print(f"  Total files: {total_files_created}")
-    print(f"  Expected: {NUM_UNIQUE_SAMPLES} (from config)")
-    if total_files_created != NUM_UNIQUE_SAMPLES:
-        print(f"  ⚠️  Mismatch: Created {total_files_created} but config specifies {NUM_UNIQUE_SAMPLES}")
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
