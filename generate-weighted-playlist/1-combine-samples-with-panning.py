@@ -6,6 +6,7 @@ TODO:
 CD:
 
 cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
+cd /Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/drone-meditation-utility-scripts/generate-weighted-playlist
 
 DEFINITELY:
 1. Bounce string snippets to audio
@@ -14,6 +15,9 @@ DEFINITELY:
 4. Make all samples the same volume
 5. Even out volume difference between panned samples and centered samples
 6. Decide whether we want repetitions of samples or not
+7. Add bass guitar and/or guitar and/or piano???
+8. Add dualpan with one centered.
+9. Add more samples.
 
 MAYBE:
 1. add samples that represent endings?
@@ -647,7 +651,13 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
             pan_assignments = {primary: 'center'}
         else:
             sample_names = [primary, partner]
-            pan_assignments = {primary: -1.0, partner: 1.0}
+            dualpan_style = random.choice(['left-right', 'left-center', 'right-center'])
+            if dualpan_style == 'left-right':
+                pan_assignments = {primary: -1.0, partner: 1.0}
+            elif dualpan_style == 'left-center':
+                pan_assignments = {primary: -1.0, partner: 'center'}
+            else:  # right-center
+                pan_assignments = {primary: 1.0, partner: 'center'}
 
     return sample_names, pan_assignments
 
