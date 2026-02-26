@@ -1,47 +1,5 @@
 #!/usr/bin/env python3
 
-r""" 
-TODO:
-
-CD:
-
-cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
-cd /Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/drone-meditation-utility-scripts/generate-weighted-playlist
-
-DEFINITELY:
-1. Bounce string snippets to audio
-2. Add room noise to string snippets
-3. Import string snippets into playlist.
-4. Make all samples the same volume
-5. Even out volume difference between panned samples and centered samples
-6. Decide whether we want repetitions of samples or not
-7. Add bass guitar and/or guitar and/or piano???
-8. Add dualpan with one centered.
-9. Add more samples.
-
-MAYBE:
-1. add samples that represent endings?
-2 add rule that we must have at least 1 combination of any 2 samples that share the same word
--- e.g. -- "pain" by 50 Cent and "pain" by Eve
-3. add subset of rhythmically different samples
--- e.g., samples that repeat 1 sample multiple times
-4. Add solo piano/hi hat/bass kick/string/etc. sounds
-5. get rid of the super long silent sample? (or shorten it to 30 or 40 seconds)?
-6. make the samples have similar lengths to each other 
--- e.g., "politics" is so long that it gets cut off by the next sample at fast BPMs
-7. Add multiple instances of the same string quartet snippets?
-8. use a large number of samples, but have 4 or 5 endings rather than just 1.
--- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
--- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-9. Use bass guitar strings from "Buck 'Em" as 8th notes???
-10. Add code so that samples from same song appear together???
-11. Use only orchestral stabs in 8th note positions???
-12. Remove volume fades added at python layer (since we already add them at Logic Pro layer)???
-13. Make all samples last same length of time???
-
-"""
-
-
 """
 1-combine-samples-with-panning.py
 
