@@ -57,6 +57,18 @@ SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0 
 NUM_AUDIO_SAMPLES = int(NUM_UNIQUE_SAMPLES * SAMPLES_PERCENT / 100) if SAMPLES_PERCENT > 0 else NUM_UNIQUE_SAMPLES
 NUM_SILENCE_FILES = NUM_UNIQUE_SAMPLES - NUM_AUDIO_SAMPLES
 
+# Parse samples_to_strings_ratio (e.g., "96:4" means 96% non-strings : 4% strings)
+# A strings sample is any file whose sound-type field (3rd underscore-delimited token) is "strings",
+# e.g. flowing-string-quartet_oov_strings.wav
+strings_ratio_parts = [int(x) for x in config.get("samples_to_strings_ratio", "100:0").split(":")]
+if sum(strings_ratio_parts) != 100:
+    raise ValueError(
+        f"Error: samples_to_strings_ratio percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, strings_ratio_parts))} = {sum(strings_ratio_parts)}"
+    )
+NON_STRINGS_PERCENT = strings_ratio_parts[0]
+STRINGS_PERCENT = strings_ratio_parts[1] if len(strings_ratio_parts) > 1 else 0
+
 # Parse silence lengths and their percentages (e.g., "2000:10000" with "86:14" means 86% are 2000ms, 14% are 10000ms)
 silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
 SILENCE_LENGTHS_SECONDS = [ms / 1000.0 for ms in silence_lengths_ms]
@@ -197,21 +209,43 @@ def refill_round_robin_queue(sample_queue: deque, all_sample_names: list[str],
 
 
 def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
-                         used_once_samples: set[str]) -> str | None:
+                         used_once_samples: set[str],
+                         require_strings: bool | None = None) -> str | None:
     """Pop the next usable sample from the round-robin queue.
     Skips already-used ONCE samples; refills when the queue is empty.
+    require_strings: True = only strings samples, False = only non-strings samples, None = any
     """
-    total = len(all_sample_names)
-    for _ in range(total * 3):  # upper-bound guard
+    # Fast check: are there any eligible samples of the required type at all?
+    # If not, return None immediately to avoid unbounded queue growth.
+    if require_strings is not None:
+        any_eligible = any(
+            (get_sound_type(s) == 'strings') == require_strings
+            and not (get_sound_type(s) == 'once' and s in used_once_samples)
+            for s in all_sample_names
+        )
+        if not any_eligible:
+            return None
+
+    # Try the current queue first; if nothing matches, do one refill and try once more.
+    for pass_num in range(2):
         if not sample_queue:
             refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
         if not sample_queue:
-            return None  # nothing left at all
-        sample = sample_queue.popleft()
-        # Skip ONCE samples that have already been used
-        if get_sound_type(sample) == 'once' and sample in used_once_samples:
-            continue
-        return sample
+            return None
+        if pass_num == 1:
+            # Second pass: refill before scanning to ensure fresh samples are present.
+            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+        for i in range(len(sample_queue)):
+            s = sample_queue[i]
+            if get_sound_type(s) == 'once' and s in used_once_samples:
+                continue
+            is_strings = get_sound_type(s) == 'strings'
+            if require_strings is True and not is_strings:
+                continue
+            if require_strings is False and is_strings:
+                continue
+            del sample_queue[i]
+            return s
     return None
 
 
@@ -446,31 +480,47 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
             if len(loaded_audio[name]) > min_len:
                 loaded_audio[name] = loaded_audio[name][:min_len]
 
+    # Check whether all samples in this combination belong to the strings group
+    has_strings = any(get_sound_type(name) == 'strings' for name in sample_names)
+
     for name in sample_names:
         audio = loaded_audio[name]
-        
-        # Normalize individual sample to consistent loudness before mixing
-        audio = normalize_to_rms(audio, target_rms=0.15)
-        
-        # Apply panning
-        stereo = apply_pan(audio, pan_assignments[name])
-        
-        # Pad to target length
-        stereo = pad_to_length(stereo, sample_rate, target_length)
-        
+
+        if get_sound_type(name) == 'strings':
+            # STRINGS: skip normalisation, panning, and length truncation — preserve
+            # the file at its full natural length, as-is.
+            # If mono, duplicate to stereo center; if already stereo, use directly.
+            if audio.ndim == 1:
+                stereo = np.column_stack([audio, audio])
+            else:
+                stereo = audio
+        else:
+            # Normalize individual sample to consistent loudness before mixing
+            audio = normalize_to_rms(audio, target_rms=0.15)
+
+            # Apply panning
+            stereo = apply_pan(audio, pan_assignments[name])
+
+            # Pad to target length
+            stereo = pad_to_length(stereo, sample_rate, target_length)
+
         # Mix (sum)
         if mixed is None:
             mixed = stereo
         else:
             mixed = mixed + stereo
-    
-    # Normalize final mix to consistent RMS level
-    mixed = normalize_to_rms(mixed, target_rms=0.15)
-    
+
+    if not has_strings:
+        # Normalize final mix to consistent RMS level
+        mixed = normalize_to_rms(mixed, target_rms=0.15)
+
     # Select and apply volume level from quota pool
     db_reduction, volume_idx = select_volume_level_from_pool(volume_pool)
-    mixed = apply_volume_db(mixed, db_reduction)
-    
+
+    if not has_strings:
+        # Only adjust volume for non-strings combinations
+        mixed = apply_volume_db(mixed, db_reduction)
+
     return mixed, volume_idx
 
 
@@ -526,7 +576,8 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
 def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
                                left_pan_history: list[float], right_pan_history: list[float],
-                               sample_round_robin: deque, all_sample_names: list[str]) -> tuple[list[str], dict[str, str]]:
+                               sample_round_robin: deque, all_sample_names: list[str],
+                               require_strings: bool | None = None) -> tuple[list[str], dict[str, str]]:
     """Generate a combination using round-robin sample selection + quota-based panning.
 
     Sample selection: samples are drawn from a shuffled round-robin queue so that
@@ -548,7 +599,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     # ----------------------------------------------------------------
     # Step 1: dequeue the primary sample from the round-robin queue
     # ----------------------------------------------------------------
-    primary = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples)
+    primary = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples, require_strings)
     if primary is None:
         return None, None
 
@@ -559,6 +610,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     # ----------------------------------------------------------------
     if sound_type == 'once':
         # ONCE: always isolated and centered
+        pattern_pool = ['center_only']
+    elif sound_type == 'strings':
+        # STRINGS: always isolated and centered; volume and panning are not adjusted
         pattern_pool = ['center_only']
     elif sound_type == 'solo':
         # SOLO: isolated but can pan left/center/right (no stereo pairs)
@@ -759,11 +813,10 @@ def main() -> None:
     adjusted_right_weight = right_quota
     adjusted_dualpan_weight = dualpan_quota
     
-    print("Generating unique combinations...\n")
-    
-    # Build round-robin queue so every sample is used as evenly as possible.
-    # Samples are drawn in a shuffled order; when all have been used once the
-    # queue is automatically refilled for the next round (in a new random order).
+    # Calculate strings vs non-strings quotas based on samples_to_strings_ratio
+    num_strings_samples = int(NUM_AUDIO_SAMPLES * STRINGS_PERCENT / 100)
+    num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+
     sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
     
@@ -779,6 +832,12 @@ def main() -> None:
     left_quota_remaining = adjusted_left_weight
     right_quota_remaining = adjusted_right_weight
     dualpan_quota_remaining = adjusted_dualpan_weight
+
+    # Strings vs non-strings quota tracking
+    strings_quota_remaining = num_strings_samples
+    non_strings_quota_remaining = num_non_strings_samples
+    strings_created_count = 0
+    non_strings_created_count = 0
     
     # Track panning distribution
     center_count = 0
@@ -826,27 +885,52 @@ def main() -> None:
     
     while created_count < NUM_AUDIO_SAMPLES and attempts < max_attempts:
         attempts += 1
-        
+
+        # Determine whether the next sample should be strings or non-strings
+        # based on remaining quotas to hit the configured ratio.
+        if strings_quota_remaining > 0 and non_strings_quota_remaining > 0:
+            total_remaining = strings_quota_remaining + non_strings_quota_remaining
+            require_strings = random.random() < (strings_quota_remaining / total_remaining)
+        elif strings_quota_remaining > 0:
+            require_strings = True
+        else:
+            require_strings = False
+
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
             left_pan_history, right_pan_history,
-            sample_round_robin, all_sample_names
+            sample_round_robin, all_sample_names,
+            require_strings
         )
         
-        # Check if combination generation failed (e.g., no more ONCE samples available)
+        # Check if combination generation failed
         if sample_names is None:
-            continue
+            # If we were trying to find a strings sample and none are available, fall back
+            # to non-strings so we don't spin forever on an unsatisfiable quota.
+            if require_strings is True:
+                sample_names, pan_assignments = generate_unique_combination(
+                    samples_by_type, used_once_samples,
+                    center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+                    left_pan_history, right_pan_history,
+                    sample_round_robin, all_sample_names,
+                    require_strings=False
+                )
+            if sample_names is None:
+                continue
         
         # Create unique key for this combination
         combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
         
-        # Check if we've seen this exact combination before
-        if combo_key in seen_combinations:
-            continue
-        
-        seen_combinations.add(combo_key)
+        # Strings combos are allowed to repeat (round-robin reuse), so skip the
+        # uniqueness check for them — just like how non-strings cycle through again
+        # after all samples have been used once.
+        is_strings_combo = any(get_sound_type(name) == 'strings' for name in sample_names)
+        if not is_strings_combo:
+            if combo_key in seen_combinations:
+                continue
+            seen_combinations.add(combo_key)
         
         # Track per-sample usage for the round-robin fairness report
         for name in sample_names:
@@ -863,7 +947,15 @@ def main() -> None:
                     used_once_samples.add(name)
         
         created_count += 1
-        
+
+        # Track strings vs non-strings against quota
+        if is_strings_combo:
+            strings_created_count += 1
+            strings_quota_remaining = max(0, strings_quota_remaining - 1)
+        else:
+            non_strings_created_count += 1
+            non_strings_quota_remaining = max(0, non_strings_quota_remaining - 1)
+
         # Track panning pattern and update quotas
         pan_positions = list(pan_assignments.values())
         is_centered = False
@@ -1146,6 +1238,15 @@ def main() -> None:
     else:
         total_files_created = created_count
     
+    # Display strings distribution
+    if STRINGS_PERCENT > 0:
+        strings_pct = (strings_created_count / created_count) * 100 if created_count > 0 else 0
+        non_strings_pct = (non_strings_created_count / created_count) * 100 if created_count > 0 else 0
+        print(f"\nStrings Distribution:")
+        print(f"  Config ratio: {config.get('samples_to_strings_ratio', '100:0')} (non-strings:strings)")
+        print(f"  Target: {NON_STRINGS_PERCENT}% non-strings / {STRINGS_PERCENT}% strings")
+        print(f"  Realized: {non_strings_created_count} non-strings ({non_strings_pct:.1f}%) / {strings_created_count} strings ({strings_pct:.1f}%)")
+
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
