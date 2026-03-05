@@ -3,7 +3,7 @@
 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
 Generates an M3U playlist from ./output/audio/final-sample-versions/
-and opens it in VLC.
+and plays it via mpv (shuffled, infinite loop).
 """
 
 import json
@@ -25,8 +25,6 @@ SOURCE_AUDIO_DIR = Path("./output/audio/final-sample-versions")
 OUTPUT_DIR = Path("./output")
 PLAYLIST_NAME = config["playlist_name"]
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / f"{PLAYLIST_NAME}.m3u"
-
-VLC_PATH = "/Applications/VLC.app/Contents/MacOS/VLC"
 
 
 
@@ -88,17 +86,12 @@ def main() -> None:
     print(f"Total tracks in playlist: {len(abs_tracks)}\n")
     print(f"Playlist written to: {PLAYLIST_PATH.resolve()}\n")
 
-    # Quit VLC if running, then reopen with playlist
-    print("Quitting VLC (if running)...")
-    subprocess.run(["osascript", "-e", 'tell application "VLC" to quit'], capture_output=True)
-    import time; time.sleep(1)
-
-    print("Opening playlist in VLC...")
-    subprocess.Popen([VLC_PATH, "--play-and-exit", str(PLAYLIST_PATH.resolve())])
-
-    print("\nDone.")
-    print("  VLC opened with your playlist — autoplay enabled.")
-    print("  Enable Repeat (All) in VLC for infinite looping.\n")
+    print("\nStarting playback with mpv (Ctrl+C to stop)...\n")
+    subprocess.run(
+        "find . -name '*.wav' | shuf | mpv --no-video --gapless-audio=yes --loop-playlist=inf --playlist=-",
+        shell=True,
+        cwd="./output",
+    )
 
 
 if __name__ == "__main__":
