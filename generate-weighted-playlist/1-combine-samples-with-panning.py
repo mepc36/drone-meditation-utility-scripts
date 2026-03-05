@@ -1,34 +1,5 @@
 #!/usr/bin/env python3
 
-r""" 
-TODO:
-
-CD:
-
-cd /Users/martinconnor/Music/Music/Media.localized/Music/Unknown\ Artist/Unknown\ Album
-
-DEFINITELY:
-- set rules to prevent using 2 of the same (or similar) panning positions??
-- always make noncentered samples fully loud?
-- add a third volume tier???
-- make samples more similar lengths (e.g., politics is too long)
-- make volume of panned samples equal to volume of centered samples
-- use a large number of samples, but have 4 or 5 endings rather than just 1.
--- IDEA: make them diametrical opposites to each other (e.g., make 1 "living" & the other "dying")
--- IDEA: play with numerology (make one of them last for 3:33, make the other last for 6:66)
-- Add solo piano/hi hat/bass kick/string/etc. sounds
-- add endings
-
-MAYBE:
-- add rule that we must have at least 1 combination of any 2 samples that share the same word
--- e.g. -- "pain" by 50 Cent and "pain" by Eve
-- add subset of rhythmically different samples
--- e.g., samples that repeat 1 sample multiple times
-- add tinnitus to one (or many) samples?
-
-"""
-
-
 """
 1-combine-samples-with-panning.py
 
@@ -37,6 +8,7 @@ Reads source files from ./input/audio/ and writes combined files to ./output/aud
 """
 
 import json
+from collections import deque
 from pathlib import Path
 import random
 import subprocess
@@ -58,24 +30,55 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
 # Calculate beat length from BPM
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
-NUM_UNIQUE_SAMPLES = config["num_unique_samples"]
+NUM_UNIQUE_SAMPLES = config["num_unique_samples"]  # Total files (audio + silence)
 
-# Parse center_to_noncenter_to_dualpan_ratio (e.g., "2:1:1" means 2 center-only : 1 non-center-only : 1 dualpan)
-panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_ratio", "1:1:1").split(":")]
-CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # 1 sample, center
-NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # 1 sample, hard left or right
-DUALPAN_WEIGHT = panning_pattern_parts[2]  # 2 samples, left + right
+# Parse center_to_noncenter_to_dualpan_percents (e.g., "16:58:26" means 16% center-only : 58% non-center-only : 26% dualpan)
+panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_percents", "33:33:34").split(":")]
+if sum(panning_pattern_parts) != 100:
+    raise ValueError(
+        f"Error: center_to_noncenter_to_dualpan_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, panning_pattern_parts))} = {sum(panning_pattern_parts)}"
+    )
+CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # Percentage, center
+NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # Percentage, hard left or right
+DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right
 
-# Parse samples_to_silence_ratio (e.g., "4:1" means 4 samples : 1 silence)
-silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_ratio", "1:0").split(":")]
-SAMPLES_COUNT = silence_ratio_parts[0]
-SILENCE_COUNT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0
+# Parse samples_to_silence_percents (e.g., "87:13" means 87% samples : 13% silence)
+silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
+if sum(silence_ratio_parts) != 100:
+    raise ValueError(
+        f"Error: samples_to_silence_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, silence_ratio_parts))} = {sum(silence_ratio_parts)}"
+    )
+SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of samples
+SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence
 
-# Parse silence lengths and their weights (e.g., "2000:10000" with "8:1")
+# Calculate how many audio samples vs silence files based on ratio
+NUM_AUDIO_SAMPLES = int(NUM_UNIQUE_SAMPLES * SAMPLES_PERCENT / 100) if SAMPLES_PERCENT > 0 else NUM_UNIQUE_SAMPLES
+NUM_SILENCE_FILES = NUM_UNIQUE_SAMPLES - NUM_AUDIO_SAMPLES
+
+# Parse samples_to_strings_ratio (e.g., "96:4" means 96% non-strings : 4% strings)
+# A strings sample is any file whose sound-type field (3rd underscore-delimited token) is "strings",
+# e.g. flowing-string-quartet_oov_strings.wav
+strings_ratio_parts = [int(x) for x in config.get("samples_to_strings_ratio", "100:0").split(":")]
+if sum(strings_ratio_parts) != 100:
+    raise ValueError(
+        f"Error: samples_to_strings_ratio percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, strings_ratio_parts))} = {sum(strings_ratio_parts)}"
+    )
+NON_STRINGS_PERCENT = strings_ratio_parts[0]
+STRINGS_PERCENT = strings_ratio_parts[1] if len(strings_ratio_parts) > 1 else 0
+
+# Parse silence lengths and their percentages (e.g., "2000:10000" with "86:14" means 86% are 2000ms, 14% are 10000ms)
 silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
 SILENCE_LENGTHS_SECONDS = [ms / 1000.0 for ms in silence_lengths_ms]
-silence_weights = [int(x) for x in config.get("silence_lengths_ratio", "1").split(":")]
-SILENCE_LENGTH_WEIGHTS = silence_weights
+silence_percentages = [int(x) for x in config.get("silence_lengths_percents", "100").split(":")]
+if sum(silence_percentages) != 100:
+    raise ValueError(
+        f"Error: silence_lengths_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, silence_percentages))} = {sum(silence_percentages)}"
+    )
+SILENCE_LENGTH_PERCENTAGES = silence_percentages
 
 # Parse padded centered samples config
 PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
@@ -83,8 +86,14 @@ PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
 PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 100.0
 
 # Parse double-timed samples config
-DOUBLE_TIMED_PERCENT = config.get("double_timed_samples_percent", 0.0) / 100.0
+EIGHTH_NOTE_SAMPLES_PERCENT = config.get("eighth_note_samples_percent", 0.0) / 100.0
 DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat length
+
+# Parse multi-beat duration samples config
+FOUR_BEAT_DURATION_PERCENT = config.get("four_beat_duration_percent", 0.0) / 100.0
+TWO_BEAT_DURATION_PERCENT = config.get("two_beat_duration_percent", 0.0) / 100.0
+FOUR_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 4.0
+TWO_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 2.0
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
@@ -94,22 +103,28 @@ NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
 
-# Validate that lengths and weights match
-if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_WEIGHTS):
+# Validate that lengths and percentages match
+if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
     raise ValueError(
-        f"Error: silence_lengths_millisec and silence_lengths_ratio must have the same number of values.\n"
-        f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_WEIGHTS)} weights."
+        f"Error: silence_lengths_millisec and silence_lengths_percents must have the same number of values.\n"
+        f"Got {len(SILENCE_LENGTHS_SECONDS)} lengths but {len(SILENCE_LENGTH_PERCENTAGES)} percentages."
     )
 
-# Parse volume levels and their weights (e.g., "0:-5:-10" with "1:4:1")
+# Parse volume levels and their percentages (e.g., "0:-5:-10" with "20:52:28" means 20% loud, 52% medium, 28% soft)
 volume_levels_db = [float(x) for x in config.get("loud_medium_soft_values", "0").split(":")]
-volume_weights = [int(x) for x in config.get("loud_medium_soft_ratio", "1").split(":")]
+volume_percentages = [int(x) for x in config.get("loud_medium_soft_percents", "100").split(":")]
 
-# Validate that volume levels and weights match
-if len(volume_levels_db) != len(volume_weights):
+if sum(volume_percentages) != 100:
     raise ValueError(
-        f"Error: loud_medium_soft_values and loud_medium_soft_ratio must have the same number of values.\n"
-        f"Got {len(volume_levels_db)} volume levels but {len(volume_weights)} weights."
+        f"Error: loud_medium_soft_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, volume_percentages))} = {sum(volume_percentages)}"
+    )
+
+# Validate that volume levels and percentages match
+if len(volume_levels_db) != len(volume_percentages):
+    raise ValueError(
+        f"Error: loud_medium_soft_values and loud_medium_soft_percents must have the same number of values.\n"
+        f"Got {len(volume_levels_db)} volume levels but {len(volume_percentages)} percentages."
     )
 
 
@@ -138,12 +153,13 @@ def get_available_samples() -> dict[str, list[str]]:
     samples_by_type = {}
     for f in wav_files:
         stem = f.stem  # filename without extension
-        # Split on underscore and get [1] as sound type with suffix
+        # Split on underscore and get [2] as sound type with suffix
+        # e.g., "let-me-blow-ya-mind_oov_stab.1" -> parts[2] = "stab.1" -> "stab"
         parts = stem.split('_')
-        if len(parts) >= 2:
+        if len(parts) >= 3:
             # Extract sound type by removing numeric suffix after dot
-            # e.g., "kick.1" -> "kick", "snare.6" -> "snare"
-            sound_type_with_suffix = parts[1]
+            # e.g., "stab.1" -> "stab", "kick.1" -> "kick"
+            sound_type_with_suffix = parts[2]
             sound_type = sound_type_with_suffix.split('.')[0]
             
             if sound_type not in samples_by_type:
@@ -157,6 +173,109 @@ def get_available_samples() -> dict[str, list[str]]:
             samples_by_type[fallback_type].append(stem)
     
     return samples_by_type
+
+
+def get_sound_type(sample_name: str) -> str:
+    """Extract the sound type from a sample filename.
+    e.g., 'let-me-blow-ya-mind_oov_stab.1' -> 'stab'
+    """
+    parts = sample_name.split('_')
+    if len(parts) >= 3:
+        return parts[2].split('.')[0].lower()
+    return sample_name.split('.')[0].lower()
+
+
+# -------------------------------------------------------------------
+# Round-robin queue helpers — ensures each sample is used as evenly
+# as possible across all output files.
+# -------------------------------------------------------------------
+
+def build_sample_round_robin(samples_by_type: dict[str, list[str]]) -> tuple[deque, list[str]]:
+    """Build an initial shuffled round-robin queue from all samples.
+    Returns (queue, all_sample_names).
+    """
+    all_samples = [s for samples in samples_by_type.values() for s in samples]
+    shuffled = random.sample(all_samples, len(all_samples))
+    return deque(shuffled), all_samples
+
+
+def refill_round_robin_queue(sample_queue: deque, all_sample_names: list[str],
+                              used_once_samples: set[str]) -> None:
+    """Append a new shuffled round to the queue, excluding exhausted ONCE samples."""
+    eligible = [s for s in all_sample_names
+                if not (get_sound_type(s) == 'once' and s in used_once_samples)]
+    random.shuffle(eligible)
+    sample_queue.extend(eligible)
+
+
+def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
+                         used_once_samples: set[str],
+                         require_strings: bool | None = None) -> str | None:
+    """Pop the next usable sample from the round-robin queue.
+    Skips already-used ONCE samples; refills when the queue is empty.
+    require_strings: True = only strings samples, False = only non-strings samples, None = any
+    """
+    # Fast check: are there any eligible samples of the required type at all?
+    # If not, return None immediately to avoid unbounded queue growth.
+    if require_strings is not None:
+        any_eligible = any(
+            (get_sound_type(s) == 'strings') == require_strings
+            and not (get_sound_type(s) == 'once' and s in used_once_samples)
+            for s in all_sample_names
+        )
+        if not any_eligible:
+            return None
+
+    # Try the current queue first; if nothing matches, do one refill and try once more.
+    for pass_num in range(2):
+        if not sample_queue:
+            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+        if not sample_queue:
+            return None
+        if pass_num == 1:
+            # Second pass: refill before scanning to ensure fresh samples are present.
+            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+        for i in range(len(sample_queue)):
+            s = sample_queue[i]
+            if get_sound_type(s) == 'once' and s in used_once_samples:
+                continue
+            is_strings = get_sound_type(s) == 'strings'
+            if require_strings is True and not is_strings:
+                continue
+            if require_strings is False and is_strings:
+                continue
+            del sample_queue[i]
+            return s
+    return None
+
+
+def dequeue_partner_sample(sample_queue: deque, all_sample_names: list[str],
+                            sound_type: str, exclude_name: str,
+                            used_once_samples: set[str]) -> str | None:
+    """Find and remove the next sample of *sound_type* from the queue for a stereo pair.
+    Scans the existing queue first; falls back to any eligible sample of that type
+    (choosing least-recently used via a secondary search) when not found in queue.
+    """
+    # Search current queue
+    for i in range(len(sample_queue)):
+        s = sample_queue[i]
+        if s == exclude_name:
+            continue
+        if get_sound_type(s) != sound_type:
+            continue
+        if get_sound_type(s) == 'once' and s in used_once_samples:
+            continue
+        del sample_queue[i]
+        return s
+
+    # Not found in queue — pick any eligible sample of that type
+    eligible = [s for s in all_sample_names
+                if s != exclude_name
+                and get_sound_type(s) == sound_type
+                and not (get_sound_type(s) == 'once' and s in used_once_samples)]
+    if eligible:
+        return random.choice(eligible)
+    return None
 
 
 def ensure_input_files_exist() -> None:
@@ -314,7 +433,8 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
+                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, 
+                       use_four_beat: bool = False, use_two_beat: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
     Returns (padded stereo audio, volume_level_index).
@@ -326,48 +446,81 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         volume_pool: Pool of remaining volume level indices to choose from (quota-based)
         use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
         use_double_time: If True, pad to DOUBLE_TIMED_BEAT_LENGTH_SECONDS (half beat length)
+        use_four_beat: If True, pad to FOUR_BEAT_LENGTH_SECONDS (4 beats)
+        use_two_beat: If True, pad to TWO_BEAT_LENGTH_SECONDS (2 beats)
         is_centered: If True, sample is centered and should use centered volume pool
     """
     # Load and pan each sample
     mixed = None
     
-    # Determine target length based on flags
-    if use_double_time:
+    # Determine target length based on flags (priority order)
+    if use_four_beat:
+        target_length = FOUR_BEAT_LENGTH_SECONDS
+    elif use_two_beat:
+        target_length = TWO_BEAT_LENGTH_SECONDS
+    elif use_double_time:
         target_length = DOUBLE_TIMED_BEAT_LENGTH_SECONDS
     elif use_padded_length:
         target_length = PADDED_CENTERED_LENGTH_SECONDS
     else:
         target_length = BEAT_LENGTH_SECONDS
     
+    # Load and resample all samples first
+    loaded_audio: dict[str, np.ndarray] = {}
     for name in sample_names:
         audio, sr = load_audio(name)
-        
-        # Resample if needed
         if sr != sample_rate:
             audio = resample_audio(audio, sr, sample_rate)
-        
-        # Normalize individual sample to consistent loudness before mixing
-        audio = normalize_to_rms(audio, target_rms=0.15)
-        
-        # Apply panning
-        stereo = apply_pan(audio, pan_assignments[name])
-        
-        # Pad to target length
-        stereo = pad_to_length(stereo, sample_rate, target_length)
-        
+        loaded_audio[name] = audio
+
+    # For dualpan (stereo pair), truncate both samples to the length of the shorter one
+    if len(sample_names) == 2:
+        min_len = min(len(loaded_audio[n]) for n in sample_names)
+        for name in sample_names:
+            if len(loaded_audio[name]) > min_len:
+                loaded_audio[name] = loaded_audio[name][:min_len]
+
+    # Check whether all samples in this combination belong to the strings group
+    has_strings = any(get_sound_type(name) == 'strings' for name in sample_names)
+
+    for name in sample_names:
+        audio = loaded_audio[name]
+
+        if get_sound_type(name) == 'strings':
+            # STRINGS: skip normalisation, panning, and length truncation — preserve
+            # the file at its full natural length, as-is.
+            # If mono, duplicate to stereo center; if already stereo, use directly.
+            if audio.ndim == 1:
+                stereo = np.column_stack([audio, audio])
+            else:
+                stereo = audio
+        else:
+            # Normalize individual sample to consistent loudness before mixing
+            audio = normalize_to_rms(audio, target_rms=0.15)
+
+            # Apply panning
+            stereo = apply_pan(audio, pan_assignments[name])
+
+            # Pad to target length
+            stereo = pad_to_length(stereo, sample_rate, target_length)
+
         # Mix (sum)
         if mixed is None:
             mixed = stereo
         else:
             mixed = mixed + stereo
-    
-    # Normalize final mix to consistent RMS level
-    mixed = normalize_to_rms(mixed, target_rms=0.15)
-    
+
+    if not has_strings:
+        # Normalize final mix to consistent RMS level
+        mixed = normalize_to_rms(mixed, target_rms=0.15)
+
     # Select and apply volume level from quota pool
     db_reduction, volume_idx = select_volume_level_from_pool(volume_pool)
-    mixed = apply_volume_db(mixed, db_reduction)
-    
+
+    if not has_strings:
+        # Only adjust volume for non-strings combinations
+        mixed = apply_volume_db(mixed, db_reduction)
+
     return mixed, volume_idx
 
 
@@ -420,100 +573,110 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
     return -position if side == 'left' else position
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str], 
+def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
-                               left_pan_history: list[float], right_pan_history: list[float]) -> tuple[list[str], dict[str, str]]:
-    """Generate a random unique combination using weighted panning patterns.
-    Only combines samples with the same sound type.
-    Only allows 3 specific patterns:
+                               left_pan_history: list[float], right_pan_history: list[float],
+                               sample_round_robin: deque, all_sample_names: list[str],
+                               require_strings: bool | None = None) -> tuple[list[str], dict[str, str]]:
+    """Generate a combination using round-robin sample selection + quota-based panning.
+
+    Sample selection: samples are drawn from a shuffled round-robin queue so that
+    every input file is used roughly the same number of times.  Once all samples
+    have been used once the queue is refilled in a new random order, giving the
+    next "round".
+
+    Panning patterns (unchanged):
     1. 1 sample, center only
     2. 1 sample, left or right (quota-based for 50/50 distribution)
     3. 2 samples, stereo pair (1 left + 1 right)
-    
-    ONCE samples (subset of SOLO): isolated, centered, appear once
-    SOLO samples: isolated, can pan left/center/right, can repeat
-    Regular samples: can be combined, use all patterns
-    
+
+    ONCE samples: isolated, centered, appear exactly once.
+    SOLO samples: isolated, can pan left/center/right, no stereo pairs.
+    Regular samples: can be combined, use all patterns.
+
     Returns (sample_names, pan_assignments)
     """
-    # First, randomly select a sound type
-    sound_type = random.choice(list(samples_by_type.keys()))
-    available_samples = samples_by_type[sound_type]
-    
-    # For ONCE samples, filter out already-used ones
-    if sound_type.lower() == 'once':
-        available_samples = [s for s in available_samples if s not in used_once_samples]
-        # If no ONCE samples left, return None to signal retry
-        if not available_samples:
-            return None, None
-    
-    # Build pattern pool based on sound type and remaining quotas
-    if sound_type.lower() == 'once':
+    # ----------------------------------------------------------------
+    # Step 1: dequeue the primary sample from the round-robin queue
+    # ----------------------------------------------------------------
+    primary = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples, require_strings)
+    if primary is None:
+        return None, None
+
+    sound_type = get_sound_type(primary)
+
+    # ----------------------------------------------------------------
+    # Step 2: choose panning pattern based on type + remaining quotas
+    # ----------------------------------------------------------------
+    if sound_type == 'once':
         # ONCE: always isolated and centered
         pattern_pool = ['center_only']
-    elif sound_type.lower() == 'solo':
-        # SOLO: isolated but can pan left/center/right (exclude stereo_pair)
-        # Use quotas to ensure exact ratio and left/right balance
+    elif sound_type == 'strings':
+        # STRINGS: always isolated and centered; volume and panning are not adjusted
+        pattern_pool = ['center_only']
+    elif sound_type == 'solo':
+        # SOLO: isolated but can pan left/center/right (no stereo pairs)
         pattern_pool = (
-            ['center_only'] * center_quota + 
+            ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota
         )
     else:
-        # Regular samples: use all patterns with quotas
+        # Regular: all patterns allowed
         pattern_pool = (
-            ['center_only'] * center_quota + 
+            ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota +
             ['stereo_pair'] * dualpan_quota
         )
-    
-    # If pool is empty (all quotas exhausted), return None
+
     if not pattern_pool:
         return None, None
-    
-    # Select a pattern type
+
     pattern_type = random.choice(pattern_pool)
-    
+
+    # ----------------------------------------------------------------
+    # Step 3: build sample list and pan assignments
+    # ----------------------------------------------------------------
     if pattern_type == 'center_only':
-        # Pattern 1: 1 sample, center
-        sample_names = random.sample(available_samples, 1)
-        pan_assignments = {sample_names[0]: 'center'}
-    
+        sample_names = [primary]
+        pan_assignments = {primary: 'center'}
+
     elif pattern_type == 'left_only':
-        # Pattern 2a: 1 sample, panned left
-        # Use statistical balancing to ensure even distribution
-        sample_names = random.sample(available_samples, 1)
+        sample_names = [primary]
         pan_position = select_balanced_pan_position('left', left_pan_history)
-        pan_assignments = {sample_names[0]: pan_position}
-    
+        pan_assignments = {primary: pan_position}
+
     elif pattern_type == 'right_only':
-        # Pattern 2b: 1 sample, panned right
-        # Use statistical balancing to ensure even distribution
-        sample_names = random.sample(available_samples, 1)
+        sample_names = [primary]
         pan_position = select_balanced_pan_position('right', right_pan_history)
-        pan_assignments = {sample_names[0]: pan_position}
-    
+        pan_assignments = {primary: pan_position}
+
     else:  # stereo_pair
-        # Pattern 3: 2 samples, one left and one right
-        if len(available_samples) < 2:
-            # Fallback to center if we don't have enough samples of this type
-            sample_names = random.sample(available_samples, 1)
-            pan_assignments = {sample_names[0]: 'center'}
+        partner = dequeue_partner_sample(
+            sample_round_robin, all_sample_names,
+            sound_type, primary, used_once_samples
+        )
+        if partner is None:
+            # Can't form a pair — fall back to center
+            sample_names = [primary]
+            pan_assignments = {primary: 'center'}
         else:
-            sample_names = random.sample(available_samples, 2)
-            # For stereo pairs, use hard panning for clear separation
-            pan_assignments = {
-                sample_names[0]: -1.0,
-                sample_names[1]: 1.0
-            }
-    
+            sample_names = [primary, partner]
+            dualpan_style = random.choice(['left-right', 'left-center', 'right-center'])
+            if dualpan_style == 'left-right':
+                pan_assignments = {primary: -1.0, partner: 1.0}
+            elif dualpan_style == 'left-center':
+                pan_assignments = {primary: -1.0, partner: 'center'}
+            else:  # right-center
+                pan_assignments = {primary: 1.0, partner: 'center'}
+
     return sample_names, pan_assignments
 
 
-def format_filename(sample_names: list[str], pan_assignments: dict[str, str], index: int) -> str:
+def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int, beat_suffix: str = "1beat") -> str:
     """
-    Format filename as: left_center_right_NNN.wav
+    Format filename as: left_center_right_vol_X_pan_Y_NNN_Xbeat.wav
     Only includes samples that are present, in pan order.
     """
     # Create list of (pan_position, sample_name) tuples
@@ -538,9 +701,18 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], in
     # Extract sorted sample names
     sorted_names = [name.lower() for _, name in samples_by_pan]
     
+    # Calculate average pan position for filename
+    avg_pan = sum(p for p, _ in samples_by_pan) / len(samples_by_pan)
+    
+    # Format volume (remove decimal if it's a whole number, use abs value)
+    vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
+    
+    # Format panning (use absolute value, rounded to 1 decimal)
+    pan_str = f"{abs(avg_pan):.1f}"
+    
     # Build filename
     name_part = "_".join(sorted_names)
-    return f"{name_part}_{index:03d}.wav"
+    return f"{name_part}_vol_{vol_str}_pan_{pan_str}_{index:03d}_{beat_suffix}.wav"
 
 
 def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
@@ -558,23 +730,6 @@ def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> 
     sf.write(output_path, silence_audio, sample_rate)
 
 
-def import_folder_to_music(folder: Path) -> str:
-    """Import entire folder to iTunes/Music in one operation."""
-    script = f'''
-tell application "Music"
-    add (POSIX file "{folder.resolve()}/")
-end tell
-'''
-    try:
-        result = subprocess.run(
-            ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.stderr}"
 
 
 # -------------------------------------------------------------------
@@ -599,11 +754,38 @@ def main() -> None:
     once_samples_count = len(samples_by_type.get('once', []))
     print(f"Found {once_samples_count} ONCE samples (always centered)\n")
     
-    # Calculate how many samples will use each pattern based on ratio
-    total_ratio_parts = CENTER_ONLY_WEIGHT + NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
-    center_quota = int(NUM_UNIQUE_SAMPLES * CENTER_ONLY_WEIGHT / total_ratio_parts)
-    noncenter_quota = int(NUM_UNIQUE_SAMPLES * NON_CENTER_ONLY_WEIGHT / total_ratio_parts)
-    dualpan_quota = int(NUM_UNIQUE_SAMPLES * DUALPAN_WEIGHT / total_ratio_parts)
+    # Calculate how many samples will use each pattern based on percentages
+    center_quota = int(NUM_AUDIO_SAMPLES * CENTER_ONLY_WEIGHT / 100)
+    noncenter_quota = int(NUM_AUDIO_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
+    dualpan_quota = int(NUM_AUDIO_SAMPLES * DUALPAN_WEIGHT / 100)
+
+    # Cap center_quota to the number of unique audio files (each center combo is 1 file = 1 unique slot)
+    if center_quota > total_samples:
+        center_overflow = center_quota - total_samples
+        center_quota = total_samples
+        # Redistribute overflow proportionally to noncenter and dualpan
+        non_center_total_weight = NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
+        if non_center_total_weight > 0:
+            noncenter_quota += int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
+            dualpan_quota += center_overflow - int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
+        else:
+            dualpan_quota += center_overflow
+        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to noncenter/dualpan.\n")
+
+    # Handle case where num_audio_samples is very small and all quotas round to 0
+    # Distribute remaining samples proportionally
+    total_allocated = center_quota + noncenter_quota + dualpan_quota
+    remaining_samples = NUM_AUDIO_SAMPLES - total_allocated
+    if remaining_samples > 0:
+        # Allocate remaining samples based on weights
+        weights = [CENTER_ONLY_WEIGHT, NON_CENTER_ONLY_WEIGHT, DUALPAN_WEIGHT]
+        max_weight_idx = weights.index(max(weights))
+        if max_weight_idx == 0:
+            center_quota += remaining_samples
+        elif max_weight_idx == 1:
+            noncenter_quota += remaining_samples
+        else:
+            dualpan_quota += remaining_samples
     
     # Split noncenter quota evenly between left and right for 50/50 distribution
     left_quota = noncenter_quota // 2
@@ -613,12 +795,12 @@ def main() -> None:
     if once_samples_count > center_quota:
         raise ValueError(
             f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
-            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_ratio')}' allocates {center_quota} center slots "
-            f"out of {NUM_UNIQUE_SAMPLES} total samples.\n"
+            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_percents')}' allocates {center_quota} center slots "
+            f"out of {NUM_AUDIO_SAMPLES} audio samples.\n"
             f"Either:\n"
             f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
-            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_ratio, or\n"
-            f"  3. Increase num_unique_samples to {int(once_samples_count * total_ratio_parts / CENTER_ONLY_WEIGHT)} or more"
+            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_percents, or\n"
+            f"  3. Increase num_unique_samples to {int(once_samples_count * 100 / (SAMPLES_PERCENT * CENTER_ONLY_WEIGHT / 100))} or more"
         )
     
     # Adjust quotas: ONCE samples consume center quota
@@ -631,20 +813,31 @@ def main() -> None:
     adjusted_right_weight = right_quota
     adjusted_dualpan_weight = dualpan_quota
     
-    print("Generating unique combinations...\n")
+    # Calculate strings vs non-strings quotas based on samples_to_strings_ratio
+    num_strings_samples = int(NUM_AUDIO_SAMPLES * STRINGS_PERCENT / 100)
+    num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+
+    sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
+    sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
     
     # Track combinations to ensure uniqueness
     seen_combinations = set()
     used_once_samples = set()  # Track ONCE samples that have been used (can only appear once)
     created_count = 0
     attempts = 0
-    max_attempts = NUM_UNIQUE_SAMPLES * 100  # Prevent infinite loop
+    max_attempts = NUM_AUDIO_SAMPLES * 100  # Prevent infinite loop
     
     # Quota-based generation: track how many of each pattern we still need
     center_quota_remaining = adjusted_center_weight
     left_quota_remaining = adjusted_left_weight
     right_quota_remaining = adjusted_right_weight
     dualpan_quota_remaining = adjusted_dualpan_weight
+
+    # Strings vs non-strings quota tracking
+    strings_quota_remaining = num_strings_samples
+    non_strings_quota_remaining = num_non_strings_samples
+    strings_created_count = 0
+    non_strings_created_count = 0
     
     # Track panning distribution
     center_count = 0
@@ -660,30 +853,16 @@ def main() -> None:
     volume_counts = [0] * len(volume_levels_db)
     
     # Initialize volume quota pool (quota-based selection)
-    # Calculate how many samples should use each volume level
-    total_volume_weight = sum(volume_weights)
+    # Calculate how many samples should use each volume level based on percentages
     volume_quotas = []
-    for weight in volume_weights:
-        quota = int(NUM_UNIQUE_SAMPLES * weight / total_volume_weight)
+    for pct in volume_percentages:
+        quota = int(NUM_AUDIO_SAMPLES * pct / 100)
         volume_quotas.append(quota)
     
-    # Calculate volume quotas for different panning types
-    centered_volume_quota = center_quota  # All centered samples use first volume level
-    non_centered_volume_quota = noncenter_quota  # All non-centered samples use last volume level
-    last_volume_idx = len(volume_levels_db) - 1
-    
-    # Adjust volume quotas to account for centered and non-centered samples
-    adjusted_volume_quotas = volume_quotas.copy()
-    adjusted_volume_quotas[0] = max(0, volume_quotas[0] - centered_volume_quota)  # Remove centered from first
-    adjusted_volume_quotas[last_volume_idx] = max(0, volume_quotas[last_volume_idx] - non_centered_volume_quota)  # Remove non-centered from last
-    
-    # Build separate volume pools for centered, non-centered, and dualpan samples
-    centered_volume_pool = [0] * centered_volume_quota  # All indices point to first volume level
-    non_centered_volume_pool = [last_volume_idx] * non_centered_volume_quota  # All indices point to last volume level
-    
-    dualpan_volume_pool = []
-    for idx, quota in enumerate(adjusted_volume_quotas):
-        dualpan_volume_pool.extend([idx] * quota)
+    # Build shared volume pool for all samples (all panning types can have any volume)
+    volume_pool = []
+    for idx, quota in enumerate(volume_quotas):
+        volume_pool.extend([idx] * quota)
     
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
@@ -695,44 +874,88 @@ def main() -> None:
     centered_created_count = 0
     
     # Calculate how many samples should be double-timed
-    num_double_timed = int(NUM_UNIQUE_SAMPLES * DOUBLE_TIMED_PERCENT)
+    num_double_timed = int(NUM_AUDIO_SAMPLES * EIGHTH_NOTE_SAMPLES_PERCENT)
     double_timed_count = 0
     
-    while created_count < NUM_UNIQUE_SAMPLES and attempts < max_attempts:
+    # Calculate how many samples should have 4-beat and 2-beat durations
+    num_four_beat = int(NUM_AUDIO_SAMPLES * FOUR_BEAT_DURATION_PERCENT)
+    num_two_beat = int(NUM_AUDIO_SAMPLES * TWO_BEAT_DURATION_PERCENT)
+    four_beat_count = 0
+    two_beat_count = 0
+    
+    while created_count < NUM_AUDIO_SAMPLES and attempts < max_attempts:
         attempts += 1
-        
+
+        # Determine whether the next sample should be strings or non-strings
+        # based on remaining quotas to hit the configured ratio.
+        if strings_quota_remaining > 0 and non_strings_quota_remaining > 0:
+            total_remaining = strings_quota_remaining + non_strings_quota_remaining
+            require_strings = random.random() < (strings_quota_remaining / total_remaining)
+        elif strings_quota_remaining > 0:
+            require_strings = True
+        else:
+            require_strings = False
+
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-            left_pan_history, right_pan_history
+            left_pan_history, right_pan_history,
+            sample_round_robin, all_sample_names,
+            require_strings
         )
         
-        # Check if combination generation failed (e.g., no more ONCE samples available)
+        # Check if combination generation failed
         if sample_names is None:
-            continue
+            # If we were trying to find a strings sample and none are available, fall back
+            # to non-strings so we don't spin forever on an unsatisfiable quota.
+            if require_strings is True:
+                sample_names, pan_assignments = generate_unique_combination(
+                    samples_by_type, used_once_samples,
+                    center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+                    left_pan_history, right_pan_history,
+                    sample_round_robin, all_sample_names,
+                    require_strings=False
+                )
+            if sample_names is None:
+                continue
         
         # Create unique key for this combination
         combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
         
-        # Check if we've seen this exact combination before
-        if combo_key in seen_combinations:
-            continue
+        # Strings combos are allowed to repeat (round-robin reuse), so skip the
+        # uniqueness check for them — just like how non-strings cycle through again
+        # after all samples have been used once.
+        is_strings_combo = any(get_sound_type(name) == 'strings' for name in sample_names)
+        if not is_strings_combo:
+            if combo_key in seen_combinations:
+                continue
+            seen_combinations.add(combo_key)
         
-        seen_combinations.add(combo_key)
+        # Track per-sample usage for the round-robin fairness report
+        for name in sample_names:
+            sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
         
         # Mark ONCE samples as used (they can only appear once)
         for name in sample_names:
             # Check if this sample is from the ONCE sound type
             parts = name.split('_')
-            if len(parts) >= 2:
-                sound_type_with_suffix = parts[1]
+            if len(parts) >= 3:
+                sound_type_with_suffix = parts[2]
                 sound_type = sound_type_with_suffix.split('.')[0]
                 if sound_type.lower() == 'once':
                     used_once_samples.add(name)
         
         created_count += 1
-        
+
+        # Track strings vs non-strings against quota
+        if is_strings_combo:
+            strings_created_count += 1
+            strings_quota_remaining = max(0, strings_quota_remaining - 1)
+        else:
+            non_strings_created_count += 1
+            non_strings_quota_remaining = max(0, non_strings_quota_remaining - 1)
+
         # Track panning pattern and update quotas
         pan_positions = list(pan_assignments.values())
         is_centered = False
@@ -740,9 +963,18 @@ def main() -> None:
         is_dualpan = False
         use_padded_length = False
         use_double_time = False
+        use_four_beat = False
+        use_two_beat = False
         
-        # Decide if this sample should be double-timed (applies to all panning types)
-        if double_timed_count < num_double_timed:
+        # Decide beat duration (priority: 4-beat > 2-beat > double-time)
+        # These are mutually exclusive
+        if four_beat_count < num_four_beat:
+            use_four_beat = True
+            four_beat_count += 1
+        elif two_beat_count < num_two_beat:
+            use_two_beat = True
+            two_beat_count += 1
+        elif double_timed_count < num_double_timed:
             use_double_time = True
             double_timed_count += 1
         
@@ -753,8 +985,8 @@ def main() -> None:
                 centered_created_count += 1
                 center_quota_remaining = max(0, center_quota_remaining - 1)
                 
-                # Decide if this centered sample should be padded (only if NOT double-timed)
-                if not use_double_time and padded_centered_count < num_padded_centered:
+                # Decide if this centered sample should be padded (only if NOT using any other duration)
+                if not use_four_beat and not use_two_beat and not use_double_time and padded_centered_count < num_padded_centered:
                     use_padded_length = True
                     padded_centered_count += 1
             else:  # left or right (numeric pan value)
@@ -775,45 +1007,62 @@ def main() -> None:
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
-        # Create the audio with appropriate volume pool
+        # Create the audio using shared volume pool (all panning types can have any volume)
         if is_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, centered_volume_pool, use_padded_length, use_double_time, is_centered=True)
-            # Remove used volume index from centered pool
-            if volume_idx in centered_volume_pool:
-                centered_volume_pool.remove(volume_idx)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=True)
         elif is_non_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, non_centered_volume_pool, use_padded_length, use_double_time, is_centered=False)
-            # Remove used volume index from non-centered pool
-            if volume_idx in non_centered_volume_pool:
-                non_centered_volume_pool.remove(volume_idx)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
         else:  # is_dualpan
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, dualpan_volume_pool, use_padded_length, use_double_time, is_centered=False)
-            # Remove used volume index from dualpan pool
-            if volume_idx in dualpan_volume_pool:
-                dualpan_volume_pool.remove(volume_idx)
-            if volume_idx in non_centered_volume_pool:
-                non_centered_volume_pool.remove(volume_idx)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
+        
+        # Remove used volume index from shared pool
+        if volume_idx in volume_pool:
+            volume_pool.remove(volume_idx)
         
         # Track volume level
         volume_counts[volume_idx] += 1
+        volume_db = volume_levels_db[volume_idx]
         
         # Generate filename
-        filename = format_filename(sample_names, pan_assignments, created_count)
+        if use_four_beat:
+            beat_suffix = "4beat"
+        elif use_two_beat:
+            beat_suffix = "2beat"
+        elif use_double_time:
+            beat_suffix = "halfbeat"
+        else:
+            beat_suffix = "1beat"
+        filename = format_filename(sample_names, pan_assignments, volume_db, created_count, beat_suffix)
         output_path = OUTPUT_DIR / filename
         
         # Save
         sf.write(output_path, combined_audio, sample_rate)
         
-        if created_count % 10 == 0 or created_count == NUM_UNIQUE_SAMPLES:
-            print(f"  Created {created_count}/{NUM_UNIQUE_SAMPLES} samples...")
+        if created_count % 10 == 0 or created_count == NUM_AUDIO_SAMPLES:
+            print(f"  Created {created_count}/{NUM_AUDIO_SAMPLES} samples...")
     
-    if created_count < NUM_UNIQUE_SAMPLES:
-        print(f"\nWarning: Only created {created_count} unique combinations.")
-        print("Consider reducing num_unique_samples in config.json")
+    if created_count < NUM_AUDIO_SAMPLES:
+        print(f"\nWarning: Only created {created_count} audio samples (expected {NUM_AUDIO_SAMPLES}).")
+        print("Consider reducing num_unique_samples or samples_to_silence_percents in config.json")
     else:
-        print(f"\nComplete! Created {created_count} unique samples.")
+        print(f"\nComplete! Created {created_count} audio samples.")
     
     print(f"  Output: {OUTPUT_DIR.resolve()}")
+    
+    # Display sample usage distribution (round-robin fairness report)
+    usage_values = list(sample_usage_count.values())
+    if usage_values:
+        min_uses = min(usage_values)
+        max_uses = max(usage_values)
+        avg_uses = sum(usage_values) / len(usage_values)
+        print(f"\nSample Usage Distribution (round-robin):")
+        print(f"  Total input samples: {len(all_sample_names)}")
+        print(f"  Min uses: {min_uses}  Max uses: {max_uses}  Avg: {avg_uses:.2f}")
+        if max_uses - min_uses <= 1:
+            print(f"  ✓ Perfectly even — all samples used {min_uses}–{max_uses} times")
+        else:
+            outliers = [s for s, c in sample_usage_count.items() if c == max_uses]
+            print(f"  ⚠  Spread of {max_uses - min_uses} ({len(outliers)} sample(s) at max)")
     
     # Display panning distribution
     from math import gcd
@@ -835,26 +1084,31 @@ def main() -> None:
     realized_ratio = f"{center_count//ratio_gcd}:{noncenter_count//ratio_gcd}:{dualpan_count//ratio_gcd}"
     
     # Calculate percentage differences from target
-    target_center_pct = (center_quota / created_count) * 100
-    target_noncenter_pct = (noncenter_quota / created_count) * 100
-    target_dualpan_pct = (dualpan_quota / created_count) * 100
-    
-    actual_center_pct = (center_count / created_count) * 100
-    actual_noncenter_pct = (noncenter_count / created_count) * 100
-    actual_dualpan_pct = (dualpan_count / created_count) * 100
-    
-    center_diff = actual_center_pct - target_center_pct
-    noncenter_diff = actual_noncenter_pct - target_noncenter_pct
-    dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+    if created_count > 0:
+        target_center_pct = (center_quota / created_count) * 100
+        target_noncenter_pct = (noncenter_quota / created_count) * 100
+        target_dualpan_pct = (dualpan_quota / created_count) * 100
+        
+        actual_center_pct = (center_count / created_count) * 100
+        actual_noncenter_pct = (noncenter_count / created_count) * 100
+        actual_dualpan_pct = (dualpan_count / created_count) * 100
+        
+        center_diff = actual_center_pct - target_center_pct
+        noncenter_diff = actual_noncenter_pct - target_noncenter_pct
+        dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+    else:
+        target_center_pct = target_noncenter_pct = target_dualpan_pct = 0
+        actual_center_pct = actual_noncenter_pct = actual_dualpan_pct = 0
+        center_diff = noncenter_diff = dualpan_diff = 0
     
     deviation_ratio = f"{center_diff:+.3f}%:{noncenter_diff:+.3f}%:{dualpan_diff:+.3f}%"
     
     print(f"\nPanning Distribution:")
-    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1')}")
+    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_percents', '33:33:34')}")
     print(f"  Realized ratio: {realized_ratio}")
     
     # Calculate perfect ratio scaled to match realized first value
-    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_ratio', '1:1:1').split(':')]
+    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_percents', '33:33:34').split(':')]
     realized_parts = [int(x) for x in realized_ratio.split(':')]
     scale_factor = realized_parts[0] / config_ratio_parts[0] if config_ratio_parts[0] != 0 else 1
     perfect_ratio_parts = [int(x * scale_factor) for x in config_ratio_parts]
@@ -888,16 +1142,34 @@ def main() -> None:
     # Display double-timed samples info
     if double_timed_count > 0:
         double_timed_pct = (double_timed_count / created_count) * 100 if created_count > 0 else 0
-        target_double_timed_pct = DOUBLE_TIMED_PERCENT * 100
+        target_double_timed_pct = EIGHTH_NOTE_SAMPLES_PERCENT * 100
         print(f"\nDouble-Timed Samples:")
         print(f"  Target: {target_double_timed_pct:.1f}% of all samples")
         print(f"  Realized: {double_timed_count}/{created_count} = {double_timed_pct:.1f}%")
         print(f"  BPM: {config['bpm'] * 2} (double-time)")
         print(f"  Length: {DOUBLE_TIMED_BEAT_LENGTH_SECONDS:.3f}s (half of {BEAT_LENGTH_SECONDS:.3f}s)")
     
+    # Display 4-beat duration samples info
+    if four_beat_count > 0:
+        four_beat_pct = (four_beat_count / created_count) * 100 if created_count > 0 else 0
+        target_four_beat_pct = FOUR_BEAT_DURATION_PERCENT * 100
+        print(f"\n4-Beat Duration Samples:")
+        print(f"  Target: {target_four_beat_pct:.1f}% of all samples")
+        print(f"  Realized: {four_beat_count}/{created_count} = {four_beat_pct:.1f}%")
+        print(f"  Length: {FOUR_BEAT_LENGTH_SECONDS:.3f}s (4 beats at {config['bpm']} BPM)")
+    
+    # Display 2-beat duration samples info
+    if two_beat_count > 0:
+        two_beat_pct = (two_beat_count / created_count) * 100 if created_count > 0 else 0
+        target_two_beat_pct = TWO_BEAT_DURATION_PERCENT * 100
+        print(f"\n2-Beat Duration Samples:")
+        print(f"  Target: {target_two_beat_pct:.1f}% of all samples")
+        print(f"  Realized: {two_beat_count}/{created_count} = {two_beat_pct:.1f}%")
+        print(f"  Length: {TWO_BEAT_LENGTH_SECONDS:.3f}s (2 beats at {config['bpm']} BPM)")
+    
     # Display volume distribution
     print(f"\nVolume Distribution:")
-    print(f"  Config ratio: {config.get('loud_medium_soft_ratio', '1')}")
+    print(f"  Config ratio: {config.get('loud_medium_soft_percents', '100')}")
     print(f"  Config values: {config.get('loud_medium_soft_values', '0')} dB")
     
     # Calculate realized ratio
@@ -924,26 +1196,22 @@ def main() -> None:
         pct = (count / created_count) * 100 if created_count > 0 else 0
         print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
     
-    # Generate silence files based on samples_to_silence_ratio
-    if SILENCE_COUNT > 0 and SAMPLES_COUNT > 0:
-        # Calculate total number of silence files needed
-        num_silence_files = int((created_count / SAMPLES_COUNT) * SILENCE_COUNT)
-        
+    # Generate silence files based on samples_to_silence_percents
+    if SILENCE_PERCENT > 0 and NUM_SILENCE_FILES > 0:
         print(f"\nGenerating silence files...")
-        print(f"  Ratio: {SAMPLES_COUNT}:{SILENCE_COUNT} (samples:silence)")
-        print(f"  Total silence files to create: {num_silence_files}")
+        print(f"  Ratio: {SAMPLES_PERCENT}:{SILENCE_PERCENT} (samples:silence percentages)")
+        print(f"  Total silence files to create: {NUM_SILENCE_FILES}")
         
-        # Calculate distribution of silence files across different lengths based on weights
-        total_weight = sum(SILENCE_LENGTH_WEIGHTS)
+        # Calculate distribution of silence files across different lengths based on percentages
         silence_counts_by_length = []
-        remaining_files = num_silence_files
+        remaining_files = NUM_SILENCE_FILES
         
-        for i, weight in enumerate(SILENCE_LENGTH_WEIGHTS):
-            if i == len(SILENCE_LENGTH_WEIGHTS) - 1:
+        for i, pct in enumerate(SILENCE_LENGTH_PERCENTAGES):
+            if i == len(SILENCE_LENGTH_PERCENTAGES) - 1:
                 # Last length gets remaining files to ensure we hit exact total
                 count = remaining_files
             else:
-                count = int((num_silence_files * weight) / total_weight)
+                count = int(NUM_SILENCE_FILES * pct / 100)
                 remaining_files -= count
             silence_counts_by_length.append(count)
         
@@ -960,26 +1228,25 @@ def main() -> None:
             for i in range(count):
                 create_silence_file(sample_rate, length_sec, file_counter)
                 file_counter += 1
-                if file_counter % 10 == 1 or file_counter == num_silence_files + 1:
-                    print(f"    Created {file_counter - 1}/{num_silence_files} silence files...", end="\r")
+                if file_counter % 10 == 1 or file_counter == NUM_SILENCE_FILES + 1:
+                    print(f"    Created {file_counter - 1}/{NUM_SILENCE_FILES} silence files...", end="\r")
         
-        print(f"    Created {num_silence_files}/{num_silence_files} silence files...")
+        print(f"    Created {NUM_SILENCE_FILES}/{NUM_SILENCE_FILES} silence files...")
         
-        total_files = created_count + num_silence_files
-        print(f"\nTotal files created: {total_files} ({created_count} samples + {num_silence_files} silence)")
+        total_files_created = created_count + NUM_SILENCE_FILES
+        print(f"\nTotal files created: {total_files_created} ({created_count} samples + {NUM_SILENCE_FILES} silence)")
     else:
-        total_files = created_count
+        total_files_created = created_count
     
-    # Import to iTunes
-    print("\n" + "="*60)
-    print("Importing entire folder to iTunes/Music...")
-    print("This may take a moment...\n")
-    
-    result = import_folder_to_music(OUTPUT_DIR)
-    
-    print(f"Import complete!")
-    print(f"  Imported folder: {OUTPUT_DIR.resolve()}")
-    print(f"  Total files: {total_files}")
+    # Display strings distribution
+    if STRINGS_PERCENT > 0:
+        strings_pct = (strings_created_count / created_count) * 100 if created_count > 0 else 0
+        non_strings_pct = (non_strings_created_count / created_count) * 100 if created_count > 0 else 0
+        print(f"\nStrings Distribution:")
+        print(f"  Config ratio: {config.get('samples_to_strings_ratio', '100:0')} (non-strings:strings)")
+        print(f"  Target: {NON_STRINGS_PERCENT}% non-strings / {STRINGS_PERCENT}% strings")
+        print(f"  Realized: {non_strings_created_count} non-strings ({non_strings_pct:.1f}%) / {strings_created_count} strings ({strings_pct:.1f}%)")
+
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
 
