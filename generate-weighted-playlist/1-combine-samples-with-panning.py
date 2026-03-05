@@ -97,8 +97,8 @@ TWO_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 2.0
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
-NON_CENTER_PAN_MIN = 0.35  # Minimum distance from center (applies to both sides)
-NON_CENTER_PAN_MAX = 1.0  # Maximum distance from center (applies to both sides)
+NON_CENTER_PAN_MIN = 0.5  # Minimum distance from center (applies to both sides)
+NON_CENTER_PAN_MAX = 0.5  # Maximum distance from center (applies to both sides)
 
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
@@ -538,7 +538,12 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
     # Define the range for this side (always work with positive values)
     range_min = NON_CENTER_PAN_MIN
     range_max = NON_CENTER_PAN_MAX
-    
+
+    # If min and max are equal, the pan position is fixed — no need for distribution logic
+    if range_min == range_max:
+        position = range_min
+        return -position if side == 'left' else position
+
     if not pan_history:
         # No history yet, pick random position
         position = random.uniform(range_min, range_max)
