@@ -6,7 +6,7 @@
   "itunes_dir": "/Users/martinconnor/Music/Music/Media.localized/Music/Unknown Artist/Unknown Album",
   "bpm": 117,
   "num_unique_samples": 100,
-  "center_to_noncenter_to_dualpan_percents": "50:30:20",
+  "center_diagonal_dualpan_leftorright_percents": "50:30:20:0",
   "samples_to_silence_percents": "98:2",
   "loud_medium_soft_values": "0:-30",
   "loud_medium_soft_percents": "60:40",
