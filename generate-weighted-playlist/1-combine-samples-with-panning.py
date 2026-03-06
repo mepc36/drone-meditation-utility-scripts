@@ -32,16 +32,22 @@ OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]  # Total files (audio + silence)
 
-# Parse center_to_noncenter_to_dualpan_percents (e.g., "16:58:26" means 16% center-only : 58% non-center-only : 26% dualpan)
-panning_pattern_parts = [int(x) for x in config.get("center_to_noncenter_to_dualpan_percents", "33:33:34").split(":")]
+# Parse center_diagonal_dualpan_leftorright_percents (e.g., "16:48:26:10" means 16% center : 48% diagonal : 26% dualpan : 10% hard left or right)
+panning_pattern_parts = [int(x) for x in config.get("center_diagonal_dualpan_leftorright_percents", "33:33:34:0").split(":")]
+if len(panning_pattern_parts) != 4:
+    raise ValueError(
+        f"Error: center_diagonal_dualpan_leftorright_percents must have exactly 4 colon-separated values (center:diagonal:dualpan:leftorright).\n"
+        f"Got: {':'.join(map(str, panning_pattern_parts))}"
+    )
 if sum(panning_pattern_parts) != 100:
     raise ValueError(
-        f"Error: center_to_noncenter_to_dualpan_percents percentages must sum to exactly 100.\n"
+        f"Error: center_diagonal_dualpan_leftorright_percents percentages must sum to exactly 100.\n"
         f"Got: {':'.join(map(str, panning_pattern_parts))} = {sum(panning_pattern_parts)}"
     )
 CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # Percentage, center
-NON_CENTER_ONLY_WEIGHT = panning_pattern_parts[1]  # Percentage, hard left or right
-DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right
+DIAGONAL_WEIGHT = panning_pattern_parts[1]  # Percentage, diagonal left or right
+DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right stereo pair
+LEFTORRIGHT_WEIGHT = panning_pattern_parts[3]  # Percentage, hard left or hard right
 
 # Parse samples_to_silence_percents (e.g., "87:13" means 87% samples : 13% silence)
 silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
@@ -325,6 +331,12 @@ def apply_pan(audio: np.ndarray, pan_position) -> np.ndarray:
     if pan_position == 'center':
         left = audio
         right = audio
+    elif pan_position == 'hard_left':
+        left = audio * HARD_PAN_GAIN
+        right = np.zeros_like(audio)
+    elif pan_position == 'hard_right':
+        left = np.zeros_like(audio)
+        right = audio * HARD_PAN_GAIN
     else:
         # Numeric pan position: use equal-power panning curve
         # Convert pan (-1 to 1) to angle (0 to π/2)
@@ -580,6 +592,7 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
 
 def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
+                               hard_left_quota: int, hard_right_quota: int,
                                left_pan_history: list[float], right_pan_history: list[float],
                                sample_round_robin: deque, all_sample_names: list[str],
                                require_strings: bool | None = None) -> tuple[list[str], dict[str, str]]:
@@ -590,10 +603,11 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     have been used once the queue is refilled in a new random order, giving the
     next "round".
 
-    Panning patterns (unchanged):
+    Panning patterns:
     1. 1 sample, center only
-    2. 1 sample, left or right (quota-based for 50/50 distribution)
+    2. 1 sample, diagonal left or right (quota-based for 50/50 distribution)
     3. 2 samples, stereo pair (1 left + 1 right)
+    4. 1 sample, hard left or hard right (quota-based for 50/50 distribution)
 
     ONCE samples: isolated, centered, appear exactly once.
     SOLO samples: isolated, can pan left/center/right, no stereo pairs.
@@ -624,7 +638,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         pattern_pool = (
             ['center_only'] * center_quota +
             ['left_only'] * left_quota +
-            ['right_only'] * right_quota
+            ['right_only'] * right_quota +
+            ['hard_left_only'] * hard_left_quota +
+            ['hard_right_only'] * hard_right_quota
         )
     else:
         # Regular: all patterns allowed
@@ -632,7 +648,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
             ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota +
-            ['stereo_pair'] * dualpan_quota
+            ['stereo_pair'] * dualpan_quota +
+            ['hard_left_only'] * hard_left_quota +
+            ['hard_right_only'] * hard_right_quota
         )
 
     if not pattern_pool:
@@ -656,6 +674,14 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         sample_names = [primary]
         pan_position = select_balanced_pan_position('right', right_pan_history)
         pan_assignments = {primary: pan_position}
+
+    elif pattern_type == 'hard_left_only':
+        sample_names = [primary]
+        pan_assignments = {primary: 'hard_left'}
+
+    elif pattern_type == 'hard_right_only':
+        sample_names = [primary]
+        pan_assignments = {primary: 'hard_right'}
 
     else:  # stereo_pair
         partner = dequeue_partner_sample(
@@ -694,6 +720,10 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], vo
         elif pan == 'left':
             pan_value = -1.0
         elif pan == 'right':
+            pan_value = 1.0
+        elif pan == 'hard_left':
+            pan_value = -1.0
+        elif pan == 'hard_right':
             pan_value = 1.0
         else:
             # Already numeric
@@ -761,50 +791,58 @@ def main() -> None:
     
     # Calculate how many samples will use each pattern based on percentages
     center_quota = int(NUM_AUDIO_SAMPLES * CENTER_ONLY_WEIGHT / 100)
-    noncenter_quota = int(NUM_AUDIO_SAMPLES * NON_CENTER_ONLY_WEIGHT / 100)
+    diagonal_quota = int(NUM_AUDIO_SAMPLES * DIAGONAL_WEIGHT / 100)
     dualpan_quota = int(NUM_AUDIO_SAMPLES * DUALPAN_WEIGHT / 100)
+    leftorright_quota = int(NUM_AUDIO_SAMPLES * LEFTORRIGHT_WEIGHT / 100)
 
     # Cap center_quota to the number of unique audio files (each center combo is 1 file = 1 unique slot)
     if center_quota > total_samples:
         center_overflow = center_quota - total_samples
         center_quota = total_samples
-        # Redistribute overflow proportionally to noncenter and dualpan
-        non_center_total_weight = NON_CENTER_ONLY_WEIGHT + DUALPAN_WEIGHT
+        # Redistribute overflow proportionally to diagonal, dualpan, and leftorright
+        non_center_total_weight = DIAGONAL_WEIGHT + DUALPAN_WEIGHT + LEFTORRIGHT_WEIGHT
         if non_center_total_weight > 0:
-            noncenter_quota += int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
-            dualpan_quota += center_overflow - int(center_overflow * NON_CENTER_ONLY_WEIGHT / non_center_total_weight)
+            diagonal_quota += int(center_overflow * DIAGONAL_WEIGHT / non_center_total_weight)
+            leftorright_quota += int(center_overflow * LEFTORRIGHT_WEIGHT / non_center_total_weight)
+            dualpan_quota += center_overflow - int(center_overflow * DIAGONAL_WEIGHT / non_center_total_weight) - int(center_overflow * LEFTORRIGHT_WEIGHT / non_center_total_weight)
         else:
             dualpan_quota += center_overflow
-        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to noncenter/dualpan.\n")
+        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to diagonal/dualpan/leftorright.\n")
 
     # Handle case where num_audio_samples is very small and all quotas round to 0
     # Distribute remaining samples proportionally
-    total_allocated = center_quota + noncenter_quota + dualpan_quota
+    total_allocated = center_quota + diagonal_quota + dualpan_quota + leftorright_quota
     remaining_samples = NUM_AUDIO_SAMPLES - total_allocated
     if remaining_samples > 0:
         # Allocate remaining samples based on weights
-        weights = [CENTER_ONLY_WEIGHT, NON_CENTER_ONLY_WEIGHT, DUALPAN_WEIGHT]
+        weights = [CENTER_ONLY_WEIGHT, DIAGONAL_WEIGHT, DUALPAN_WEIGHT, LEFTORRIGHT_WEIGHT]
         max_weight_idx = weights.index(max(weights))
         if max_weight_idx == 0:
             center_quota += remaining_samples
         elif max_weight_idx == 1:
-            noncenter_quota += remaining_samples
-        else:
+            diagonal_quota += remaining_samples
+        elif max_weight_idx == 2:
             dualpan_quota += remaining_samples
+        else:
+            leftorright_quota += remaining_samples
     
-    # Split noncenter quota evenly between left and right for 50/50 distribution
-    left_quota = noncenter_quota // 2
-    right_quota = noncenter_quota - left_quota  # Gives right any remainder for odd numbers
+    # Split diagonal quota evenly between left and right for 50/50 distribution
+    left_quota = diagonal_quota // 2
+    right_quota = diagonal_quota - left_quota  # Gives right any remainder for odd numbers
+    
+    # Split leftorright quota evenly between hard left and hard right for 50/50 distribution
+    hard_left_quota = leftorright_quota // 2
+    hard_right_quota = leftorright_quota - hard_left_quota  # Gives right any remainder for odd numbers
     
     # Validate: ONCE samples cannot exceed center quota
     if once_samples_count > center_quota:
         raise ValueError(
             f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
-            f"Config ratio '{config.get('center_to_noncenter_to_dualpan_percents')}' allocates {center_quota} center slots "
+            f"Config ratio '{config.get('center_diagonal_dualpan_leftorright_percents')}' allocates {center_quota} center slots "
             f"out of {NUM_AUDIO_SAMPLES} audio samples.\n"
             f"Either:\n"
             f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
-            f"  2. Increase center ratio in center_to_noncenter_to_dualpan_percents, or\n"
+            f"  2. Increase center ratio in center_diagonal_dualpan_leftorright_percents, or\n"
             f"  3. Increase num_unique_samples to {int(once_samples_count * 100 / (SAMPLES_PERCENT * CENTER_ONLY_WEIGHT / 100))} or more"
         )
     
@@ -817,6 +855,8 @@ def main() -> None:
     adjusted_left_weight = left_quota
     adjusted_right_weight = right_quota
     adjusted_dualpan_weight = dualpan_quota
+    adjusted_hard_left_weight = hard_left_quota
+    adjusted_hard_right_weight = hard_right_quota
     
     # Calculate strings vs non-strings quotas based on samples_to_strings_ratio
     num_strings_samples = int(NUM_AUDIO_SAMPLES * STRINGS_PERCENT / 100)
@@ -837,6 +877,8 @@ def main() -> None:
     left_quota_remaining = adjusted_left_weight
     right_quota_remaining = adjusted_right_weight
     dualpan_quota_remaining = adjusted_dualpan_weight
+    hard_left_quota_remaining = adjusted_hard_left_weight
+    hard_right_quota_remaining = adjusted_hard_right_weight
 
     # Strings vs non-strings quota tracking
     strings_quota_remaining = num_strings_samples
@@ -849,6 +891,8 @@ def main() -> None:
     left_count = 0
     right_count = 0
     dualpan_count = 0
+    hard_left_count = 0
+    hard_right_count = 0
     
     # Track pan position histories for statistical balancing (store absolute values)
     left_pan_history = []  # Stores positive values (0.35 to 1.0)
@@ -905,6 +949,7 @@ def main() -> None:
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type, used_once_samples,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+            hard_left_quota_remaining, hard_right_quota_remaining,
             left_pan_history, right_pan_history,
             sample_round_robin, all_sample_names,
             require_strings
@@ -918,6 +963,7 @@ def main() -> None:
                 sample_names, pan_assignments = generate_unique_combination(
                     samples_by_type, used_once_samples,
                     center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+                    hard_left_quota_remaining, hard_right_quota_remaining,
                     left_pan_history, right_pan_history,
                     sample_round_robin, all_sample_names,
                     require_strings=False
@@ -994,7 +1040,15 @@ def main() -> None:
                 if not use_four_beat and not use_two_beat and not use_double_time and padded_centered_count < num_padded_centered:
                     use_padded_length = True
                     padded_centered_count += 1
-            else:  # left or right (numeric pan value)
+            elif pan_positions[0] == 'hard_left':
+                is_non_centered = True
+                hard_left_count += 1
+                hard_left_quota_remaining = max(0, hard_left_quota_remaining - 1)
+            elif pan_positions[0] == 'hard_right':
+                is_non_centered = True
+                hard_right_count += 1
+                hard_right_quota_remaining = max(0, hard_right_quota_remaining - 1)
+            else:  # diagonal left or right (numeric pan value)
                 is_non_centered = True
                 pan_value = float(pan_positions[0])
                 if pan_value < 0:  # left side
@@ -1073,47 +1127,49 @@ def main() -> None:
     from math import gcd
     from functools import reduce
     
-    noncenter_count = left_count + right_count
+    diagonal_count = left_count + right_count
+    leftorright_count = hard_left_count + hard_right_count
     
     def gcd_multiple(*args):
         """Calculate GCD of multiple numbers."""
         return reduce(gcd, args)
     
     # Calculate GCD for ratio display
-    counts = [c for c in [center_count, noncenter_count, dualpan_count] if c > 0]
+    counts = [c for c in [center_count, diagonal_count, dualpan_count, leftorright_count] if c > 0]
     if len(counts) > 1:
         ratio_gcd = gcd_multiple(*counts)
     else:
         ratio_gcd = 1
     
-    realized_ratio = f"{center_count//ratio_gcd}:{noncenter_count//ratio_gcd}:{dualpan_count//ratio_gcd}"
+    realized_ratio = f"{center_count//ratio_gcd}:{diagonal_count//ratio_gcd}:{dualpan_count//ratio_gcd}:{leftorright_count//ratio_gcd}"
     
     # Calculate percentage differences from target
     if created_count > 0:
         target_center_pct = (center_quota / created_count) * 100
-        target_noncenter_pct = (noncenter_quota / created_count) * 100
+        target_diagonal_pct = (diagonal_quota / created_count) * 100
         target_dualpan_pct = (dualpan_quota / created_count) * 100
+        target_leftorright_pct = (leftorright_quota / created_count) * 100
         
         actual_center_pct = (center_count / created_count) * 100
-        actual_noncenter_pct = (noncenter_count / created_count) * 100
+        actual_diagonal_pct = (diagonal_count / created_count) * 100
         actual_dualpan_pct = (dualpan_count / created_count) * 100
+        actual_leftorright_pct = (leftorright_count / created_count) * 100
         
         center_diff = actual_center_pct - target_center_pct
-        noncenter_diff = actual_noncenter_pct - target_noncenter_pct
+        diagonal_diff = actual_diagonal_pct - target_diagonal_pct
         dualpan_diff = actual_dualpan_pct - target_dualpan_pct
+        leftorright_diff = actual_leftorright_pct - target_leftorright_pct
     else:
-        target_center_pct = target_noncenter_pct = target_dualpan_pct = 0
-        actual_center_pct = actual_noncenter_pct = actual_dualpan_pct = 0
-        center_diff = noncenter_diff = dualpan_diff = 0
-    
-    deviation_ratio = f"{center_diff:+.3f}%:{noncenter_diff:+.3f}%:{dualpan_diff:+.3f}%"
+        target_center_pct = target_diagonal_pct = target_dualpan_pct = target_leftorright_pct = 0
+        actual_center_pct = actual_diagonal_pct = actual_dualpan_pct = actual_leftorright_pct = 0
+        center_diff = diagonal_diff = dualpan_diff = leftorright_diff = 0
     
     print(f"\nPanning Distribution:")
-    print(f"  Config ratio: {config.get('center_to_noncenter_to_dualpan_percents', '33:33:34')}")
+    print(f"  Config ratio: {config.get('center_diagonal_dualpan_leftorright_percents', '33:33:34:0')}")
     print(f"  Realized ratio: {realized_ratio}")
     
     # Calculate perfect ratio scaled to match realized first value
-    config_ratio_parts = [int(x) for x in config.get('center_to_noncenter_to_dualpan_percents', '33:33:34').split(':')]
+    config_ratio_parts = [int(x) for x in config.get('center_diagonal_dualpan_leftorright_percents', '33:33:34:0').split(':')]
     realized_parts = [int(x) for x in realized_ratio.split(':')]
     scale_factor = realized_parts[0] / config_ratio_parts[0] if config_ratio_parts[0] != 0 else 1
     perfect_ratio_parts = [int(x * scale_factor) for x in config_ratio_parts]
@@ -1125,15 +1181,25 @@ def main() -> None:
     differential_str = ':'.join([f"{'+' if d > 0 else ''}{d}" for d in differential])
     print(f"  Differential: {differential_str}")
     
-    # Display left/right distribution for non-center samples
-    if noncenter_count > 0:
-        left_pct = (left_count / noncenter_count) * 100
-        right_pct = (right_count / noncenter_count) * 100
-        print(f"\nLeft/Right Distribution (non-center samples only):")
+    # Display left/right distribution for diagonal samples
+    if diagonal_count > 0:
+        left_pct = (left_count / diagonal_count) * 100
+        right_pct = (right_count / diagonal_count) * 100
+        print(f"\nDiagonal Left/Right Distribution:")
         print(f"  Target: 50.0% left : 50.0% right")
         print(f"  Realized: {left_count}:{right_count} = {left_pct:.1f}% : {right_pct:.1f}%")
         diff = left_count - right_count
         print(f"  Differential: {diff:+d} (left - right)")
+    
+    # Display hard left/right distribution
+    if leftorright_count > 0:
+        hard_left_pct = (hard_left_count / leftorright_count) * 100
+        hard_right_pct = (hard_right_count / leftorright_count) * 100
+        print(f"\nHard Left/Right Distribution:")
+        print(f"  Target: 50.0% hard left : 50.0% hard right")
+        print(f"  Realized: {hard_left_count}:{hard_right_count} = {hard_left_pct:.1f}% : {hard_right_pct:.1f}%")
+        diff = hard_left_count - hard_right_count
+        print(f"  Differential: {diff:+d} (hard left - hard right)")
     
     # Display padded centered samples info
     if padded_centered_count > 0:
