@@ -10,7 +10,7 @@
   "samples_to_silence_percents": "70:30",
   "loud_medium_soft_values": "0",
   "loud_medium_soft_percents": "100",
-  "silence_lengths_millisec": "550",
+  "silence_lengths_millisec": "540",
   "silence_lengths_percents": "100",
   "eighth_note_samples_percent": 0,
   "four_beat_duration_percent": 0,
