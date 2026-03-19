@@ -7,7 +7,7 @@
   "bpms": "117",
   "slow_to_fast_bpm_percents": "100",
   "num_unique_samples": 100,
-  "center_diagonal_dualpan_leftorright_percents": "50:30:20:0",
+  "center_diagonal_dualpan_leftorright_tripan_percents": "50:30:20:0:0",
   "samples_to_silence_percents": "98:2",
   "loud_medium_soft_values": "0:-30",
   "loud_medium_soft_percents": "60:40",
