@@ -28,8 +28,26 @@ with open(CONFIG_PATH, 'r') as f:
 INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_DIR = Path("./output/audio/final-sample-versions")
 
-# Calculate beat length from BPM
-BEAT_LENGTH_SECONDS = 60.0 / config["bpm"]
+# Parse bpms (required)
+if "bpms" not in config:
+    raise ValueError("Error: 'bpms' is required in config.json")
+BPM_VALUES = [int(x) for x in str(config["bpms"]).split(":")]
+BEAT_LENGTHS_SECONDS = [60.0 / bpm for bpm in BPM_VALUES]
+
+# Parse slow_to_fast_bpm_percents
+bpm_percent_parts = [int(x) for x in str(config.get("slow_to_fast_bpm_percents", "100")).split(":")]
+if sum(bpm_percent_parts) != 100:
+    raise ValueError(
+        f"Error: slow_to_fast_bpm_percents percentages must sum to exactly 100.\n"
+        f"Got: {':'.join(map(str, bpm_percent_parts))} = {sum(bpm_percent_parts)}"
+    )
+if len(bpm_percent_parts) != len(BPM_VALUES):
+    raise ValueError(
+        f"Error: slow_to_fast_bpm_percents must have the same number of values as bpms.\n"
+        f"Got {len(BPM_VALUES)} bpm(s) but {len(bpm_percent_parts)} percent(s)."
+    )
+BPM_PERCENTS = bpm_percent_parts
+
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]  # Total files (audio + silence)
 
 # Parse center_diagonal_dualpan_leftorright_percents (e.g., "16:48:26:10" means 16% center : 48% diagonal : 26% dualpan : 10% hard left or right)
@@ -93,13 +111,10 @@ PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 1
 
 # Parse double-timed samples config
 EIGHTH_NOTE_SAMPLES_PERCENT = config.get("eighth_note_samples_percent", 0.0) / 100.0
-DOUBLE_TIMED_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS / 2.0  # Half the beat length
 
 # Parse multi-beat duration samples config
 FOUR_BEAT_DURATION_PERCENT = config.get("four_beat_duration_percent", 0.0) / 100.0
 TWO_BEAT_DURATION_PERCENT = config.get("two_beat_duration_percent", 0.0) / 100.0
-FOUR_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 4.0
-TWO_BEAT_LENGTH_SECONDS = BEAT_LENGTH_SECONDS * 2.0
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
@@ -445,7 +460,8 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, volume_pool: list[int], use_padded_length: bool = False, use_double_time: bool = False, 
+                       sample_rate: int, volume_pool: list[int], beat_length_seconds: float,
+                       use_padded_length: bool = False, use_double_time: bool = False, 
                        use_four_beat: bool = False, use_two_beat: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
     """
     Create a stereo mix of samples with their pan positions.
@@ -467,15 +483,15 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
     
     # Determine target length based on flags (priority order)
     if use_four_beat:
-        target_length = FOUR_BEAT_LENGTH_SECONDS
+        target_length = beat_length_seconds * 4.0
     elif use_two_beat:
-        target_length = TWO_BEAT_LENGTH_SECONDS
+        target_length = beat_length_seconds * 2.0
     elif use_double_time:
-        target_length = DOUBLE_TIMED_BEAT_LENGTH_SECONDS
+        target_length = beat_length_seconds / 2.0
     elif use_padded_length:
         target_length = PADDED_CENTERED_LENGTH_SECONDS
     else:
-        target_length = BEAT_LENGTH_SECONDS
+        target_length = beat_length_seconds
     
     # Load and resample all samples first
     loaded_audio: dict[str, np.ndarray] = {}
@@ -772,7 +788,9 @@ def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> 
 # -------------------------------------------------------------------
 def main() -> None:
     print("\nCombine Samples with Random Panning\n")
-    print(f"BPM: {config['bpm']}")
+    bpms_str = ':'.join(str(b) for b in BPM_VALUES)
+    bpm_percents_str = ':'.join(str(p) for p in BPM_PERCENTS)
+    print(f"BPMs: {bpms_str}  (slow_to_fast_bpm_percents: {bpm_percents_str})")
     
     # Get all available samples from input directory, grouped by sound type
     samples_by_type = get_available_samples()
@@ -912,7 +930,13 @@ def main() -> None:
     volume_pool = []
     for idx, quota in enumerate(volume_quotas):
         volume_pool.extend([idx] * quota)
-    
+
+    # Build beat length pool based on slow_to_fast_bpm_percents quota
+    beat_length_pool = []
+    for idx, pct in enumerate(BPM_PERCENTS):
+        quota = int(NUM_AUDIO_SAMPLES * pct / 100)
+        beat_length_pool.extend([idx] * quota)
+
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     first_audio, sample_rate = load_audio(first_sample_name)
@@ -1066,13 +1090,21 @@ def main() -> None:
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
+        # Select beat length from pool based on slow_to_fast_bpm_percents quota
+        if beat_length_pool:
+            selected_bpm_idx = random.choice(beat_length_pool)
+            beat_length_pool.remove(selected_bpm_idx)
+        else:
+            selected_bpm_idx = 0  # Fallback to first BPM
+        beat_length_sec = BEAT_LENGTHS_SECONDS[selected_bpm_idx]
+
         # Create the audio using shared volume pool (all panning types can have any volume)
         if is_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=True)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=True)
         elif is_non_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
         else:  # is_dualpan
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
+            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
         
         # Remove used volume index from shared pool
         if volume_idx in volume_pool:
@@ -1217,8 +1249,11 @@ def main() -> None:
         print(f"\nDouble-Timed Samples:")
         print(f"  Target: {target_double_timed_pct:.1f}% of all samples")
         print(f"  Realized: {double_timed_count}/{created_count} = {double_timed_pct:.1f}%")
-        print(f"  BPM: {config['bpm'] * 2} (double-time)")
-        print(f"  Length: {DOUBLE_TIMED_BEAT_LENGTH_SECONDS:.3f}s (half of {BEAT_LENGTH_SECONDS:.3f}s)")
+        half_lengths = ', '.join(f"{bl/2:.3f}s" for bl in BEAT_LENGTHS_SECONDS)
+        full_lengths = ', '.join(f"{bl:.3f}s" for bl in BEAT_LENGTHS_SECONDS)
+        bpms_x2 = ', '.join(str(b * 2) for b in BPM_VALUES)
+        print(f"  BPMs (double-time): {bpms_x2}")
+        print(f"  Half-beat lengths: {half_lengths} (halves of {full_lengths})")
     
     # Display 4-beat duration samples info
     if four_beat_count > 0:
@@ -1227,7 +1262,9 @@ def main() -> None:
         print(f"\n4-Beat Duration Samples:")
         print(f"  Target: {target_four_beat_pct:.1f}% of all samples")
         print(f"  Realized: {four_beat_count}/{created_count} = {four_beat_pct:.1f}%")
-        print(f"  Length: {FOUR_BEAT_LENGTH_SECONDS:.3f}s (4 beats at {config['bpm']} BPM)")
+        four_beat_lengths = ', '.join(f"{bl*4:.3f}s" for bl in BEAT_LENGTHS_SECONDS)
+        bpms_str = ':'.join(str(b) for b in BPM_VALUES)
+        print(f"  4-beat lengths: {four_beat_lengths} (at BPMs: {bpms_str})")
     
     # Display 2-beat duration samples info
     if two_beat_count > 0:
@@ -1236,7 +1273,9 @@ def main() -> None:
         print(f"\n2-Beat Duration Samples:")
         print(f"  Target: {target_two_beat_pct:.1f}% of all samples")
         print(f"  Realized: {two_beat_count}/{created_count} = {two_beat_pct:.1f}%")
-        print(f"  Length: {TWO_BEAT_LENGTH_SECONDS:.3f}s (2 beats at {config['bpm']} BPM)")
+        two_beat_lengths = ', '.join(f"{bl*2:.3f}s" for bl in BEAT_LENGTHS_SECONDS)
+        bpms_str = ':'.join(str(b) for b in BPM_VALUES)
+        print(f"  2-beat lengths: {two_beat_lengths} (at BPMs: {bpms_str})")
     
     # Display volume distribution
     print(f"\nVolume Distribution:")
