@@ -63,13 +63,13 @@ SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0 
 NUM_AUDIO_SAMPLES = int(NUM_UNIQUE_SAMPLES * SAMPLES_PERCENT / 100) if SAMPLES_PERCENT > 0 else NUM_UNIQUE_SAMPLES
 NUM_SILENCE_FILES = NUM_UNIQUE_SAMPLES - NUM_AUDIO_SAMPLES
 
-# Parse samples_to_strings_ratio (e.g., "96:4" means 96% non-strings : 4% strings)
+# Parse samples_to_strings_percents (e.g., "96:4" means 96% non-strings : 4% strings)
 # A strings sample is any file whose sound-type field (3rd underscore-delimited token) is "strings",
 # e.g. flowing-string-quartet_oov_strings.wav
-strings_ratio_parts = [int(x) for x in config.get("samples_to_strings_ratio", "100:0").split(":")]
+strings_ratio_parts = [int(x) for x in config.get("samples_to_strings_percents", "100:0").split(":")]
 if sum(strings_ratio_parts) != 100:
     raise ValueError(
-        f"Error: samples_to_strings_ratio percentages must sum to exactly 100.\n"
+        f"Error: samples_to_strings_percents percentages must sum to exactly 100.\n"
         f"Got: {':'.join(map(str, strings_ratio_parts))} = {sum(strings_ratio_parts)}"
     )
 NON_STRINGS_PERCENT = strings_ratio_parts[0]
@@ -858,7 +858,7 @@ def main() -> None:
     adjusted_hard_left_weight = hard_left_quota
     adjusted_hard_right_weight = hard_right_quota
     
-    # Calculate strings vs non-strings quotas based on samples_to_strings_ratio
+    # Calculate strings vs non-strings quotas based on samples_to_strings_percents
     num_strings_samples = int(NUM_AUDIO_SAMPLES * STRINGS_PERCENT / 100)
     num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
 
@@ -1314,7 +1314,7 @@ def main() -> None:
         strings_pct = (strings_created_count / created_count) * 100 if created_count > 0 else 0
         non_strings_pct = (non_strings_created_count / created_count) * 100 if created_count > 0 else 0
         print(f"\nStrings Distribution:")
-        print(f"  Config ratio: {config.get('samples_to_strings_ratio', '100:0')} (non-strings:strings)")
+        print(f"  Config ratio: {config.get('samples_to_strings_percents', '100:0')} (non-strings:strings)")
         print(f"  Target: {NON_STRINGS_PERCENT}% non-strings / {STRINGS_PERCENT}% strings")
         print(f"  Realized: {non_strings_created_count} non-strings ({non_strings_pct:.1f}%) / {strings_created_count} strings ({strings_pct:.1f}%)")
 

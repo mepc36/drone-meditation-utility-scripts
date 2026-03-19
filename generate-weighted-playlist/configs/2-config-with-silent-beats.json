@@ -15,5 +15,5 @@
   "eighth_note_samples_percent": 0,
   "four_beat_duration_percent": 0,
   "two_beat_duration_percent": 0,
-  "samples_to_strings_ratio": "100"
+  "samples_to_strings_percents": "100"
 }
