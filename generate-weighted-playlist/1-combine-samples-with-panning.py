@@ -172,7 +172,7 @@ SOUND_TYPE_RULES: dict[str, dict] = {
         'allowed_pannings': {'diagonal', 'dualpan', 'leftorright'},
         'volume_by_panning': {
             'diagonal':    'any',
-            'dualpan':     'loud_only',
+            'dualpan':     'quiet_only',
             'leftorright': 'any',
         },
         'bpm_if_loud':     'any',
@@ -291,11 +291,19 @@ def get_available_samples() -> dict[str, list[str]]:
 def get_sound_type(sample_name: str) -> str:
     """Extract the sound type from a sample filename.
     e.g., 'let-me-blow-ya-mind_oov_stab.1' -> 'stab'
+    Normalizes common misspellings of known sound types so rules apply consistently.
     """
     parts = sample_name.split('_')
     if len(parts) >= 3:
-        return parts[2].split('.')[0].lower()
-    return sample_name.split('.')[0].lower()
+        raw = parts[2].split('.')[0].lower()
+    else:
+        raw = sample_name.split('.')[0].lower()
+
+    # Normalize acappella misspellings (acapela, acappela, etc.) to the canonical form.
+    if raw.startswith('acap'):
+        return 'acappella'
+
+    return raw
 
 
 # -------------------------------------------------------------------
