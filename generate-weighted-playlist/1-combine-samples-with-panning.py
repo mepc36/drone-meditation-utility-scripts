@@ -734,7 +734,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
         elif sound_type == 'snare':
             _partner_allowed = {'snare', 'acappella'}
         elif sound_type == 'acappella':
-            _partner_allowed = {random.choice(['kick', 'snare']), 'acappella'}
+            # In a 2-sample dualpan the primary is always acappella, so any partner
+            # from {kick, snare, acappella} is valid — kick+snare can't co-exist here.
+            _partner_allowed = {'kick', 'snare', 'acappella'}
         else:
             # Default: same type only
             _partner_allowed = {sound_type}
