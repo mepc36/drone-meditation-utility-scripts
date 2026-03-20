@@ -136,6 +136,18 @@ NON_CENTER_PAN_MAX = 0.55  # Maximum distance from center (applies to both sides
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
 
+# Sound types that must appear alone — they cannot be paired in dualpan or tripan.
+# Add or remove sound-type strings here to control which musical groupings are unpaired.
+# Note: 'strings' is also listed here but has additional special handling elsewhere
+# (always center-only, with no pan or volume adjustments).
+NOT_PAIRED_SAMPLES = ['strings', 'acappella', 'kickstab', 'snarestab']
+
+# Sound types whose per-sample panning, normalisation, and padding are left untouched.
+NOT_PANNED_SAMPLES = ['strings']
+
+# Sound types whose final mix normalisation and volume level are left untouched.
+NOT_VOLUME_ADJUSTED_SAMPLES = ['strings']
+
 # Validate that lengths and percentages match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
     raise ValueError(
@@ -544,14 +556,15 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
             if len(loaded_audio[name]) > min_len:
                 loaded_audio[name] = loaded_audio[name][:min_len]
 
-    # Check whether all samples in this combination belong to the strings group
-    has_strings = any(get_sound_type(name) == 'strings' for name in sample_names)
+    # Check combination-level processing flags
+    has_not_panned = any(get_sound_type(name) in NOT_PANNED_SAMPLES for name in sample_names)
+    has_not_volume_adjusted = any(get_sound_type(name) in NOT_VOLUME_ADJUSTED_SAMPLES for name in sample_names)
 
     for name in sample_names:
         audio = loaded_audio[name]
 
-        if get_sound_type(name) == 'strings':
-            # STRINGS: skip normalisation, panning, and length truncation — preserve
+        if get_sound_type(name) in NOT_PANNED_SAMPLES:
+            # NOT_PANNED_SAMPLES: skip normalisation, panning, and length truncation — preserve
             # the file at its full natural length, as-is.
             # If mono, duplicate to stereo center; if already stereo, use directly.
             if audio.ndim == 1:
@@ -574,15 +587,15 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         else:
             mixed = mixed + stereo
 
-    if not has_strings:
+    if not has_not_panned:
         # Normalize final mix to consistent RMS level
         mixed = normalize_to_rms(mixed, target_rms=0.15)
 
     # Select and apply volume level from quota pool
     db_reduction, volume_idx = select_volume_level_from_pool(volume_pool)
 
-    if not has_strings:
-        # Only adjust volume for non-strings combinations
+    if not has_not_volume_adjusted:
+        # Only adjust volume for types not in NOT_VOLUME_ADJUSTED_SAMPLES
         mixed = apply_volume_db(mixed, db_reduction)
 
     return mixed, volume_idx
@@ -691,9 +704,10 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             ['hard_left_only'] * hard_left_quota +
             ['hard_right_only'] * hard_right_quota
         )
-    elif sound_type in ('kickstab', 'snarestab'):
-        # KICKSTAB/SNARESTAB: can pan in any single-channel position but cannot
+    elif sound_type in NOT_PAIRED_SAMPLES:
+        # Unpaired types: can pan in any single-channel position but cannot
         # appear in dualpan (stereo_pair) or tripan combinations.
+        # To control which sound types are unpaired, edit NOT_PAIRED_SAMPLES at the top of this file.
         pattern_pool = (
             ['center_only'] * center_quota +
             ['left_only'] * left_quota +
@@ -703,8 +717,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
         )
     else:
         # Regular: all types can appear in dualpan and tripan.
-        # Kick/snare/acappella have special cross-group mixing rules (see stereo_pair and tripan blocks).
-        # All other types are paired same-type-only by default in those blocks.
+        # All types are paired same-type-only by default in those blocks.
         pattern_pool = (
             ['center_only'] * center_quota +
             ['left_only'] * left_quota +
