@@ -222,20 +222,17 @@ def build_sample_round_robin(samples_by_type: dict[str, list[str]]) -> tuple[deq
     return deque(shuffled), all_samples
 
 
-def refill_round_robin_queue(sample_queue: deque, all_sample_names: list[str],
-                              used_once_samples: set[str]) -> None:
-    """Append a new shuffled round to the queue, excluding exhausted ONCE samples."""
-    eligible = [s for s in all_sample_names
-                if not (get_sound_type(s) == 'once' and s in used_once_samples)]
+def refill_round_robin_queue(sample_queue: deque, all_sample_names: list[str]) -> None:
+    """Append a new shuffled round to the queue."""
+    eligible = list(all_sample_names)
     random.shuffle(eligible)
     sample_queue.extend(eligible)
 
 
 def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
-                         used_once_samples: set[str],
                          require_strings: bool | None = None) -> str | None:
     """Pop the next usable sample from the round-robin queue.
-    Skips already-used ONCE samples; refills when the queue is empty.
+    Refills when the queue is empty.
     require_strings: True = only strings samples, False = only non-strings samples, None = any
     """
     # Fast check: are there any eligible samples of the required type at all?
@@ -243,7 +240,6 @@ def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
     if require_strings is not None:
         any_eligible = any(
             (get_sound_type(s) == 'strings') == require_strings
-            and not (get_sound_type(s) == 'once' and s in used_once_samples)
             for s in all_sample_names
         )
         if not any_eligible:
@@ -252,16 +248,14 @@ def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
     # Try the current queue first; if nothing matches, do one refill and try once more.
     for pass_num in range(2):
         if not sample_queue:
-            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+            refill_round_robin_queue(sample_queue, all_sample_names)
         if not sample_queue:
             return None
         if pass_num == 1:
             # Second pass: refill before scanning to ensure fresh samples are present.
-            refill_round_robin_queue(sample_queue, all_sample_names, used_once_samples)
+            refill_round_robin_queue(sample_queue, all_sample_names)
         for i in range(len(sample_queue)):
             s = sample_queue[i]
-            if get_sound_type(s) == 'once' and s in used_once_samples:
-                continue
             is_strings = get_sound_type(s) == 'strings'
             if require_strings is True and not is_strings:
                 continue
@@ -272,9 +266,42 @@ def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
     return None
 
 
+def dequeue_next_sample_of_types(sample_queue: deque, all_sample_names: list[str],
+                                  allowed_types: set[str],
+                                  exclude_name: str | None = None) -> str | None:
+    """Pop the next usable non-strings sample from the round-robin queue whose
+    sound_type is in *allowed_types*. Returns None if no eligible sample exists.
+    exclude_name: if provided, skip that specific sample (used to avoid pairing a sample with itself).
+    """
+    any_eligible = any(
+        get_sound_type(s) in allowed_types
+        and s != exclude_name
+        for s in all_sample_names
+    )
+    if not any_eligible:
+        return None
+
+    for pass_num in range(2):
+        if not sample_queue:
+            refill_round_robin_queue(sample_queue, all_sample_names)
+        if not sample_queue:
+            return None
+        if pass_num == 1:
+            refill_round_robin_queue(sample_queue, all_sample_names)
+        for i in range(len(sample_queue)):
+            s = sample_queue[i]
+            if s == exclude_name:
+                continue
+            st = get_sound_type(s)
+            if st not in allowed_types:
+                continue
+            del sample_queue[i]
+            return s
+    return None
+
+
 def dequeue_partner_sample(sample_queue: deque, all_sample_names: list[str],
-                            sound_type: str, exclude_name: str,
-                            used_once_samples: set[str]) -> str | None:
+                            sound_type: str, exclude_name: str) -> str | None:
     """Find and remove the next sample of *sound_type* from the queue for a stereo pair.
     Scans the existing queue first; falls back to any eligible sample of that type
     (choosing least-recently used via a secondary search) when not found in queue.
@@ -286,16 +313,13 @@ def dequeue_partner_sample(sample_queue: deque, all_sample_names: list[str],
             continue
         if get_sound_type(s) != sound_type:
             continue
-        if get_sound_type(s) == 'once' and s in used_once_samples:
-            continue
         del sample_queue[i]
         return s
 
     # Not found in queue — pick any eligible sample of that type
     eligible = [s for s in all_sample_names
                 if s != exclude_name
-                and get_sound_type(s) == sound_type
-                and not (get_sound_type(s) == 'once' and s in used_once_samples)]
+                and get_sound_type(s) == sound_type]
     if eligible:
         return random.choice(eligible)
     return None
@@ -608,7 +632,7 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
     return -position if side == 'left' else position
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once_samples: set[str],
+def generate_unique_combination(samples_by_type: dict[str, list[str]],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
                                hard_left_quota: int, hard_right_quota: int, tripan_quota: int,
                                left_pan_history: list[float], right_pan_history: list[float],
@@ -628,7 +652,6 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     4. 1 sample, hard left or hard right (quota-based for 50/50 distribution)
     5. 3 samples, tripan (1 hard left + 1 center + 1 hard right) — no strings/silence
 
-    ONCE samples: isolated, centered, appear exactly once.
     SOLO samples: isolated, can pan left/center/right, no stereo pairs.
     Regular samples: can be combined, use all patterns.
 
@@ -637,7 +660,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     # ----------------------------------------------------------------
     # Step 1: dequeue the primary sample from the round-robin queue
     # ----------------------------------------------------------------
-    primary = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples, require_strings)
+    primary = dequeue_next_sample(sample_round_robin, all_sample_names, require_strings)
     if primary is None:
         return None, None
 
@@ -646,10 +669,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     # ----------------------------------------------------------------
     # Step 2: choose panning pattern based on type + remaining quotas
     # ----------------------------------------------------------------
-    if sound_type == 'once':
-        # ONCE: always isolated and centered
-        pattern_pool = ['center_only']
-    elif sound_type == 'strings':
+    if sound_type == 'strings':
         # STRINGS: always isolated and centered; volume and panning are not adjusted
         pattern_pool = ['center_only']
     elif sound_type == 'solo':
@@ -662,7 +682,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
             ['hard_right_only'] * hard_right_quota
         )
     else:
-        # Regular: all patterns allowed
+        # Regular: all types can appear in dualpan and tripan.
+        # Kick/snare/acappella have special cross-group mixing rules (see stereo_pair and tripan blocks).
+        # All other types are paired same-type-only by default in those blocks.
         pattern_pool = (
             ['center_only'] * center_quota +
             ['left_only'] * left_quota +
@@ -704,9 +726,21 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
         pan_assignments = {primary: 'hard_right'}
 
     else:  # stereo_pair
-        partner = dequeue_partner_sample(
+        # Kick/snare/acappella have cross-group mixing rules — no kick+snare mixing.
+        # All other types pair only with their own type.
+        # To add cross-group mixing for a new type, add it to _SPECIAL_TYPES above and add a branch here.
+        if sound_type == 'kick':
+            _partner_allowed = {'kick', 'acappella'}
+        elif sound_type == 'snare':
+            _partner_allowed = {'snare', 'acappella'}
+        elif sound_type == 'acappella':
+            _partner_allowed = {random.choice(['kick', 'snare']), 'acappella'}
+        else:
+            # Default: same type only
+            _partner_allowed = {sound_type}
+        partner = dequeue_next_sample_of_types(
             sample_round_robin, all_sample_names,
-            sound_type, primary, used_once_samples
+            _partner_allowed, exclude_name=primary
         )
         if partner is None:
             # Can't form a pair — fall back to center
@@ -724,9 +758,20 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
 
     if pattern_type == 'tripan':
         # Tripan: 3 non-strings regular samples — hard left, center, hard right.
-        # The primary is already dequeued; dequeue two more of any non-strings type.
-        second = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples, require_strings=False)
-        third = dequeue_next_sample(sample_round_robin, all_sample_names, used_once_samples, require_strings=False)
+        # Kick/snare/acappella have cross-group mixing rules — no kick+snare mixing.
+        # All other types use same-type-only pairing.
+        # To add cross-group mixing for a new type, add it to _SPECIAL_TYPES above and add a branch here.
+        if sound_type == 'kick':
+            allowed = {'kick', 'acappella'}
+        elif sound_type == 'snare':
+            allowed = {'snare', 'acappella'}
+        elif sound_type == 'acappella':
+            allowed = {random.choice(['kick', 'snare']), 'acappella'}
+        else:
+            # Default: same type only
+            allowed = {sound_type}
+        second = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed, exclude_name=primary)
+        third  = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed)
         if second is None or third is None:
             # Fall back to center if we can't fill the tripan
             sample_names = [primary]
@@ -744,9 +789,27 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]], used_once
     return sample_names, pan_assignments
 
 
+def infer_pan_group(sample_names: list[str], pan_assignments: dict[str, str]) -> str:
+    """Derive the panning group label from the pan assignments.
+    Returns one of: center, diagonal, dualpan, leftorright, tripan.
+    """
+    n = len(sample_names)
+    if n == 3:
+        return 'tripan'
+    if n == 2:
+        return 'dualpan'
+    # Single sample
+    pan = pan_assignments[sample_names[0]]
+    if pan == 'center':
+        return 'center'
+    if pan in ('hard_left', 'hard_right'):
+        return 'leftorright'
+    return 'diagonal'
+
+
 def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int, bpm: int, beat_suffix: str = "1-beat") -> str:
     """
-    Format filename as: left_center_right_vol-X_pan-Y_index-NNN_length-Xbeat_bpm-NNN.wav
+    Format filename as: left_center_right_vol-X_index-NNN_length-Xbeat_bpm-NNN_<pangroup>.wav
     Only includes samples that are present, in pan order.
     """
     # Create list of (pan_position, sample_name) tuples
@@ -775,18 +838,14 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], vo
     # Extract sorted sample names
     sorted_names = [name.lower() for _, name in samples_by_pan]
     
-    # Calculate average pan position for filename
-    avg_pan = sum(p for p, _ in samples_by_pan) / len(samples_by_pan)
-    
     # Format volume (remove decimal if it's a whole number, use abs value)
     vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
     
-    # Format panning (use absolute value, rounded to 1 decimal)
-    pan_str = f"{abs(avg_pan):.1f}"
+    pan_group = infer_pan_group(sample_names, pan_assignments)
     
     # Build filename
     name_part = "_".join(sorted_names)
-    return f"{name_part}_vol-{vol_str}_pan-{pan_str}_index-{index:03d}_length-{beat_suffix}_bpm-{bpm}.wav"
+    return f"{name_part}_vol-{vol_str}_index-{index:03d}_length-{beat_suffix}_bpm-{bpm}_{pan_group}.wav"
 
 
 def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
@@ -826,10 +885,6 @@ def main() -> None:
     print()
     
     reset_output_dir()
-    # Count ONCE samples and calculate adjusted ratio
-    once_samples_count = len(samples_by_type.get('once', []))
-    print(f"Found {once_samples_count} ONCE samples (always centered)\n")
-    
     # Calculate how many samples will use each pattern based on percentages
     center_quota = int(NUM_AUDIO_SAMPLES * CENTER_ONLY_WEIGHT / 100)
     diagonal_quota = int(NUM_AUDIO_SAMPLES * DIAGONAL_WEIGHT / 100)
@@ -879,24 +934,7 @@ def main() -> None:
     hard_left_quota = leftorright_quota // 2
     hard_right_quota = leftorright_quota - hard_left_quota  # Gives right any remainder for odd numbers
     
-    # Validate: ONCE samples cannot exceed center quota
-    if once_samples_count > center_quota:
-        raise ValueError(
-            f"Error: Too many ONCE samples ({once_samples_count}) for center quota ({center_quota}).\n"
-            f"Config ratio '{config.get('center_diagonal_dualpan_leftorright_tripan_percents')}' allocates {center_quota} center slots "
-            f"out of {NUM_AUDIO_SAMPLES} audio samples.\n"
-            f"Either:\n"
-            f"  1. Reduce number of ONCE samples to {center_quota} or fewer, or\n"
-            f"  2. Increase center ratio in center_diagonal_dualpan_leftorright_tripan_percents, or\n"
-            f"  3. Increase num_unique_samples to {int(once_samples_count * 100 / (SAMPLES_PERCENT * CENTER_ONLY_WEIGHT / 100))} or more"
-        )
-    
-    # Adjust quotas: ONCE samples consume center quota
-    remaining_center_quota = max(0, center_quota - once_samples_count)
-    
-    # Calculate adjusted weights for non-ONCE samples
-    # If we've used up all center quota, set center weight to 0
-    adjusted_center_weight = remaining_center_quota
+    adjusted_center_weight = center_quota
     adjusted_left_weight = left_quota
     adjusted_right_weight = right_quota
     adjusted_dualpan_weight = dualpan_quota
@@ -913,7 +951,6 @@ def main() -> None:
     
     # Track combinations to ensure uniqueness
     seen_combinations = set()
-    used_once_samples = set()  # Track ONCE samples that have been used (can only appear once)
     created_count = 0
     attempts = 0
     max_attempts = NUM_AUDIO_SAMPLES * 100  # Prevent infinite loop
@@ -1001,7 +1038,7 @@ def main() -> None:
 
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
-            samples_by_type, used_once_samples,
+            samples_by_type,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
             hard_left_quota_remaining, hard_right_quota_remaining, tripan_quota_remaining,
             left_pan_history, right_pan_history,
@@ -1015,7 +1052,7 @@ def main() -> None:
             # to non-strings so we don't spin forever on an unsatisfiable quota.
             if require_strings is True:
                 sample_names, pan_assignments = generate_unique_combination(
-                    samples_by_type, used_once_samples,
+                    samples_by_type,
                     center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
                     hard_left_quota_remaining, hard_right_quota_remaining, tripan_quota_remaining,
                     left_pan_history, right_pan_history,
@@ -1040,16 +1077,6 @@ def main() -> None:
         # Track per-sample usage for the round-robin fairness report
         for name in sample_names:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
-        
-        # Mark ONCE samples as used (they can only appear once)
-        for name in sample_names:
-            # Check if this sample is from the ONCE sound type
-            parts = name.split('_')
-            if len(parts) >= 3:
-                sound_type_with_suffix = parts[2]
-                sound_type = sound_type_with_suffix.split('.')[0]
-                if sound_type.lower() == 'once':
-                    used_once_samples.add(name)
         
         created_count += 1
 
