@@ -153,6 +153,10 @@ NOT_VOLUME_ADJUSTED_SAMPLES = ['strings']
 # of these types, it is silently capped and a warning is printed.
 NO_DUPLICATES_SAMPLES = ['strings']
 
+# Sound types that are always generated at the first BPM listed in the config,
+# regardless of slow_to_fast_bpm_percents. Add a type here to lock it to BPM_VALUES[0].
+NO_BPM_VARIATION_SAMPLES = ['acappella']
+
 # Validate that lengths and percentages match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
     raise ValueError(
@@ -1190,8 +1194,12 @@ def main() -> None:
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
-        # Select beat length from pool based on slow_to_fast_bpm_percents quota
-        if beat_length_pool:
+        # Select beat length from pool based on slow_to_fast_bpm_percents quota.
+        # Types in NO_BPM_VARIATION_SAMPLES are always pinned to the first BPM.
+        is_no_bpm_variation = any(get_sound_type(name) in NO_BPM_VARIATION_SAMPLES for name in sample_names)
+        if is_no_bpm_variation:
+            selected_bpm_idx = 0
+        elif beat_length_pool:
             selected_bpm_idx = random.choice(beat_length_pool)
             beat_length_pool.remove(selected_bpm_idx)
         else:
