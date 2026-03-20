@@ -681,6 +681,16 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             ['hard_left_only'] * hard_left_quota +
             ['hard_right_only'] * hard_right_quota
         )
+    elif sound_type in ('kickstab', 'snarestab'):
+        # KICKSTAB/SNARESTAB: can pan in any single-channel position but cannot
+        # appear in dualpan (stereo_pair) or tripan combinations.
+        pattern_pool = (
+            ['center_only'] * center_quota +
+            ['left_only'] * left_quota +
+            ['right_only'] * right_quota +
+            ['hard_left_only'] * hard_left_quota +
+            ['hard_right_only'] * hard_right_quota
+        )
     else:
         # Regular: all types can appear in dualpan and tripan.
         # Kick/snare/acappella have special cross-group mixing rules (see stereo_pair and tripan blocks).
@@ -726,20 +736,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
         pan_assignments = {primary: 'hard_right'}
 
     else:  # stereo_pair
-        # Kick/snare/acappella have cross-group mixing rules — no kick+snare mixing.
-        # All other types pair only with their own type.
-        # To add cross-group mixing for a new type, add it to _SPECIAL_TYPES above and add a branch here.
-        if sound_type == 'kick':
-            _partner_allowed = {'kick', 'acappella'}
-        elif sound_type == 'snare':
-            _partner_allowed = {'snare', 'acappella'}
-        elif sound_type == 'acappella':
-            # In a 2-sample dualpan the primary is always acappella, so any partner
-            # from {kick, snare, acappella} is valid — kick+snare can't co-exist here.
-            _partner_allowed = {'kick', 'snare', 'acappella'}
-        else:
-            # Default: same type only
-            _partner_allowed = {sound_type}
+        # All types pair only with their own type by default.
+        # To add cross-group mixing for a new type, add a branch here.
+        _partner_allowed = {sound_type}
         partner = dequeue_next_sample_of_types(
             sample_round_robin, all_sample_names,
             _partner_allowed, exclude_name=primary
@@ -760,18 +759,9 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
 
     if pattern_type == 'tripan':
         # Tripan: 3 non-strings regular samples — hard left, center, hard right.
-        # Kick/snare/acappella have cross-group mixing rules — no kick+snare mixing.
-        # All other types use same-type-only pairing.
-        # To add cross-group mixing for a new type, add it to _SPECIAL_TYPES above and add a branch here.
-        if sound_type == 'kick':
-            allowed = {'kick', 'acappella'}
-        elif sound_type == 'snare':
-            allowed = {'snare', 'acappella'}
-        elif sound_type == 'acappella':
-            allowed = {random.choice(['kick', 'snare']), 'acappella'}
-        else:
-            # Default: same type only
-            allowed = {sound_type}
+        # All types use same-type-only pairing by default.
+        # To add cross-group mixing for a new type, add a branch here.
+        allowed = {sound_type}
         second = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed, exclude_name=primary)
         third  = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed)
         if second is None or third is None:
