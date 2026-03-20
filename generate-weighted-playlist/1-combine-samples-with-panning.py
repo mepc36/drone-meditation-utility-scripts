@@ -69,19 +69,15 @@ DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right stereo pai
 LEFTORRIGHT_WEIGHT = panning_pattern_parts[3]  # Percentage, hard left or hard right
 TRIPAN_WEIGHT = panning_pattern_parts[4]  # Percentage, hard left + center + hard right
 
-# Parse samples_to_silence_percents (e.g., "87:13" means 87% samples : 13% silence)
+# Parse samples_to_silence_percents (e.g., "87:13" means 87% non-strings : 13% silence)
 silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
 if sum(silence_ratio_parts) != 100:
     raise ValueError(
         f"Error: samples_to_silence_percents percentages must sum to exactly 100.\n"
         f"Got: {':'.join(map(str, silence_ratio_parts))} = {sum(silence_ratio_parts)}"
     )
-SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of samples
-SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence
-
-# Calculate how many audio samples vs silence files based on ratio
-NUM_AUDIO_SAMPLES = int(NUM_UNIQUE_SAMPLES * SAMPLES_PERCENT / 100) if SAMPLES_PERCENT > 0 else NUM_UNIQUE_SAMPLES
-NUM_SILENCE_FILES = NUM_UNIQUE_SAMPLES - NUM_AUDIO_SAMPLES
+SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of non-strings (A) in the A:B ratio
+SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence (B) in the A:B ratio
 
 # Parse samples_to_strings_percents (e.g., "96:4" means 96% non-strings : 4% strings)
 # A strings sample is any file whose sound-type field (3rd underscore-delimited token) is "strings",
@@ -94,6 +90,20 @@ if sum(strings_ratio_parts) != 100:
     )
 NON_STRINGS_PERCENT = strings_ratio_parts[0]
 STRINGS_PERCENT = strings_ratio_parts[1] if len(strings_ratio_parts) > 1 else 0
+
+# Calculate counts using two independent ratios sharing non-strings (A) as the common baseline:
+#   samples_to_silence_percents defines  A (non-strings) : B (silence)
+#   samples_to_strings_percents defines  A (non-strings) : C (strings)
+# Derive a three-way proportional split from these two ratios.
+if SILENCE_PERCENT == 0:
+    NUM_SILENCE_FILES = 0
+    NUM_AUDIO_SAMPLES = NUM_UNIQUE_SAMPLES
+else:
+    ratio_silence = SILENCE_PERCENT / SAMPLES_PERCENT  # silence per unit of non-strings
+    ratio_strings = (STRINGS_PERCENT / NON_STRINGS_PERCENT) if (NON_STRINGS_PERCENT > 0 and STRINGS_PERCENT > 0) else 0.0
+    _denom = 1.0 + ratio_silence + ratio_strings
+    NUM_SILENCE_FILES = round(NUM_UNIQUE_SAMPLES * ratio_silence / _denom)
+    NUM_AUDIO_SAMPLES = NUM_UNIQUE_SAMPLES - NUM_SILENCE_FILES
 
 # Parse silence lengths and their percentages (e.g., "2000:10000" with "86:14" means 86% are 2000ms, 14% are 10000ms)
 silence_lengths_ms = [int(x) for x in config.get("silence_lengths_millisec", "2000").split(":")]
@@ -934,9 +944,17 @@ def main() -> None:
     adjusted_hard_right_weight = hard_right_quota
     adjusted_tripan_weight = tripan_quota
     
-    # Calculate strings vs non-strings quotas based on samples_to_strings_percents
-    num_strings_samples = int(NUM_AUDIO_SAMPLES * STRINGS_PERCENT / 100)
-    num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+    # Calculate strings vs non-strings quotas using the independent A:C ratio.
+    # Both samples_to_silence_percents (A:B) and samples_to_strings_percents (A:C) share
+    # non-strings (A) as their common baseline, so strings are derived from NUM_AUDIO_SAMPLES
+    # proportionally via the A:C ratio rather than as a flat percentage of it.
+    if STRINGS_PERCENT == 0 or NON_STRINGS_PERCENT == 0:
+        num_strings_samples = 0 if STRINGS_PERCENT == 0 else NUM_AUDIO_SAMPLES
+        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+    else:
+        _ratio_strings = STRINGS_PERCENT / NON_STRINGS_PERCENT  # C per unit of A
+        num_strings_samples = round(NUM_AUDIO_SAMPLES * _ratio_strings / (1.0 + _ratio_strings))
+        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
 
     sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
