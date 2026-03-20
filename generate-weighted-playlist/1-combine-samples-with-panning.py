@@ -138,7 +138,8 @@ PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments f
 # Add or remove sound-type strings here to control which musical groupings are unpaired.
 # Note: 'strings' is also listed here but has additional special handling elsewhere
 # (always center-only, with no pan or volume adjustments).
-NOT_PAIRED_SAMPLES = ['strings', 'acappella', 'kickstab', 'snarestab']
+# Note: 'acappella' is intentionally NOT listed here — acappella CAN appear in dualpan.
+NOT_PAIRED_SAMPLES = ['strings', 'kickstab', 'snarestab']
 
 # Sound types whose per-sample panning, normalisation, and padding are left untouched.
 NOT_PANNED_SAMPLES = ['strings']
@@ -153,7 +154,67 @@ NO_DUPLICATES_SAMPLES = ['strings']
 
 # Sound types that are always generated at the first BPM listed in the config,
 # regardless of slow_to_fast_bpm_percents. Add a type here to lock it to BPM_VALUES[0].
-NO_BPM_VARIATION_SAMPLES = ['acappella']
+# Note: 'acappella' is intentionally NOT listed here — its BPM is governed by SOUND_TYPE_RULES.
+NO_BPM_VARIATION_SAMPLES = []
+
+# Per-type rules coupling panning, volume, and BPM.
+# 'allowed_pannings': which panning groups this type may use (whitelisted).
+# 'volume_by_panning': for each panning group, which volume is allowed:
+#   'loud_only'  => always volume_levels_db[0]  (first / highest value)
+#   'quiet_only' => always volume_levels_db[-1] (last / lowest value)
+#   'any'        => draw freely from pool (no constraint)
+# 'bpm_if_loud':     BPM constraint when volume == volume_levels_db[0]
+# 'bpm_if_not_loud': BPM constraint otherwise
+#   'any'       => draw freely from pool
+#   'slow_only' => always BPM_VALUES[0] (first / slowest BPM)
+SOUND_TYPE_RULES: dict[str, dict] = {
+    'acappella': {
+        'allowed_pannings': {'diagonal', 'dualpan', 'leftorright'},
+        'volume_by_panning': {
+            'diagonal':    'any',
+            'dualpan':     'loud_only',
+            'leftorright': 'any',
+        },
+        'bpm_if_loud':     'any',
+        'bpm_if_not_loud': 'slow_only',
+    },
+    'kickstab': {
+        'allowed_pannings': {'diagonal', 'leftorright'},
+        'volume_by_panning': {
+            'diagonal':    'quiet_only',
+            'leftorright': 'any',
+        },
+        'bpm_if_loud':     'any',
+        'bpm_if_not_loud': 'slow_only',
+    },
+    'snarestab': {
+        'allowed_pannings': {'diagonal', 'leftorright'},
+        'volume_by_panning': {
+            'diagonal':    'quiet_only',
+            'leftorright': 'any',
+        },
+        'bpm_if_loud':     'any',
+        'bpm_if_not_loud': 'slow_only',
+    },
+    'kick': {
+        'allowed_pannings': {'center', 'dualpan'},
+        'volume_by_panning': {
+            'center':  'loud_only',
+            'dualpan': 'quiet_only',
+        },
+        'bpm_if_loud':     'any',
+        'bpm_if_not_loud': 'slow_only',
+    },
+    'snare': {
+        'allowed_pannings': {'center', 'dualpan'},
+        'volume_by_panning': {
+            'center':  'loud_only',
+            'dualpan': 'quiet_only',
+        },
+        'bpm_if_loud':     'any',
+        'bpm_if_not_loud': 'slow_only',
+    },
+}
 
 # Validate that lengths and percentages match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
@@ -481,24 +542,24 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
     return volume_levels_db[selected_idx], selected_idx
 
 
-def create_combination(sample_names: list[str], pan_assignments: dict[str, str], 
-                       sample_rate: int, volume_pool: list[int], beat_length_seconds: float,
-                       use_padded_length: bool = False, use_double_time: bool = False, 
-                       use_four_beat: bool = False, use_two_beat: bool = False, is_centered: bool = False) -> tuple[np.ndarray, int]:
+def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
+                       sample_rate: int, volume_db: float, beat_length_seconds: float,
+                       use_padded_length: bool = False, use_double_time: bool = False,
+                       use_four_beat: bool = False, use_two_beat: bool = False, is_centered: bool = False) -> np.ndarray:
     """
     Create a stereo mix of samples with their pan positions.
-    Returns (padded stereo audio, volume_level_index).
-    
+    Returns padded stereo audio.
+
     Args:
         sample_names: List of sample names to combine
         pan_assignments: Dictionary mapping sample names to pan positions
         sample_rate: Sample rate for the output
-        volume_pool: Pool of remaining volume level indices to choose from (quota-based)
+        volume_db: dB reduction to apply (selected in main() before this call)
         use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of BEAT_LENGTH_SECONDS
         use_double_time: If True, pad to DOUBLE_TIMED_BEAT_LENGTH_SECONDS (half beat length)
         use_four_beat: If True, pad to FOUR_BEAT_LENGTH_SECONDS (4 beats)
         use_two_beat: If True, pad to TWO_BEAT_LENGTH_SECONDS (2 beats)
-        is_centered: If True, sample is centered and should use centered volume pool
+        is_centered: If True, sample is centered
     """
     # Load and pan each sample
     mixed = None
@@ -565,14 +626,11 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         # Normalize final mix to consistent RMS level
         mixed = normalize_to_rms(mixed, target_rms=0.15)
 
-    # Select and apply volume level from quota pool
-    db_reduction, volume_idx = select_volume_level_from_pool(volume_pool)
-
     if not has_not_volume_adjusted:
         # Only adjust volume for types not in NOT_VOLUME_ADJUSTED_SAMPLES
-        mixed = apply_volume_db(mixed, db_reduction)
+        mixed = apply_volume_db(mixed, volume_db)
 
-    return mixed, volume_idx
+    return mixed
 
 
 def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
@@ -677,12 +735,22 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             ['hard_left_only'] * hard_left_quota +
             ['hard_right_only'] * hard_right_quota
         )
+    elif sound_type in SOUND_TYPE_RULES:
+        # Types with explicit panning rules: build the pattern pool from allowed_pannings.
+        _rule = SOUND_TYPE_RULES[sound_type]
+        _allowed = _rule['allowed_pannings']
+        pattern_pool = []
+        if 'center' in _allowed:
+            pattern_pool += ['center_only'] * center_quota
+        if 'diagonal' in _allowed:
+            pattern_pool += ['left_only'] * left_quota + ['right_only'] * right_quota
+        if 'dualpan' in _allowed:
+            pattern_pool += ['stereo_pair'] * dualpan_quota
+        if 'leftorright' in _allowed:
+            pattern_pool += ['hard_left_only'] * hard_left_quota + ['hard_right_only'] * hard_right_quota
     elif sound_type in NOT_PAIRED_SAMPLES:
-        # Unpaired types: can pan in any single-channel position but cannot
-        # appear in dualpan (stereo_pair) combinations.
-        # To control which sound types are unpaired, edit NOT_PAIRED_SAMPLES at the top of this file.
+        # Catch-all for unpaired types not covered by SOUND_TYPE_RULES.
         pattern_pool = (
-            ['center_only'] * center_quota +
             ['left_only'] * left_quota +
             ['right_only'] * right_quota +
             ['hard_left_only'] * hard_left_quota +
@@ -739,18 +807,20 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             _partner_allowed, exclude_name=primary
         )
         if partner is None:
-            # Can't form a pair — fall back to center
-            sample_names = [primary]
-            pan_assignments = {primary: 'center'}
+            # Can't form a pair — fall back to an allowed single-channel panning.
+            # Types that don't allow center (e.g. acappella) fall back to diagonal.
+            _rule = SOUND_TYPE_RULES.get(sound_type)
+            if _rule and 'center' not in _rule['allowed_pannings']:
+                pan_position = select_balanced_pan_position('left', left_pan_history)
+                sample_names = [primary]
+                pan_assignments = {primary: pan_position}
+            else:
+                sample_names = [primary]
+                pan_assignments = {primary: 'center'}
         else:
             sample_names = [primary, partner]
-            dualpan_style = random.choice(['left-right', 'left-center', 'right-center'])
-            if dualpan_style == 'left-right':
-                pan_assignments = {primary: -1.0, partner: 1.0}
-            elif dualpan_style == 'left-center':
-                pan_assignments = {primary: -1.0, partner: 'center'}
-            else:  # right-center
-                pan_assignments = {primary: 1.0, partner: 'center'}
+            # Dualpan is always hard left + hard right — never mixed with center.
+            pan_assignments = {primary: 'hard_left', partner: 'hard_right'}
 
     return sample_names, pan_assignments
 
@@ -964,14 +1034,14 @@ def main() -> None:
     # Track volume level distribution
     volume_counts = [0] * len(volume_levels_db)
     
-    # Initialize volume quota pool (quota-based selection)
-    # Calculate how many samples should use each volume level based on percentages
+    # Initialize volume quota pool (quota-based selection).
+    # Pools are sized against non-strings samples only — strings bypass both pools entirely.
     volume_quotas = []
     for pct in volume_percentages:
-        quota = int(NUM_AUDIO_SAMPLES * pct / 100)
+        quota = int(num_non_strings_samples * pct / 100)
         volume_quotas.append(quota)
-    
-    # Build shared volume pool for all samples (all panning types can have any volume)
+
+    # Build shared volume pool for all non-strings samples
     volume_pool = []
     for idx, quota in enumerate(volume_quotas):
         volume_pool.extend([idx] * quota)
@@ -979,7 +1049,7 @@ def main() -> None:
     # Build beat length pool based on slow_to_fast_bpm_percents quota
     beat_length_pool = []
     for idx, pct in enumerate(BPM_PERCENTS):
-        quota = int(NUM_AUDIO_SAMPLES * pct / 100)
+        quota = int(num_non_strings_samples * pct / 100)
         beat_length_pool.extend([idx] * quota)
 
     # Get sample rate from first file
@@ -1121,10 +1191,53 @@ def main() -> None:
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
-        # Select beat length from pool based on slow_to_fast_bpm_percents quota.
-        # Types in NO_BPM_VARIATION_SAMPLES are always pinned to the first BPM.
+        # Determine sound type and pan group for SOUND_TYPE_RULES lookup.
+        primary_sound_type = get_sound_type(sample_names[0])
+        pan_group = infer_pan_group(sample_names, pan_assignments)
+        _rule = SOUND_TYPE_RULES.get(primary_sound_type)
+
+        # Select volume. Strings bypass the pool entirely (their volume is never adjusted).
+        # Types in SOUND_TYPE_RULES with a fixed volume constraint bypass the pool too;
+        # only unconstrained types draw from it, keeping the pool accurate for them.
+        if is_strings_combo:
+            volume_db = 0.0  # Ignored — strings are in NOT_VOLUME_ADJUSTED_SAMPLES.
+            volume_idx = 0
+        elif _rule is not None:
+            vol_constraint = _rule['volume_by_panning'].get(pan_group, 'any')
+            if vol_constraint == 'loud_only':
+                volume_db = volume_levels_db[0]
+                volume_idx = 0
+            elif vol_constraint == 'quiet_only':
+                volume_db = volume_levels_db[-1]
+                volume_idx = len(volume_levels_db) - 1
+            else:  # 'any' — draw freely from pool
+                volume_db, volume_idx = select_volume_level_from_pool(volume_pool)
+                if volume_idx in volume_pool:
+                    volume_pool.remove(volume_idx)
+            volume_counts[volume_idx] += 1
+        else:
+            volume_db, volume_idx = select_volume_level_from_pool(volume_pool)
+            if volume_idx in volume_pool:
+                volume_pool.remove(volume_idx)
+            volume_counts[volume_idx] += 1
+
+        # Select BPM. Strings bypass the pool. Types in SOUND_TYPE_RULES are constrained
+        # by their volume: loud → any BPM from pool; not-loud → slow (first BPM) only.
+        is_loud = (volume_db == volume_levels_db[0])
         is_no_bpm_variation = any(get_sound_type(name) in NO_BPM_VARIATION_SAMPLES for name in sample_names)
-        if is_no_bpm_variation:
+        if is_strings_combo:
+            selected_bpm_idx = 0  # Arbitrary — strings use their natural file length.
+        elif _rule is not None:
+            bpm_constraint = _rule['bpm_if_loud'] if is_loud else _rule['bpm_if_not_loud']
+            if bpm_constraint == 'slow_only':
+                selected_bpm_idx = 0
+            else:  # 'any'
+                if beat_length_pool:
+                    selected_bpm_idx = random.choice(beat_length_pool)
+                    beat_length_pool.remove(selected_bpm_idx)
+                else:
+                    selected_bpm_idx = 0
+        elif is_no_bpm_variation:
             selected_bpm_idx = 0
         elif beat_length_pool:
             selected_bpm_idx = random.choice(beat_length_pool)
@@ -1133,21 +1246,8 @@ def main() -> None:
             selected_bpm_idx = 0  # Fallback to first BPM
         beat_length_sec = BEAT_LENGTHS_SECONDS[selected_bpm_idx]
 
-        # Create the audio using shared volume pool (all panning types can have any volume)
-        if is_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=True)
-        elif is_non_centered:
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
-        else:  # is_dualpan
-            combined_audio, volume_idx = create_combination(sample_names, pan_assignments, sample_rate, volume_pool, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered=False)
-        
-        # Remove used volume index from shared pool
-        if volume_idx in volume_pool:
-            volume_pool.remove(volume_idx)
-        
-        # Track volume level
-        volume_counts[volume_idx] += 1
-        volume_db = volume_levels_db[volume_idx]
+        # Create the audio (volume_db is now pre-selected, enabling Phase 3 coupling)
+        combined_audio = create_combination(sample_names, pan_assignments, sample_rate, volume_db, beat_length_sec, use_padded_length, use_double_time, use_four_beat, use_two_beat, is_centered)
         
         # Generate filename
         if use_four_beat:
