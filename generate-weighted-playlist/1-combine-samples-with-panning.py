@@ -11,7 +11,6 @@ import json
 from collections import deque
 from pathlib import Path
 import random
-import subprocess
 import numpy as np
 import soundfile as sf
 
@@ -329,39 +328,6 @@ def dequeue_next_sample_of_types(sample_queue: deque, all_sample_names: list[str
             del sample_queue[i]
             return s
     return None
-
-
-def dequeue_partner_sample(sample_queue: deque, all_sample_names: list[str],
-                            sound_type: str, exclude_name: str) -> str | None:
-    """Find and remove the next sample of *sound_type* from the queue for a stereo pair.
-    Scans the existing queue first; falls back to any eligible sample of that type
-    (choosing least-recently used via a secondary search) when not found in queue.
-    """
-    # Search current queue
-    for i in range(len(sample_queue)):
-        s = sample_queue[i]
-        if s == exclude_name:
-            continue
-        if get_sound_type(s) != sound_type:
-            continue
-        del sample_queue[i]
-        return s
-
-    # Not found in queue — pick any eligible sample of that type
-    eligible = [s for s in all_sample_names
-                if s != exclude_name
-                and get_sound_type(s) == sound_type]
-    if eligible:
-        return random.choice(eligible)
-    return None
-
-
-def ensure_input_files_exist() -> None:
-    """Verify input audio directory and files exist."""
-    # Just check that we have at least some samples
-    samples_by_type = get_available_samples()
-    if not samples_by_type:
-        raise FileNotFoundError("No valid samples found")
 
 
 def reset_output_dir() -> None:
@@ -1051,7 +1017,7 @@ def main() -> None:
 
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
-    first_audio, sample_rate = load_audio(first_sample_name)
+    _, sample_rate = load_audio(first_sample_name)
     
     # Calculate how many centered samples should be padded
     num_padded_centered = int(center_quota * PADDED_CENTERED_PERCENT)
@@ -1135,7 +1101,6 @@ def main() -> None:
         pan_positions = list(pan_assignments.values())
         is_centered = False
         is_non_centered = False
-        is_dualpan = False
         use_padded_length = False
         use_double_time = False
         use_four_beat = False
@@ -1190,7 +1155,6 @@ def main() -> None:
             tripan_count += 1
             tripan_quota_remaining = max(0, tripan_quota_remaining - 1)
         else:  # 2 samples (stereo pair)
-            is_dualpan = True
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
         
@@ -1282,23 +1246,6 @@ def main() -> None:
         ratio_gcd = 1
     
     realized_ratio = f"{center_count//ratio_gcd}:{diagonal_count//ratio_gcd}:{dualpan_count//ratio_gcd}:{leftorright_count//ratio_gcd}:{tripan_count//ratio_gcd}"
-    
-    # Calculate percentage differences from target
-    if created_count > 0:
-        target_center_pct = (center_quota / created_count) * 100
-        target_diagonal_pct = (diagonal_quota / created_count) * 100
-        target_dualpan_pct = (dualpan_quota / created_count) * 100
-        target_leftorright_pct = (leftorright_quota / created_count) * 100
-        target_tripan_pct = (tripan_quota / created_count) * 100
-        
-        actual_center_pct = (center_count / created_count) * 100
-        actual_diagonal_pct = (diagonal_count / created_count) * 100
-        actual_dualpan_pct = (dualpan_count / created_count) * 100
-        actual_leftorright_pct = (leftorright_count / created_count) * 100
-        actual_tripan_pct = (tripan_count / created_count) * 100
-    else:
-        target_center_pct = target_diagonal_pct = target_dualpan_pct = target_leftorright_pct = target_tripan_pct = 0
-        actual_center_pct = actual_diagonal_pct = actual_dualpan_pct = actual_leftorright_pct = actual_tripan_pct = 0
     
     print(f"\nPanning Distribution:")
     print(f"  Config ratio: {config.get('center_diagonal_dualpan_leftorright_tripan_percents', '33:33:34:0:0')}")
