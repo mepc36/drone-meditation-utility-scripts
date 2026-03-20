@@ -148,6 +148,11 @@ NOT_PANNED_SAMPLES = ['strings']
 # Sound types whose final mix normalisation and volume level are left untouched.
 NOT_VOLUME_ADJUSTED_SAMPLES = ['strings']
 
+# Sound types where each individual sample file may only appear once in the output.
+# If the quota calculated from config requests more than the number of unique files
+# of these types, it is silently capped and a warning is printed.
+NO_DUPLICATES_SAMPLES = ['strings']
+
 # Validate that lengths and percentages match
 if len(SILENCE_LENGTHS_SECONDS) != len(SILENCE_LENGTH_PERCENTAGES):
     raise ValueError(
@@ -969,6 +974,19 @@ def main() -> None:
         num_strings_samples = round(NUM_AUDIO_SAMPLES * _ratio_strings / (1.0 + _ratio_strings))
         num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
 
+    # Cap NO_DUPLICATES_SAMPLES types to the number of unique files that actually exist.
+    actual_no_dup_count = sum(
+        len(v) for k, v in samples_by_type.items() if k in NO_DUPLICATES_SAMPLES
+    )
+    if num_strings_samples > actual_no_dup_count:
+        print(
+            f"⚠️  Warning: samples_to_strings_percents requests {num_strings_samples} strings "
+            f"sample(s), but only {actual_no_dup_count} unique strings file(s) exist "
+            f"(NO_DUPLICATES_SAMPLES is enforced). Capping at {actual_no_dup_count}."
+        )
+        num_strings_samples = actual_no_dup_count
+        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+
     sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
     
@@ -1088,14 +1106,12 @@ def main() -> None:
         # Create unique key for this combination
         combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
         
-        # Strings combos are allowed to repeat (round-robin reuse), so skip the
-        # uniqueness check for them — just like how non-strings cycle through again
-        # after all samples have been used once.
+        # Enforce uniqueness. Types in NO_DUPLICATES_SAMPLES may not repeat;
+        # all other types also enforce uniqueness (each unique pan+sample combo once).
         is_strings_combo = any(get_sound_type(name) == 'strings' for name in sample_names)
-        if not is_strings_combo:
-            if combo_key in seen_combinations:
-                continue
-            seen_combinations.add(combo_key)
+        if combo_key in seen_combinations:
+            continue
+        seen_combinations.add(combo_key)
         
         # Track per-sample usage for the round-robin fairness report
         for name in sample_names:
