@@ -49,24 +49,23 @@ BPM_PERCENTS = bpm_percent_parts
 
 NUM_UNIQUE_SAMPLES = config["num_unique_samples"]  # Total files (audio + silence)
 
-# Parse center_diagonal_dualpan_leftorright_tripan_percents
-# e.g., "20:20:20:20:20" means 20% center : 20% diagonal : 20% dualpan : 20% leftorright : 20% tripan
-panning_pattern_parts = [int(x) for x in config.get("center_diagonal_dualpan_leftorright_tripan_percents", "33:33:34:0:0").split(":")]
-if len(panning_pattern_parts) != 5:
+# Parse center_diagonal_dualpan_leftorright_percents
+# e.g., "25:25:25:25" means 25% center : 25% diagonal : 25% dualpan : 25% leftorright
+panning_pattern_parts = [int(x) for x in config.get("center_diagonal_dualpan_leftorright_percents", "25:25:25:25").split(":")]
+if len(panning_pattern_parts) != 4:
     raise ValueError(
-        f"Error: center_diagonal_dualpan_leftorright_tripan_percents must have exactly 5 colon-separated values (center:diagonal:dualpan:leftorright:tripan).\n"
+        f"Error: center_diagonal_dualpan_leftorright_percents must have exactly 4 colon-separated values (center:diagonal:dualpan:leftorright).\n"
         f"Got: {':'.join(map(str, panning_pattern_parts))}"
     )
 if sum(panning_pattern_parts) != 100:
     raise ValueError(
-        f"Error: center_diagonal_dualpan_leftorright_tripan_percents percentages must sum to exactly 100.\n"
+        f"Error: center_diagonal_dualpan_leftorright_percents percentages must sum to exactly 100.\n"
         f"Got: {':'.join(map(str, panning_pattern_parts))} = {sum(panning_pattern_parts)}"
     )
 CENTER_ONLY_WEIGHT = panning_pattern_parts[0]  # Percentage, center
-DIAGONAL_WEIGHT = panning_pattern_parts[1]  # Percentage, diagonal left or right
-DUALPAN_WEIGHT = panning_pattern_parts[2]  # Percentage, left + right stereo pair
+DIAGONAL_WEIGHT = panning_pattern_parts[1]     # Percentage, diagonal left or right
+DUALPAN_WEIGHT = panning_pattern_parts[2]      # Percentage, left + right stereo pair
 LEFTORRIGHT_WEIGHT = panning_pattern_parts[3]  # Percentage, hard left or hard right
-TRIPAN_WEIGHT = panning_pattern_parts[4]  # Percentage, hard left + center + hard right
 
 # Parse samples_to_silence_percents (e.g., "87:13" means 87% non-strings : 13% silence)
 silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
@@ -135,7 +134,7 @@ NON_CENTER_PAN_MAX = 0.55  # Maximum distance from center (applies to both sides
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
 
-# Sound types that must appear alone — they cannot be paired in dualpan or tripan.
+# Sound types that must appear alone — they cannot be paired in dualpan.
 # Add or remove sound-type strings here to control which musical groupings are unpaired.
 # Note: 'strings' is also listed here but has additional special handling elsewhere
 # (always center-only, with no pan or volume adjustments).
@@ -632,7 +631,7 @@ def select_balanced_pan_position(side: str, pan_history: list[float]) -> float:
 
 def generate_unique_combination(samples_by_type: dict[str, list[str]],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
-                               hard_left_quota: int, hard_right_quota: int, tripan_quota: int,
+                               hard_left_quota: int, hard_right_quota: int,
                                left_pan_history: list[float], right_pan_history: list[float],
                                sample_round_robin: deque, all_sample_names: list[str],
                                require_strings: bool | None = None) -> tuple[list[str], dict[str, str]]:
@@ -648,7 +647,6 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
     2. 1 sample, diagonal left or right (quota-based for 50/50 distribution)
     3. 2 samples, stereo pair (1 left + 1 right)
     4. 1 sample, hard left or hard right (quota-based for 50/50 distribution)
-    5. 3 samples, tripan (1 hard left + 1 center + 1 hard right) — no strings/silence
 
     SOLO samples: isolated, can pan left/center/right, no stereo pairs.
     Regular samples: can be combined, use all patterns.
@@ -681,7 +679,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
         )
     elif sound_type in NOT_PAIRED_SAMPLES:
         # Unpaired types: can pan in any single-channel position but cannot
-        # appear in dualpan (stereo_pair) or tripan combinations.
+        # appear in dualpan (stereo_pair) combinations.
         # To control which sound types are unpaired, edit NOT_PAIRED_SAMPLES at the top of this file.
         pattern_pool = (
             ['center_only'] * center_quota +
@@ -691,7 +689,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             ['hard_right_only'] * hard_right_quota
         )
     else:
-        # Regular: all types can appear in dualpan and tripan.
+        # Regular: all types can appear in dualpan.
         # All types are paired same-type-only by default in those blocks.
         pattern_pool = (
             ['center_only'] * center_quota +
@@ -699,8 +697,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             ['right_only'] * right_quota +
             ['stereo_pair'] * dualpan_quota +
             ['hard_left_only'] * hard_left_quota +
-            ['hard_right_only'] * hard_right_quota +
-            ['tripan'] * tripan_quota
+            ['hard_right_only'] * hard_right_quota
         )
 
     if not pattern_pool:
@@ -755,37 +752,14 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
             else:  # right-center
                 pan_assignments = {primary: 1.0, partner: 'center'}
 
-    if pattern_type == 'tripan':
-        # Tripan: 3 non-strings regular samples — hard left, center, hard right.
-        # All types use same-type-only pairing by default.
-        # To add cross-group mixing for a new type, add a branch here.
-        allowed = {sound_type}
-        second = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed, exclude_name=primary)
-        third  = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed)
-        if second is None or third is None:
-            # Fall back to center if we can't fill the tripan
-            sample_names = [primary]
-            pan_assignments = {primary: 'center'}
-        else:
-            sample_names = [primary, second, third]
-            # Randomly assign which sample goes hard left, center, hard right
-            random.shuffle(sample_names)
-            pan_assignments = {
-                sample_names[0]: 'hard_left',
-                sample_names[1]: 'center',
-                sample_names[2]: 'hard_right',
-            }
-
     return sample_names, pan_assignments
 
 
 def infer_pan_group(sample_names: list[str], pan_assignments: dict[str, str]) -> str:
     """Derive the panning group label from the pan assignments.
-    Returns one of: center, diagonal, dualpan, leftorright, tripan.
+    Returns one of: center, diagonal, dualpan, leftorright.
     """
     n = len(sample_names)
-    if n == 3:
-        return 'tripan'
     if n == 2:
         return 'dualpan'
     # Single sample
@@ -880,30 +854,28 @@ def main() -> None:
     diagonal_quota = int(NUM_AUDIO_SAMPLES * DIAGONAL_WEIGHT / 100)
     dualpan_quota = int(NUM_AUDIO_SAMPLES * DUALPAN_WEIGHT / 100)
     leftorright_quota = int(NUM_AUDIO_SAMPLES * LEFTORRIGHT_WEIGHT / 100)
-    tripan_quota = int(NUM_AUDIO_SAMPLES * TRIPAN_WEIGHT / 100)
 
     # Cap center_quota to the number of unique audio files (each center combo is 1 file = 1 unique slot)
     if center_quota > total_samples:
         center_overflow = center_quota - total_samples
         center_quota = total_samples
-        # Redistribute overflow proportionally to diagonal, dualpan, leftorright, and tripan
-        non_center_total_weight = DIAGONAL_WEIGHT + DUALPAN_WEIGHT + LEFTORRIGHT_WEIGHT + TRIPAN_WEIGHT
+        # Redistribute overflow proportionally to diagonal, dualpan, and leftorright
+        non_center_total_weight = DIAGONAL_WEIGHT + DUALPAN_WEIGHT + LEFTORRIGHT_WEIGHT
         if non_center_total_weight > 0:
             diagonal_quota += int(center_overflow * DIAGONAL_WEIGHT / non_center_total_weight)
             leftorright_quota += int(center_overflow * LEFTORRIGHT_WEIGHT / non_center_total_weight)
-            tripan_quota += int(center_overflow * TRIPAN_WEIGHT / non_center_total_weight)
-            dualpan_quota += center_overflow - int(center_overflow * DIAGONAL_WEIGHT / non_center_total_weight) - int(center_overflow * LEFTORRIGHT_WEIGHT / non_center_total_weight) - int(center_overflow * TRIPAN_WEIGHT / non_center_total_weight)
+            dualpan_quota += center_overflow - int(center_overflow * DIAGONAL_WEIGHT / non_center_total_weight) - int(center_overflow * LEFTORRIGHT_WEIGHT / non_center_total_weight)
         else:
             dualpan_quota += center_overflow
-        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to diagonal/dualpan/leftorright/tripan.\n")
+        print(f"⚠️  Center quota capped at {total_samples} (number of unique files). Overflow redistributed to diagonal/dualpan/leftorright.\n")
 
     # Handle case where num_audio_samples is very small and all quotas round to 0
     # Distribute remaining samples proportionally
-    total_allocated = center_quota + diagonal_quota + dualpan_quota + leftorright_quota + tripan_quota
+    total_allocated = center_quota + diagonal_quota + dualpan_quota + leftorright_quota
     remaining_samples = NUM_AUDIO_SAMPLES - total_allocated
     if remaining_samples > 0:
         # Allocate remaining samples based on weights
-        weights = [CENTER_ONLY_WEIGHT, DIAGONAL_WEIGHT, DUALPAN_WEIGHT, LEFTORRIGHT_WEIGHT, TRIPAN_WEIGHT]
+        weights = [CENTER_ONLY_WEIGHT, DIAGONAL_WEIGHT, DUALPAN_WEIGHT, LEFTORRIGHT_WEIGHT]
         max_weight_idx = weights.index(max(weights))
         if max_weight_idx == 0:
             center_quota += remaining_samples
@@ -911,10 +883,8 @@ def main() -> None:
             diagonal_quota += remaining_samples
         elif max_weight_idx == 2:
             dualpan_quota += remaining_samples
-        elif max_weight_idx == 3:
-            leftorright_quota += remaining_samples
         else:
-            tripan_quota += remaining_samples
+            leftorright_quota += remaining_samples
     
     # Split diagonal quota evenly between left and right for 50/50 distribution
     left_quota = diagonal_quota // 2
@@ -930,7 +900,6 @@ def main() -> None:
     adjusted_dualpan_weight = dualpan_quota
     adjusted_hard_left_weight = hard_left_quota
     adjusted_hard_right_weight = hard_right_quota
-    adjusted_tripan_weight = tripan_quota
     
     # Calculate strings vs non-strings quotas using the independent A:C ratio.
     # Both samples_to_silence_percents (A:B) and samples_to_strings_percents (A:C) share
@@ -973,7 +942,6 @@ def main() -> None:
     dualpan_quota_remaining = adjusted_dualpan_weight
     hard_left_quota_remaining = adjusted_hard_left_weight
     hard_right_quota_remaining = adjusted_hard_right_weight
-    tripan_quota_remaining = adjusted_tripan_weight
 
     # Strings vs non-strings quota tracking
     strings_quota_remaining = num_strings_samples
@@ -988,7 +956,6 @@ def main() -> None:
     dualpan_count = 0
     hard_left_count = 0
     hard_right_count = 0
-    tripan_count = 0
     
     # Track pan position histories for statistical balancing (store absolute values)
     left_pan_history = []  # Stores positive values (0.35 to 1.0)
@@ -1051,7 +1018,7 @@ def main() -> None:
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-            hard_left_quota_remaining, hard_right_quota_remaining, tripan_quota_remaining,
+            hard_left_quota_remaining, hard_right_quota_remaining,
             left_pan_history, right_pan_history,
             sample_round_robin, all_sample_names,
             require_strings
@@ -1065,7 +1032,7 @@ def main() -> None:
                 sample_names, pan_assignments = generate_unique_combination(
                     samples_by_type,
                     center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-                    hard_left_quota_remaining, hard_right_quota_remaining, tripan_quota_remaining,
+                    hard_left_quota_remaining, hard_right_quota_remaining,
                     left_pan_history, right_pan_history,
                     sample_round_robin, all_sample_names,
                     require_strings=False
@@ -1150,10 +1117,6 @@ def main() -> None:
                     right_quota_remaining = max(0, right_quota_remaining - 1)
                     # Track absolute value in history
                     right_pan_history.append(abs(pan_value))
-        elif len(pan_positions) == 3:  # tripan
-            is_non_centered = True
-            tripan_count += 1
-            tripan_quota_remaining = max(0, tripan_quota_remaining - 1)
         else:  # 2 samples (stereo pair)
             dualpan_count += 1
             dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
@@ -1239,20 +1202,20 @@ def main() -> None:
         return reduce(gcd, args)
     
     # Calculate GCD for ratio display
-    counts = [c for c in [center_count, diagonal_count, dualpan_count, leftorright_count, tripan_count] if c > 0]
+    counts = [c for c in [center_count, diagonal_count, dualpan_count, leftorright_count] if c > 0]
     if len(counts) > 1:
         ratio_gcd = gcd_multiple(*counts)
     else:
         ratio_gcd = 1
     
-    realized_ratio = f"{center_count//ratio_gcd}:{diagonal_count//ratio_gcd}:{dualpan_count//ratio_gcd}:{leftorright_count//ratio_gcd}:{tripan_count//ratio_gcd}"
+    realized_ratio = f"{center_count//ratio_gcd}:{diagonal_count//ratio_gcd}:{dualpan_count//ratio_gcd}:{leftorright_count//ratio_gcd}"
     
     print(f"\nPanning Distribution:")
-    print(f"  Config ratio: {config.get('center_diagonal_dualpan_leftorright_tripan_percents', '33:33:34:0:0')}")
+    print(f"  Config ratio: {config.get('center_diagonal_dualpan_leftorright_percents', '25:25:25:25')}")
     print(f"  Realized ratio: {realized_ratio}")
     
     # Calculate perfect ratio scaled to match realized first value
-    config_ratio_parts = [int(x) for x in config.get('center_diagonal_dualpan_leftorright_tripan_percents', '33:33:34:0:0').split(':')]
+    config_ratio_parts = [int(x) for x in config.get('center_diagonal_dualpan_leftorright_percents', '25:25:25:25').split(':')]
     realized_parts = [int(x) for x in realized_ratio.split(':')]
     scale_factor = realized_parts[0] / config_ratio_parts[0] if config_ratio_parts[0] != 0 else 1
     perfect_ratio_parts = [int(x * scale_factor) for x in config_ratio_parts]
@@ -1263,12 +1226,6 @@ def main() -> None:
     differential = [perfect_ratio_parts[i] - realized_parts[i] for i in range(len(realized_parts))]
     differential_str = ':'.join([f"{'+' if d > 0 else ''}{d}" for d in differential])
     print(f"  Differential: {differential_str}")
-    
-    # Tripan summary
-    if tripan_count > 0:
-        tripan_pct = (tripan_count / created_count) * 100 if created_count > 0 else 0
-        print(f"\nTripan Distribution:")
-        print(f"  Realized: {tripan_count} tripans ({tripan_pct:.1f}% of all samples)")
     
     # Display left/right distribution for diagonal samples
     if diagonal_count > 0:
