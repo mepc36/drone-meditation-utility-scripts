@@ -170,7 +170,42 @@ NO_BPM_VARIATION_SAMPLES = []
 #   'fast_only' => always BPM_VALUES[-1] (last / fastest BPM)
 # 'bpm_by_panning' (optional): per-panning BPM override checked before bpm_if_loud/bpm_if_not_loud.
 SOUND_TYPE_RULES: list[dict] = [
+        {
+        'musical_groupings': ['kick', 'snare'],
+        'pannings': {
+            'center': {
+                'volumes': {
+                    'loud': {'bpms': ['fast', 'slow']},
+                },
+            },
+            'leftorright': {
+                'volumes': {
+                    'loud': {'bpms': ['fast', 'slow']},
+                },
+            },
+            'dualpans': {
+                'volumes': {
+                    'loud': {'bpms': ['fast', 'slow']},
+                },
+            },
+        },
+    },
     {
+        'musical_groupings': ['kickstab', 'snarestab'],
+        'pannings': {
+            'diagonal': {
+                'volumes': {
+                    'quiet': {'bpms': ['slow']},
+                },
+            },
+            'leftorright': {
+                'volumes': {
+                    'loud': {'bpms': ['fast', 'slow']},
+                },
+            },
+        },
+    },
+        {
         'musical_groupings': ['acappella'],
         'pannings': {
             'center': {
@@ -184,50 +219,9 @@ SOUND_TYPE_RULES: list[dict] = [
                     'quiet': {'bpms': ['slow']},
                 },
             },
-            'dualpan': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
             'leftorright': {
                 'volumes': {
                     'loud':  {'bpms': ['fast', 'slow']},
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-        },
-    },
-    {
-        'musical_groupings': ['kickstab', 'snarestab'],
-        'pannings': {
-            'center': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-            'diagonal': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-            'leftorright': {
-                'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
-                },
-            },
-        },
-    },
-    {
-        'musical_groupings': ['kick', 'snare'],
-        'pannings': {
-            'center': {
-                'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
-                },
-            },
-            'leftorright': {
-                'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
                 },
             },
         },
