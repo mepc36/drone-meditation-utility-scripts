@@ -74,7 +74,7 @@ if sum(silence_ratio_parts) != 100:
         f"Error: samples_to_silence_percents percentages must sum to exactly 100.\n"
         f"Got: {':'.join(map(str, silence_ratio_parts))} = {sum(silence_ratio_parts)}"
     )
-SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of non-strings (A) in the A:B ratio
+SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of audio samples (A) in the A:B (audio:silence) ratio
 SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence (B) in the A:B ratio
 
 # Parse samples_to_strings_percents (e.g., "96:4" means 96% non-strings : 4% strings)
@@ -114,13 +114,8 @@ if sum(silence_percentages) != 100:
     )
 SILENCE_LENGTH_PERCENTAGES = silence_percentages
 
-# Parse padded centered samples config
-PADDED_CENTERED_LENGTH_MS = config.get("padded_centered_samples_length_millisec", 2000)
-PADDED_CENTERED_LENGTH_SECONDS = PADDED_CENTERED_LENGTH_MS / 1000.0
-PADDED_CENTERED_PERCENT = config.get("padded_centered_samples_percent", 0.0) / 100.0
-
 # Fixed panning position for diagonal samples (left side uses negative, right side positive)
-NON_CENTER_PAN = 0.60
+NON_CENTER_PAN = 0.53
 
 # Per-type rules: panning groups, volume levels, and BPM constraints.
 # 'musical_groupings': sound types this rule applies to.
@@ -142,11 +137,13 @@ SOUND_TYPE_RULES: list[dict] = [
                     'loud': {'bpms': ['fast', 'slow']},
                 },
             },
-            'dualpans': {
+            'dualpan': {
                 'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
-                },
-            },
+                    'loud': {
+                        'bpms': ['slow']
+                    }
+                }
+            }
         },
     },
     {
@@ -154,7 +151,7 @@ SOUND_TYPE_RULES: list[dict] = [
         'pannings': {
             'diagonal': {
                 'volumes': {
-                    'quiet': {'bpms': ['slow']},
+                    'loud': {'bpms': ['fast', 'slow']},
                 },
             },
             'leftorright': {
@@ -177,6 +174,13 @@ SOUND_TYPE_RULES: list[dict] = [
                     'loud':  {'bpms': ['fast', 'slow']},
                 },
             },
+            'diagonal': {
+                'volumes': {
+                    'loud': {
+                        'bpms': ['slow']
+                    }
+                }
+            }
         },
     },
     {
@@ -358,8 +362,8 @@ def dequeue_next_sample(sample_queue: deque, all_sample_names: list[str],
 def dequeue_next_sample_of_types(sample_queue: deque, all_sample_names: list[str],
                                   allowed_types: set[str],
                                   exclude_name: str | None = None) -> str | None:
-    """Pop the next usable non-strings sample from the round-robin queue whose
-    sound_type is in *allowed_types*. Returns None if no eligible sample exists.
+    """Pop the next sample from the round-robin queue whose sound_type is in *allowed_types*.
+    Returns None if no eligible sample exists.
     exclude_name: if provided, skip that specific sample (used to avoid pairing a sample with itself).
     """
     any_eligible = any(
@@ -542,8 +546,7 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
 
 
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
-                       sample_rate: int, volume_db: float, beat_length_seconds: float,
-                       use_padded_length: bool = False, is_centered: bool = False) -> np.ndarray:
+                       sample_rate: int, volume_db: float, beat_length_seconds: float) -> np.ndarray:
     """
     Create a stereo mix of samples with their pan positions.
     Returns padded stereo audio.
@@ -553,17 +556,10 @@ def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
         pan_assignments: Dictionary mapping sample names to pan positions
         sample_rate: Sample rate for the output
         volume_db: dB reduction to apply (selected in main() before this call)
-        use_padded_length: If True, pad to PADDED_CENTERED_LENGTH_SECONDS instead of beat_length_seconds
-        is_centered: If True, sample is centered
     """
     # Load and pan each sample
     mixed = None
-    
-    # Determine target length
-    if use_padded_length:
-        target_length = PADDED_CENTERED_LENGTH_SECONDS
-    else:
-        target_length = beat_length_seconds
+    target_length = beat_length_seconds
     
     # Load and resample all samples first
     loaded_audio: dict[str, np.ndarray] = {}
@@ -768,7 +764,7 @@ def infer_pan_group(sample_names: list[str], pan_assignments: dict[str, str]) ->
     return 'diagonal'
 
 
-def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int, bpm: int, beat_suffix: str = "1-beat") -> str:
+def format_filename(sample_names: list[str], pan_assignments: dict[str, str], volume_db: float, index: int, bpm: int) -> str:
     """
     Format filename as: left_center_right_vol-X_index-NNN_length-Xbeat_bpm-NNN_<pangroup>.wav
     Only includes samples that are present, in pan order.
@@ -780,10 +776,6 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], vo
         # Convert pan to numeric value for sorting
         if pan == 'center':
             pan_value = 0.0
-        elif pan == 'left':
-            pan_value = -1.0
-        elif pan == 'right':
-            pan_value = 1.0
         elif pan == 'hard_left':
             pan_value = -1.0
         elif pan == 'hard_right':
@@ -806,7 +798,7 @@ def format_filename(sample_names: list[str], pan_assignments: dict[str, str], vo
     
     # Build filename
     name_part = "_".join(sorted_names)
-    return f"{name_part}_vol-{vol_str}_index-{index:03d}_length-{beat_suffix}_bpm-{bpm}_{pan_group}.wav"
+    return f"{name_part}_vol-{vol_str}_index-{index:03d}_length-1-beat_bpm-{bpm}_{pan_group}.wav"
 
 
 def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> None:
@@ -915,13 +907,6 @@ def main() -> None:
     hard_left_quota = leftorright_quota // 2
     hard_right_quota = leftorright_quota - hard_left_quota  # Gives right any remainder for odd numbers
     
-    adjusted_center_weight = center_quota
-    adjusted_left_weight = left_quota
-    adjusted_right_weight = right_quota
-    adjusted_dualpan_weight = dualpan_quota
-    adjusted_hard_left_weight = hard_left_quota
-    adjusted_hard_right_weight = hard_right_quota
-
     sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
     
@@ -932,12 +917,12 @@ def main() -> None:
     max_attempts = NUM_AUDIO_SAMPLES * 100  # Prevent infinite loop
     
     # Quota-based generation: track how many of each pattern we still need
-    center_quota_remaining = adjusted_center_weight
-    left_quota_remaining = adjusted_left_weight
-    right_quota_remaining = adjusted_right_weight
-    dualpan_quota_remaining = adjusted_dualpan_weight
-    hard_left_quota_remaining = adjusted_hard_left_weight
-    hard_right_quota_remaining = adjusted_hard_right_weight
+    center_quota_remaining = center_quota
+    left_quota_remaining = left_quota
+    right_quota_remaining = right_quota
+    dualpan_quota_remaining = dualpan_quota
+    hard_left_quota_remaining = hard_left_quota
+    hard_right_quota_remaining = hard_right_quota
 
     # Strings vs non-strings quota tracking
     strings_quota_remaining = num_strings_samples
@@ -956,16 +941,11 @@ def main() -> None:
     # Track volume level distribution
     volume_counts = [0] * len(volume_levels_db)
     
-    # Initialize volume quota pool (quota-based selection).
+    # Build shared volume pool for all non-strings samples.
     # Pools are sized against non-strings samples only — strings bypass both pools entirely.
-    volume_quotas = []
-    for pct in volume_percentages:
-        quota = int(num_non_strings_samples * pct / 100)
-        volume_quotas.append(quota)
-
-    # Build shared volume pool for all non-strings samples
     volume_pool = []
-    for idx, quota in enumerate(volume_quotas):
+    for idx, pct in enumerate(volume_percentages):
+        quota = int(num_non_strings_samples * pct / 100)
         volume_pool.extend([idx] * quota)
 
     # Build beat length pool based on slow_to_fast_bpm_percents quota
@@ -977,11 +957,6 @@ def main() -> None:
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     _, sample_rate = load_audio(first_sample_name)
-    
-    # Calculate how many centered samples should be padded
-    num_padded_centered = int(center_quota * PADDED_CENTERED_PERCENT)
-    padded_centered_count = 0
-    centered_created_count = 0
     
     while created_count < NUM_AUDIO_SAMPLES and attempts < max_attempts:
         attempts += 1
@@ -1045,32 +1020,19 @@ def main() -> None:
 
         # Track panning pattern and update quotas (strings do not consume panning quotas)
         pan_positions = list(pan_assignments.values())
-        is_centered = False
-        is_non_centered = False
-        use_padded_length = False
         
         if len(pan_positions) == 1:
             if pan_positions[0] == 'center':
-                is_centered = True
                 center_count += 1
-                centered_created_count += 1
                 if not is_strings_combo:
                     center_quota_remaining = max(0, center_quota_remaining - 1)
-                
-                # Decide if this centered sample should be padded
-                if padded_centered_count < num_padded_centered:
-                    use_padded_length = True
-                    padded_centered_count += 1
             elif pan_positions[0] == 'hard_left':
-                is_non_centered = True
                 hard_left_count += 1
                 hard_left_quota_remaining = max(0, hard_left_quota_remaining - 1)
             elif pan_positions[0] == 'hard_right':
-                is_non_centered = True
                 hard_right_count += 1
                 hard_right_quota_remaining = max(0, hard_right_quota_remaining - 1)
             else:  # diagonal left or right (numeric pan value)
-                is_non_centered = True
                 pan_value = float(pan_positions[0])
                 if pan_value < 0:  # left side
                     left_count += 1
@@ -1175,8 +1137,8 @@ def main() -> None:
             selected_bpm_idx = 0  # Fallback to first BPM
         beat_length_sec = BEAT_LENGTHS_SECONDS[selected_bpm_idx]
 
-        # Create the audio (volume_db is now pre-selected, enabling Phase 3 coupling)
-        combined_audio = create_combination(sample_names, pan_assignments, sample_rate, volume_db, beat_length_sec, use_padded_length, is_centered)
+        # Create the audio
+        combined_audio = create_combination(sample_names, pan_assignments, sample_rate, volume_db, beat_length_sec)
         
         filename = format_filename(sample_names, pan_assignments, volume_db, created_count, BPM_VALUES[selected_bpm_idx])
         output_path = OUTPUT_DIR / filename
@@ -1266,15 +1228,6 @@ def main() -> None:
         print(f"  Realized: {hard_left_count}:{hard_right_count} = {hard_left_pct:.1f}% : {hard_right_pct:.1f}%")
         diff = hard_left_count - hard_right_count
         print(f"  Differential: {diff:+d} (hard left - hard right)")
-    
-    # Display padded centered samples info
-    if padded_centered_count > 0:
-        padded_pct = (padded_centered_count / center_count) * 100 if center_count > 0 else 0
-        target_padded_pct = PADDED_CENTERED_PERCENT * 100
-        print(f"\nPadded Centered Samples:")
-        print(f"  Target: {target_padded_pct:.1f}% of centered samples")
-        print(f"  Realized: {padded_centered_count}/{center_count} = {padded_pct:.1f}%")
-        print(f"  Length: {PADDED_CENTERED_LENGTH_MS}ms ({PADDED_CENTERED_LENGTH_SECONDS:.2f}s)")
     
     # Display volume distribution
     print(f"\nVolume Distribution:")

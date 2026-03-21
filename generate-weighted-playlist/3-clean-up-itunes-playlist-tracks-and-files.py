@@ -7,7 +7,6 @@ Cleanup script for audio files:
 2. Deletes generated playlist file
 """
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -15,15 +14,8 @@ from pathlib import Path
 # -------------------------------------------------------------------
 # CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
-CONFIG_PATH = Path("./input/config/config.json")
-with open(CONFIG_PATH, 'r') as f:
-    config = json.load(f)
-
 OUTPUT_AUDIO_DIR = Path("./output/audio")
-
-# Playlist location and name
-PLAYLIST_NAME = config["playlist_name"]
-PLAYLIST_PATH = Path("./output/playlists") / f"{PLAYLIST_NAME}.m3u"
+PLAYLIST_PATH = Path("./output/playlists") / "playlist.m3u"
 
 
 # -------------------------------------------------------------------

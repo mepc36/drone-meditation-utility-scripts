@@ -6,7 +6,6 @@ Generates an M3U playlist from ./output/audio/
 and plays it via mpv (shuffled, infinite loop).
 """
 
-import json
 from pathlib import Path
 import subprocess
 
@@ -14,17 +13,12 @@ import subprocess
 # -------------------------------------------------------------------
 # CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
-CONFIG_PATH = Path("./input/config/config.json")
-with open(CONFIG_PATH, 'r') as f:
-    config = json.load(f)
-
 # Source directory with final samples
 SOURCE_AUDIO_DIR = Path("./output/audio")
 
 # Output locations
 OUTPUT_DIR = Path("./output")
-PLAYLIST_NAME = config["playlist_name"]
-PLAYLIST_PATH = OUTPUT_DIR / "playlists" / f"{PLAYLIST_NAME}.m3u"
+PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "playlist.m3u"
 
 
 
