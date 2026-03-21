@@ -46,6 +46,9 @@ MANIFEST
 *.bak
 *.old
 
-input*
+cut-song-at-essentia-beat-positions/input/
+divide-song-into-quarter-note-samples/input/
+recreate-tinnitus-sound/input/
+generate-weighted-playlist/input/audio/
 output*
 .env
