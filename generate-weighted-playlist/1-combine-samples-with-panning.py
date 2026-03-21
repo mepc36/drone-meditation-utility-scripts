@@ -111,20 +111,13 @@ SOUND_TYPE_RULES: list[dict] = [
         {
         'musical_groupings': ['kick', 'snare'],
         'pannings': {
-            'center': {
-                'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
-                },
-            },
             'leftorright': {
                 'volumes': {
-                    'quiet': {'bpms': ['slow', 'fast']},
-                    'loud': {'bpms': ['fast', 'slow']},
+                    'quiet': {'bpms': ['slow']},
                 },
             },
             'dualpan': {
                 'volumes': {
-                    'quiet': { 'bpms': ['fast', 'slow'] },
                     'loud': { 'bpms': ['slow', 'fast'] },
                 }
             }
@@ -133,20 +126,25 @@ SOUND_TYPE_RULES: list[dict] = [
     {
         'musical_groupings': ['kickstab', 'snarestab'],
         'pannings': {
+            'center': {
+                'volumes': {
+                    'loud': {'bpms': ['fast', 'slow']},
+                },
+            },
             'diagonal': {
                 'volumes': {
                     'quiet': {'bpms': ['slow']},
+                    'loud': {'bpms': ['slow']},
                 },
             },
             'leftorright': {
                 'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
                     'quiet': {'bpms': ['slow', 'fast']},
                 },
             },
         },
     },
-        {
+    {
         'musical_groupings': ['acappella'],
         'pannings': {
             'center': {
@@ -156,7 +154,6 @@ SOUND_TYPE_RULES: list[dict] = [
             },
             'leftorright': {
                 'volumes': {
-                    'quiet':  {'bpms': ['slow']},
                     'loud':  {'bpms': ['slow']},
                 },
             },
@@ -164,17 +161,8 @@ SOUND_TYPE_RULES: list[dict] = [
                 'volumes': {
                     'quiet': {
                         'bpms': ['slow']
-                    }
-                }
-            },
-            'dualpans': {
-                'volumes': {
-                    'loud': {
-                        'bpms': ['slow']
                     },
-                    'quiet': {
-                        'bpms': ['slow']
-                    }
+                    'loud': {'bpms': ['slow']},
                 }
             },
         },
