@@ -239,6 +239,33 @@ QUIET_VOL_IDX: int = volume_levels_db.index(min(volume_levels_db))
 SLOW_BPM_IDX: int = BPM_VALUES.index(min(BPM_VALUES))
 FAST_BPM_IDX: int = BPM_VALUES.index(max(BPM_VALUES))
 
+# Sound groupings used by kicksnare_stab_acappella_percents.
+# Order matches the 3 colon-separated values in the config key.
+SOUND_GROUP_NAMES: list[str] = ['kicksnare', 'stab', 'acappella']
+SOUND_GROUP_TYPES: dict[str, set[str]] = {
+    'kicksnare': {'kick', 'snare'},
+    'stab':      {'kickstab', 'snarestab'},
+    'acappella': {'acappella'},
+}
+
+# Parse kicksnare_stab_acappella_percents (optional).
+# e.g. "30:20:50" → 30% kicksnare, 20% stab, 50% acappella of non-strings slots.
+if "kicksnare_stab_acappella_percents" in config:
+    _group_parts = [int(x) for x in str(config["kicksnare_stab_acappella_percents"]).split(":")]
+    if len(_group_parts) != 3:
+        raise ValueError(
+            f"Error: kicksnare_stab_acappella_percents must have exactly 3 colon-separated values "
+            f"(kicksnare:stab:acappella).\nGot: {':'.join(map(str, _group_parts))}"
+        )
+    if sum(_group_parts) != 100:
+        raise ValueError(
+            f"Error: kicksnare_stab_acappella_percents percentages must sum to exactly 100.\n"
+            f"Got: {':'.join(map(str, _group_parts))} = {sum(_group_parts)}"
+        )
+    SOUND_GROUP_PERCENTS: list[int] | None = _group_parts
+else:
+    SOUND_GROUP_PERCENTS = None  # No group constraint — natural file proportions apply.
+
 
 # -------------------------------------------------------------------
 # Helpers
@@ -630,7 +657,8 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
                                center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
                                hard_left_quota: int, hard_right_quota: int,
                                sample_round_robin: deque, all_sample_names: list[str],
-                               require_strings: bool | None = None) -> tuple[list[str], dict[str, str]]:
+                               require_strings: bool | None = None,
+                               allowed_types: set[str] | None = None) -> tuple[list[str], dict[str, str]]:
     """Generate a combination using round-robin sample selection + quota-based panning.
 
     Sample selection: samples are drawn from a shuffled round-robin queue so that
@@ -652,7 +680,10 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
     # ----------------------------------------------------------------
     # Step 1: dequeue the primary sample from the round-robin queue
     # ----------------------------------------------------------------
-    primary = dequeue_next_sample(sample_round_robin, all_sample_names, require_strings)
+    if allowed_types is not None:
+        primary = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed_types)
+    else:
+        primary = dequeue_next_sample(sample_round_robin, all_sample_names, require_strings)
     if primary is None:
         return None, None
 
@@ -921,7 +952,22 @@ def main() -> None:
     non_strings_quota_remaining = num_non_strings_samples
     strings_created_count = 0
     non_strings_created_count = 0
-    
+
+    # Sound group quotas (kicksnare / stab / acappella) — only when configured.
+    if SOUND_GROUP_PERCENTS is not None:
+        group_quotas_remaining: dict[str, int] = {}
+        for _gname, _pct in zip(SOUND_GROUP_NAMES, SOUND_GROUP_PERCENTS):
+            group_quotas_remaining[_gname] = int(num_non_strings_samples * _pct / 100)
+        # Assign any rounding remainder to the largest group.
+        _total_group = sum(group_quotas_remaining.values())
+        _group_remainder = num_non_strings_samples - _total_group
+        if _group_remainder > 0:
+            _largest_group = max(SOUND_GROUP_NAMES, key=lambda n: group_quotas_remaining[n])
+            group_quotas_remaining[_largest_group] += _group_remainder
+    else:
+        group_quotas_remaining = None
+    group_counts: dict[str, int] = {name: 0 for name in SOUND_GROUP_NAMES}
+
     # Track panning distribution
     center_count = 0
     left_count = 0
@@ -963,15 +1009,33 @@ def main() -> None:
         else:
             require_strings = False
 
+        # Determine which sound group to draw from (if kicksnare_stab_acappella_percents is configured).
+        chosen_group: str | None = None
+        allowed_types: set[str] | None = None
+        if not require_strings and group_quotas_remaining is not None:
+            _total_group_remaining = sum(group_quotas_remaining.values())
+            if _total_group_remaining > 0:
+                _rand = random.random() * _total_group_remaining
+                _cumulative = 0
+                for _gname in SOUND_GROUP_NAMES:
+                    _cumulative += group_quotas_remaining[_gname]
+                    if _rand < _cumulative:
+                        chosen_group = _gname
+                        break
+                if chosen_group is None:
+                    chosen_group = SOUND_GROUP_NAMES[-1]  # safety fallback
+                allowed_types = SOUND_GROUP_TYPES[chosen_group]
+
         # Generate combination with remaining quotas
         sample_names, pan_assignments = generate_unique_combination(
             samples_by_type,
             center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
             hard_left_quota_remaining, hard_right_quota_remaining,
             sample_round_robin, all_sample_names,
-            require_strings
+            require_strings,
+            allowed_types
         )
-        
+
         # Check if combination generation failed
         if sample_names is None:
             # If we were trying to find a strings sample and none are available, fall back
@@ -982,8 +1046,20 @@ def main() -> None:
                     center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
                     hard_left_quota_remaining, hard_right_quota_remaining,
                     sample_round_robin, all_sample_names,
-                    require_strings=False
+                    require_strings=False,
+                    allowed_types=allowed_types
                 )
+            # If a group constraint caused the failure (group exhausted), retry unconstrained.
+            if sample_names is None and allowed_types is not None:
+                sample_names, pan_assignments = generate_unique_combination(
+                    samples_by_type,
+                    center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
+                    hard_left_quota_remaining, hard_right_quota_remaining,
+                    sample_round_robin, all_sample_names,
+                    require_strings=False,
+                    allowed_types=None
+                )
+                chosen_group = None  # Can't attribute to a specific group.
             if sample_names is None:
                 continue
         
@@ -1009,6 +1085,16 @@ def main() -> None:
         else:
             non_strings_created_count += 1
             non_strings_quota_remaining = max(0, non_strings_quota_remaining - 1)
+            # Decrement sound group quota and track realized counts.
+            if group_quotas_remaining is not None:
+                _primary_type = get_sound_type(sample_names[0])
+                _actual_group = next(
+                    (gname for gname, types in SOUND_GROUP_TYPES.items() if _primary_type in types),
+                    None
+                )
+                if _actual_group is not None:
+                    group_quotas_remaining[_actual_group] = max(0, group_quotas_remaining[_actual_group] - 1)
+                    group_counts[_actual_group] += 1
 
         # Track panning pattern and update quotas (strings do not consume panning quotas)
         pan_positions = list(pan_assignments.values())
@@ -1298,6 +1384,15 @@ def main() -> None:
         print(f"\nStrings Distribution:")
         print(f"  All {actual_untouched_count} strings sample(s) added exactly once (no duplicates).")
         print(f"  Realized: {non_strings_created_count} non-strings ({non_strings_pct:.1f}%) / {strings_created_count} strings ({strings_pct:.1f}%)")
+
+    # Display sound group distribution (only if kicksnare_stab_acappella_percents is configured)
+    if SOUND_GROUP_PERCENTS is not None and non_strings_created_count > 0:
+        print(f"\nSound Group Distribution:")
+        print(f"  Config: kicksnare_stab_acappella_percents = {config['kicksnare_stab_acappella_percents']}")
+        for _gname, _target_pct in zip(SOUND_GROUP_NAMES, SOUND_GROUP_PERCENTS):
+            _count = group_counts[_gname]
+            _realized_pct = (_count / non_strings_created_count) * 100
+            print(f"  {_gname}: {_count} samples ({_realized_pct:.1f}%, target {_target_pct}%)")
 
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
