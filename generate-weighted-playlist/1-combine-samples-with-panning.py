@@ -113,7 +113,7 @@ SOUND_TYPE_RULES: list[dict] = [
         'pannings': {
             'leftorright': {
                 'volumes': {
-                    'loud': {'bpms': ['slow', 'fast']},
+                    'quiet': {'bpms': ['slow']},
                 },
             },
             'dualpan': {
