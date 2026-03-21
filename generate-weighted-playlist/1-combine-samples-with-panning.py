@@ -118,12 +118,13 @@ SOUND_TYPE_RULES: list[dict] = [
             },
             'leftorright': {
                 'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']}
+                    'loud': {'bpms': ['fast', 'slow']},
+                    'quiet': {'bpms': ['slow']}
                 },
             },
             'dualpan': {
                 'volumes': {
-                    'loud': {
+                    'quiet': {
                         'bpms': ['slow']
                     }
                 }
@@ -156,6 +157,7 @@ SOUND_TYPE_RULES: list[dict] = [
             },
             'leftorright': {
                 'volumes': {
+                    'quiet':  {'bpms': ['slow']},
                     'loud':  {'bpms': ['slow']},
                 },
             },
