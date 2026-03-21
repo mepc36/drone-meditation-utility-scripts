@@ -7,6 +7,5 @@
   "loud_medium_soft_values": "0:-30",
   "loud_medium_soft_percents": "60:40",
   "silence_lengths_millisec": "5900",
-  "silence_lengths_percents": "100",
-  "samples_to_strings_percents": "90:10"
+  "silence_lengths_percents": "100"
 }

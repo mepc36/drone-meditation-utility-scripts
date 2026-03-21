@@ -77,29 +77,13 @@ if sum(silence_ratio_parts) != 100:
 SAMPLES_PERCENT = silence_ratio_parts[0]  # Percentage of audio samples (A) in the A:B (audio:silence) ratio
 SILENCE_PERCENT = silence_ratio_parts[1] if len(silence_ratio_parts) > 1 else 0  # Percentage of silence (B) in the A:B ratio
 
-# Parse samples_to_strings_percents (e.g., "96:4" means 96% non-strings : 4% strings)
-# A strings sample is any file whose sound-type field (3rd underscore-delimited token) is "strings",
-# e.g. flowing-string-quartet_oov_strings.wav
-strings_ratio_parts = [int(x) for x in config.get("samples_to_strings_percents", "100:0").split(":")]
-if sum(strings_ratio_parts) != 100:
-    raise ValueError(
-        f"Error: samples_to_strings_percents percentages must sum to exactly 100.\n"
-        f"Got: {':'.join(map(str, strings_ratio_parts))} = {sum(strings_ratio_parts)}"
-    )
-NON_STRINGS_PERCENT = strings_ratio_parts[0]
-STRINGS_PERCENT = strings_ratio_parts[1] if len(strings_ratio_parts) > 1 else 0
-
-# Calculate counts using two independent ratios sharing non-strings (A) as the common baseline:
-#   samples_to_silence_percents defines  A (non-strings) : B (silence)
-#   samples_to_strings_percents defines  A (non-strings) : C (strings)
-# Derive a three-way proportional split from these two ratios.
+# Calculate audio vs silence split.
 if SILENCE_PERCENT == 0:
     NUM_SILENCE_FILES = 0
     NUM_AUDIO_SAMPLES = NUM_UNIQUE_SAMPLES
 else:
-    ratio_silence = SILENCE_PERCENT / SAMPLES_PERCENT  # silence per unit of non-strings
-    ratio_strings = (STRINGS_PERCENT / NON_STRINGS_PERCENT) if (NON_STRINGS_PERCENT > 0 and STRINGS_PERCENT > 0) else 0.0
-    _denom = 1.0 + ratio_silence + ratio_strings
+    ratio_silence = SILENCE_PERCENT / SAMPLES_PERCENT
+    _denom = 1.0 + ratio_silence
     NUM_SILENCE_FILES = round(NUM_UNIQUE_SAMPLES * ratio_silence / _denom)
     NUM_AUDIO_SAMPLES = NUM_UNIQUE_SAMPLES - NUM_SILENCE_FILES
 
@@ -839,29 +823,17 @@ def main() -> None:
     
     reset_output_dir()
 
-    # Compute strings vs non-strings counts first (panning quotas below are based on non-strings only).
-    # Both samples_to_silence_percents (A:B) and samples_to_strings_percents (A:C) share
-    # non-strings (A) as their common baseline.
-    if STRINGS_PERCENT == 0 or NON_STRINGS_PERCENT == 0:
-        num_strings_samples = 0 if STRINGS_PERCENT == 0 else NUM_AUDIO_SAMPLES
-        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
-    else:
-        _ratio_strings = STRINGS_PERCENT / NON_STRINGS_PERCENT  # C per unit of A
-        num_strings_samples = round(NUM_AUDIO_SAMPLES * _ratio_strings / (1.0 + _ratio_strings))
-        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
-
-    # Cap untouched-type samples (e.g. strings) to the number of unique files that actually exist.
+    # Every _strings sample is added to the playlist exactly once — no duplicates allowed.
     actual_untouched_count = sum(
         len(v) for k, v in samples_by_type.items() if is_untouched_type(k)
     )
-    if num_strings_samples > actual_untouched_count:
-        print(
-            f"⚠️  Warning: samples_to_strings_percents requests {num_strings_samples} strings "
-            f"sample(s), but only {actual_untouched_count} unique strings file(s) exist. "
-            f"Capping at {actual_untouched_count}."
+    if actual_untouched_count > NUM_UNIQUE_SAMPLES:
+        raise ValueError(
+            f"Error: {actual_untouched_count} strings sample(s) found, but num_unique_samples is "
+            f"{NUM_UNIQUE_SAMPLES}. Increase num_unique_samples to at least {actual_untouched_count}."
         )
-        num_strings_samples = actual_untouched_count
-        num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
+    num_strings_samples = actual_untouched_count
+    num_non_strings_samples = NUM_AUDIO_SAMPLES - num_strings_samples
 
     # Panning quotas apply to non-strings samples only; strings always go center (untouched).
     total_non_strings_input = sum(len(v) for k, v in samples_by_type.items() if not is_untouched_type(k))
@@ -1301,12 +1273,11 @@ def main() -> None:
         total_files_created = created_count
     
     # Display strings distribution
-    if STRINGS_PERCENT > 0:
+    if actual_untouched_count > 0:
         strings_pct = (strings_created_count / created_count) * 100 if created_count > 0 else 0
         non_strings_pct = (non_strings_created_count / created_count) * 100 if created_count > 0 else 0
         print(f"\nStrings Distribution:")
-        print(f"  Config ratio: {config.get('samples_to_strings_percents', '100:0')} (non-strings:strings)")
-        print(f"  Target: {NON_STRINGS_PERCENT}% non-strings / {STRINGS_PERCENT}% strings")
+        print(f"  All {actual_untouched_count} strings sample(s) added exactly once (no duplicates).")
         print(f"  Realized: {non_strings_created_count} non-strings ({non_strings_pct:.1f}%) / {strings_created_count} strings ({strings_pct:.1f}%)")
 
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")

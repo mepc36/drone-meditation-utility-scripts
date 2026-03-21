@@ -11,9 +11,7 @@ bpm_percents = [int(x) for x in str(cfg.get("slow_to_fast_bpm_percents", "100"))
 vol_values = [float(x) for x in str(cfg.get("loud_medium_soft_values", "0")).split(":")]
 vol_percents = [int(x) for x in str(cfg.get("loud_medium_soft_percents", "100")).split(":")]
 pan_percents = [int(x) for x in str(cfg.get("center_diagonal_dualpan_leftorright_percents", "25:25:25:25")).split(":")]
-strings_percents = [int(x) for x in str(cfg.get("samples_to_strings_percents", "100")).split(":")]
-strings_target = strings_percents[1] if len(strings_percents) > 1 else 0
-non_strings_target = strings_percents[0]
+
 
 files = [f for f in os.listdir(d) if f.endswith('.wav')]
 total = len(files)
@@ -66,5 +64,5 @@ for label, count in [("center", center), ("diagonal", diagonal), ("dualpan", dua
     print(f"  {label}: {count}/{total} = {count/total*100:.1f}%")
 
 print()
-print(f"STRINGS SPLIT (config target non-strings:{non_strings_target}% strings:{strings_target}%)")
+print(f"STRINGS (all strings added exactly once, no duplicates)")
 print(f"  non-strings: {ns}/{total} = {ns/total*100:.1f}%  |  strings: {len(strings)}/{total} = {len(strings)/total*100:.1f}%")
