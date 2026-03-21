@@ -128,8 +128,8 @@ TWO_BEAT_DURATION_PERCENT = config.get("two_beat_duration_percent", 0.0) / 100.0
 
 # Panning range constants for non-center samples
 # Left side uses negative values, right side uses positive values
-NON_CENTER_PAN_MIN = 0.55  # Minimum distance from center (applies to both sides)
-NON_CENTER_PAN_MAX = 0.55  # Maximum distance from center (applies to both sides)
+NON_CENTER_PAN_MIN = 0.50  # Minimum distance from center (applies to both sides)
+NON_CENTER_PAN_MAX = 0.50  # Maximum distance from center (applies to both sides)
 
 # Number of segments for statistical balancing of panning distribution
 PAN_DISTRIBUTION_SEGMENTS = 10  # Divide panning range into this many segments for tracking
@@ -167,10 +167,13 @@ NO_BPM_VARIATION_SAMPLES = []
 # 'bpm_if_not_loud': BPM constraint otherwise
 #   'any'       => draw freely from pool
 #   'slow_only' => always BPM_VALUES[0] (first / slowest BPM)
+#   'fast_only' => always BPM_VALUES[-1] (last / fastest BPM)
+# 'bpm_by_panning' (optional): per-panning BPM override checked before bpm_if_loud/bpm_if_not_loud.
 SOUND_TYPE_RULES: dict[str, dict] = {
     'acappella': {
-        'allowed_pannings': {'diagonal', 'dualpan', 'leftorright'},
+        'allowed_pannings': {'center', 'diagonal', 'dualpan', 'leftorright'},
         'volume_by_panning': {
+            'center':      'quiet_only',
             'diagonal':    'any',
             'dualpan':     'quiet_only',
             'leftorright': 'any',
@@ -179,8 +182,9 @@ SOUND_TYPE_RULES: dict[str, dict] = {
         'bpm_if_not_loud': 'slow_only',
     },
     'kickstab': {
-        'allowed_pannings': {'diagonal', 'leftorright'},
+        'allowed_pannings': {'center', 'diagonal', 'leftorright'},
         'volume_by_panning': {
+            'center':      'quiet_only',
             'diagonal':    'quiet_only',
             'leftorright': 'any',
         },
@@ -188,8 +192,9 @@ SOUND_TYPE_RULES: dict[str, dict] = {
         'bpm_if_not_loud': 'slow_only',
     },
     'snarestab': {
-        'allowed_pannings': {'diagonal', 'leftorright'},
+        'allowed_pannings': {'center', 'diagonal', 'leftorright'},
         'volume_by_panning': {
+            'center':      'quiet_only',
             'diagonal':    'quiet_only',
             'leftorright': 'any',
         },
@@ -200,7 +205,7 @@ SOUND_TYPE_RULES: dict[str, dict] = {
         'allowed_pannings': {'center', 'dualpan'},
         'volume_by_panning': {
             'center':  'loud_only',
-            'dualpan': 'quiet_only',
+            'dualpan': 'any',
         },
         'bpm_if_loud':     'any',
         'bpm_if_not_loud': 'slow_only',
@@ -209,7 +214,7 @@ SOUND_TYPE_RULES: dict[str, dict] = {
         'allowed_pannings': {'center', 'dualpan'},
         'volume_by_panning': {
             'center':  'loud_only',
-            'dualpan': 'quiet_only',
+            'dualpan': 'any',
         },
         'bpm_if_loud':     'any',
         'bpm_if_not_loud': 'slow_only',
@@ -816,7 +821,7 @@ def generate_unique_combination(samples_by_type: dict[str, list[str]],
         )
         if partner is None:
             # Can't form a pair — fall back to an allowed single-channel panning.
-            # Types that don't allow center (e.g. acappella) fall back to diagonal.
+            # Types that don't allow center fall back to diagonal.
             _rule = SOUND_TYPE_RULES.get(sound_type)
             if _rule and 'center' not in _rule['allowed_pannings']:
                 pan_position = select_balanced_pan_position('left', left_pan_history)
@@ -1205,8 +1210,9 @@ def main() -> None:
         _rule = SOUND_TYPE_RULES.get(primary_sound_type)
 
         # Select volume. Strings bypass the pool entirely (their volume is never adjusted).
-        # Types in SOUND_TYPE_RULES with a fixed volume constraint bypass the pool too;
-        # only unconstrained types draw from it, keeping the pool accurate for them.
+        # For forced-loud/quiet assignments, we also consume the matching slot from the pool
+        # so that the pool compensates toward the other direction, keeping the overall
+        # distribution on the config target even when many samples are force-assigned.
         if is_strings_combo:
             volume_db = 0.0  # Ignored — strings are in NOT_VOLUME_ADJUSTED_SAMPLES.
             volume_idx = 0
@@ -1215,9 +1221,13 @@ def main() -> None:
             if vol_constraint == 'loud_only':
                 volume_db = volume_levels_db[0]
                 volume_idx = 0
+                if volume_idx in volume_pool:  # consume quota so pool compensates
+                    volume_pool.remove(volume_idx)
             elif vol_constraint == 'quiet_only':
                 volume_db = volume_levels_db[-1]
                 volume_idx = len(volume_levels_db) - 1
+                if volume_idx in volume_pool:  # consume quota so pool compensates
+                    volume_pool.remove(volume_idx)
             else:  # 'any' — draw freely from pool
                 volume_db, volume_idx = select_volume_level_from_pool(volume_pool)
                 if volume_idx in volume_pool:
@@ -1230,15 +1240,28 @@ def main() -> None:
             volume_counts[volume_idx] += 1
 
         # Select BPM. Strings bypass the pool. Types in SOUND_TYPE_RULES are constrained
-        # by their volume: loud → any BPM from pool; not-loud → slow (first BPM) only.
+        # first by bpm_by_panning (per-panning override), then by bpm_if_loud/bpm_if_not_loud.
+        # Forced-slow/fast assignments also consume their slot from the pool so the pool
+        # compensates to keep the overall BPM ratio on target.
         is_loud = (volume_db == volume_levels_db[0])
         is_no_bpm_variation = any(get_sound_type(name) in NO_BPM_VARIATION_SAMPLES for name in sample_names)
         if is_strings_combo:
             selected_bpm_idx = 0  # Arbitrary — strings use their natural file length.
         elif _rule is not None:
-            bpm_constraint = _rule['bpm_if_loud'] if is_loud else _rule['bpm_if_not_loud']
+            bpm_by_panning = _rule.get('bpm_by_panning', {})
+            if pan_group in bpm_by_panning:
+                bpm_constraint = bpm_by_panning[pan_group]
+            else:
+                bpm_constraint = _rule['bpm_if_loud'] if is_loud else _rule['bpm_if_not_loud']
             if bpm_constraint == 'slow_only':
                 selected_bpm_idx = 0
+                if 0 in beat_length_pool:  # consume quota so pool compensates
+                    beat_length_pool.remove(0)
+            elif bpm_constraint == 'fast_only':
+                selected_bpm_idx = len(BPM_VALUES) - 1
+                fast_idx = len(BPM_VALUES) - 1
+                if fast_idx in beat_length_pool:  # consume quota so pool compensates
+                    beat_length_pool.remove(fast_idx)
             else:  # 'any'
                 if beat_length_pool:
                     selected_bpm_idx = random.choice(beat_length_pool)
@@ -1247,6 +1270,13 @@ def main() -> None:
                     selected_bpm_idx = 0
         elif is_no_bpm_variation:
             selected_bpm_idx = 0
+            if 0 in beat_length_pool:  # consume quota so pool compensates
+                beat_length_pool.remove(0)
+        elif not is_loud:
+            # Quiet samples are always slow BPM, regardless of type.
+            selected_bpm_idx = 0
+            if 0 in beat_length_pool:  # consume quota so pool compensates
+                beat_length_pool.remove(0)
         elif beat_length_pool:
             selected_bpm_idx = random.choice(beat_length_pool)
             beat_length_pool.remove(selected_bpm_idx)
