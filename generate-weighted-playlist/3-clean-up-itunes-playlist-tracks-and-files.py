@@ -19,7 +19,7 @@ CONFIG_PATH = Path("./input/config/config.json")
 with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
-OUTPUT_AUDIO_DIR = Path("./output/audio/final-sample-versions")
+OUTPUT_AUDIO_DIR = Path("./output/audio")
 
 # Playlist location and name
 PLAYLIST_NAME = config["playlist_name"]

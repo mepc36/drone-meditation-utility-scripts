@@ -2,7 +2,7 @@
 """
 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
-Generates an M3U playlist from ./output/audio/final-sample-versions/
+Generates an M3U playlist from ./output/audio/
 and plays it via mpv (shuffled, infinite loop).
 """
 
@@ -19,7 +19,7 @@ with open(CONFIG_PATH, 'r') as f:
     config = json.load(f)
 
 # Source directory with final samples
-SOURCE_AUDIO_DIR = Path("./output/audio/final-sample-versions")
+SOURCE_AUDIO_DIR = Path("./output/audio")
 
 # Output locations
 OUTPUT_DIR = Path("./output")
