@@ -118,7 +118,7 @@ SOUND_TYPE_RULES: list[dict] = [
             },
             'leftorright': {
                 'volumes': {
-                    'loud': {'bpms': ['slow']},
+                    'loud': {'bpms': ['fast', 'slow']}
                 },
             },
             'dualpan': {
@@ -141,6 +141,7 @@ SOUND_TYPE_RULES: list[dict] = [
             'leftorright': {
                 'volumes': {
                     'loud': {'bpms': ['fast', 'slow']},
+                    'quiet': {'bpms': ['slow']},
                 },
             },
         },
@@ -218,6 +219,14 @@ if len(volume_levels_db) != len(volume_percentages):
         f"Error: loud_medium_soft_values and loud_medium_soft_percents must have the same number of values.\n"
         f"Got {len(volume_levels_db)} volume levels but {len(volume_percentages)} percentages."
     )
+
+# Derive loud/quiet indices by comparing dB values: louder = higher (less negative) dB.
+LOUD_VOL_IDX: int = volume_levels_db.index(max(volume_levels_db))
+QUIET_VOL_IDX: int = volume_levels_db.index(min(volume_levels_db))
+
+# Derive slow/fast BPM indices by comparing BPM values.
+SLOW_BPM_IDX: int = BPM_VALUES.index(min(BPM_VALUES))
+FAST_BPM_IDX: int = BPM_VALUES.index(max(BPM_VALUES))
 
 
 # -------------------------------------------------------------------
@@ -521,8 +530,8 @@ def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
     Returns (db_reduction, level_index)
     """
     if not volume_pool:
-        # Fallback: if pool is empty, use the first volume level
-        return volume_levels_db[0], 0
+        # Fallback: if pool is empty, use the loudest volume level
+        return volume_levels_db[LOUD_VOL_IDX], LOUD_VOL_IDX
     
     # Select random index from pool
     selected_idx = random.choice(volume_pool)
@@ -1041,13 +1050,13 @@ def main() -> None:
                 else:
                     vol_constraint = 'any'
                 if vol_constraint == 'loud_only':
-                    volume_db = volume_levels_db[0]
-                    volume_idx = 0
+                    volume_db = volume_levels_db[LOUD_VOL_IDX]
+                    volume_idx = LOUD_VOL_IDX
                     if volume_idx in volume_pool:  # consume quota so pool compensates
                         volume_pool.remove(volume_idx)
                 elif vol_constraint == 'quiet_only':
-                    volume_db = volume_levels_db[-1]
-                    volume_idx = len(volume_levels_db) - 1
+                    volume_db = volume_levels_db[QUIET_VOL_IDX]
+                    volume_idx = QUIET_VOL_IDX
                     if volume_idx in volume_pool:  # consume quota so pool compensates
                         volume_pool.remove(volume_idx)
                 else:  # 'any' — draw freely from pool
@@ -1064,10 +1073,10 @@ def main() -> None:
         # Select BPM. Types with 'untouched' panning (e.g. strings) use their natural file
         # length and do not consume from the pool. For all others, forced slow/fast assignments
         # consume their slot from the pool so the overall BPM ratio stays on target.
-        is_loud = (volume_db == volume_levels_db[0])
+        is_loud = (volume_db == volume_levels_db[LOUD_VOL_IDX])
         if _rule is not None:
             if 'untouched' in _rule['pannings']:
-                selected_bpm_idx = 0  # untouched = natural file length, no BPM adjustment
+                selected_bpm_idx = SLOW_BPM_IDX  # untouched = natural file length, no BPM adjustment
             else:
                 _pan_rule = _rule['pannings'].get(pan_group)
                 if _pan_rule is not None:
@@ -1083,30 +1092,29 @@ def main() -> None:
                 else:
                     bpm_constraint = 'any'
                 if bpm_constraint == 'slow_only':
-                    selected_bpm_idx = 0
-                    if 0 in beat_length_pool:  # consume quota so pool compensates
-                        beat_length_pool.remove(0)
+                    selected_bpm_idx = SLOW_BPM_IDX
+                    if SLOW_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
+                        beat_length_pool.remove(SLOW_BPM_IDX)
                 elif bpm_constraint == 'fast_only':
-                    selected_bpm_idx = len(BPM_VALUES) - 1
-                    fast_idx = len(BPM_VALUES) - 1
-                    if fast_idx in beat_length_pool:  # consume quota so pool compensates
-                        beat_length_pool.remove(fast_idx)
+                    selected_bpm_idx = FAST_BPM_IDX
+                    if FAST_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
+                        beat_length_pool.remove(FAST_BPM_IDX)
                 else:  # 'any'
                     if beat_length_pool:
                         selected_bpm_idx = random.choice(beat_length_pool)
                         beat_length_pool.remove(selected_bpm_idx)
                     else:
-                        selected_bpm_idx = 0
+                        selected_bpm_idx = SLOW_BPM_IDX
         elif not is_loud:
             # Quiet samples are always slow BPM, regardless of type.
-            selected_bpm_idx = 0
-            if 0 in beat_length_pool:  # consume quota so pool compensates
-                beat_length_pool.remove(0)
+            selected_bpm_idx = SLOW_BPM_IDX
+            if SLOW_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
+                beat_length_pool.remove(SLOW_BPM_IDX)
         elif beat_length_pool:
             selected_bpm_idx = random.choice(beat_length_pool)
             beat_length_pool.remove(selected_bpm_idx)
         else:
-            selected_bpm_idx = 0  # Fallback to first BPM
+            selected_bpm_idx = SLOW_BPM_IDX  # Fallback to slowest BPM
         beat_length_sec = BEAT_LENGTHS_SECONDS[selected_bpm_idx]
 
         # Create the audio

@@ -1,7 +1,7 @@
 import os, json, re
 
 cfg_path = "/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/input/config/config.json"
-d = "/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/output/audio/final-sample-versions"
+d = "/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/output/audio"
 
 with open(cfg_path) as f:
     cfg = json.load(f)
