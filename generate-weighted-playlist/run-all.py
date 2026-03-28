@@ -44,9 +44,9 @@ def main() -> None:
     print("="*70)
     
     scripts = [
-        ("3-clean-up-itunes-playlist-tracks-and-files.py", "Step 1: Clean up old files"),
-        ("1-combine-samples-with-panning.py", "Step 2: Combine samples with panning"),
-        ("2-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Build playlist and open in VLC")
+        ("steps/3-clean-up-itunes-playlist-tracks-and-files.py", "Step 1: Clean up old files"),
+        ("steps/1-combine-samples-with-panning.py", "Step 2: Combine samples with panning"),
+        ("steps/2-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Build playlist and open in VLC")
     ]
     
     for script_name, description in scripts:
