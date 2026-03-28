@@ -8,7 +8,10 @@ Reads source files from ./input/audio/ and writes combined files to ./output/aud
 """
 
 import json
+import shutil
 from collections import deque
+from functools import reduce
+from math import gcd
 from pathlib import Path
 import random
 import numpy as np
@@ -67,7 +70,7 @@ DIAGONAL_WEIGHT = panning_pattern_parts[1]     # Percentage, diagonal left or ri
 DUALPAN_WEIGHT = panning_pattern_parts[2]      # Percentage, left + right stereo pair
 LEFTORRIGHT_WEIGHT = panning_pattern_parts[3]  # Percentage, hard left or hard right
 
-# Parse samples_to_silence_percents (e.g., "87:13" means 87% non-strings : 13% silence)
+# Parse samples_to_silence_percents (e.g., "87:13" means 87% audio samples : 13% silence)
 silence_ratio_parts = [int(x) for x in config.get("samples_to_silence_percents", "100:0").split(":")]
 if sum(silence_ratio_parts) != 100:
     raise ValueError(
@@ -101,50 +104,74 @@ SILENCE_LENGTH_PERCENTAGES = silence_percentages
 # Fixed panning position for diagonal samples (left side uses negative, right side positive)
 NON_CENTER_PAN = 0.53
 
+# Shared panning rule objects — referenced by name in SOUND_TYPE_RULES below.
+KICK_SNARE_PANNING_RULES: dict = {
+    'leftorright': {
+        'volumes': {
+            'quiet': {'bpms': ['slow']},
+        },
+    },
+    'dualpan': {
+        'volumes': {
+            'loud': {'bpms': ['slow', 'fast']},
+        },
+    },
+}
+
+KICKSTAB_SNARESTAB_PANNING_RULES: dict = {
+    'center': {
+        'volumes': {
+            'loud': {'bpms': ['fast', 'slow']},
+        },
+    },
+    'diagonal': {
+        'volumes': {
+            'quiet': {'bpms': ['slow']},
+        },
+    },
+    'dualpan': {
+        'volumes': {
+            'loud': {'bpms': ['slow', 'fast']},
+        },
+    },
+    'leftorright': {
+        'volumes': {
+            'quiet': {'bpms': ['slow']},
+        },
+    },
+}
+
 # Per-type rules: panning groups, volume levels, and BPM constraints.
-# 'musical_groupings': sound types this rule applies to.
+# 'musical_grouping': the single sound type this rule applies to.
+# 'dualpan_partners': (required) types allowed as the dualpan partner. Must include the type itself to allow self-pairing. Use [] if the type has no dualpan panning.
 # 'pannings': dict of panning group → volume/BPM rules.
 #   Each panning has 'volumes': dict of volume level ('loud'|'quiet') → BPM rules.
 #   Each volume level has 'bpms': list of allowed BPMs (['slow'], ['fast'], or ['slow', 'fast']).
 #   Special panning: 'untouched' → leave the file completely as-is (no panning, normalisation, or volume).
 SOUND_TYPE_RULES: list[dict] = [
-        {
-        'musical_groupings': ['kick', 'snare'],
-        'pannings': {
-            'leftorright': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-            'dualpan': {
-                'volumes': {
-                    'loud': { 'bpms': ['slow', 'fast'] },
-                }
-            }
-        },
+    {
+        'musical_grouping': 'kick',
+        'dualpan_partners': ['kick'],
+        'pannings': KICK_SNARE_PANNING_RULES,
     },
     {
-        'musical_groupings': ['kickstab', 'snarestab'],
-        'pannings': {
-            'center': {
-                'volumes': {
-                    'loud': {'bpms': ['fast', 'slow']},
-                },
-            },
-            'diagonal': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-            'leftorright': {
-                'volumes': {
-                    'quiet': {'bpms': ['slow']},
-                },
-            },
-        },
+        'musical_grouping': 'snare',
+        'dualpan_partners': ['snare'],
+        'pannings': KICK_SNARE_PANNING_RULES,
     },
     {
-        'musical_groupings': ['acappella'],
+        'musical_grouping': 'kickstab',
+        'dualpan_partners': ['kickstab'],
+        'pannings': KICKSTAB_SNARESTAB_PANNING_RULES,
+    },
+    {
+        'musical_grouping': 'snarestab',
+        'dualpan_partners': ['snarestab'],
+        'pannings': KICKSTAB_SNARESTAB_PANNING_RULES,
+    },
+    {
+        'musical_grouping': 'acappella',
+        'dualpan_partners': [],
         'pannings': {
             'center': {
                 'volumes': {
@@ -153,7 +180,7 @@ SOUND_TYPE_RULES: list[dict] = [
             },
             'leftorright': {
                 'volumes': {
-                    'loud':  {'bpms': ['slow']},
+                    'loud': {'bpms': ['slow']},
                 },
             },
             'diagonal': {
@@ -166,7 +193,8 @@ SOUND_TYPE_RULES: list[dict] = [
         },
     },
     {
-        'musical_groupings': ['strings'],
+        'musical_grouping': 'strings',
+        'dualpan_partners': [],
         'pannings': {
             'untouched': {
                 'volumes': {
@@ -179,12 +207,25 @@ SOUND_TYPE_RULES: list[dict] = [
     },
 ]
 
-# Flat lookup map built from SOUND_TYPE_RULES — use this for runtime lookups.
+# Flat lookup map: musical_grouping → rule dict. Used for validation, PANNING_COMPAT init, and runtime.
 _SOUND_TYPE_RULE_MAP: dict[str, dict] = {
-    sound_type: rule
+    rule['musical_grouping']: rule
     for rule in SOUND_TYPE_RULES
-    for sound_type in rule['musical_groupings']
 }
+
+# Validate: dualpan_partners is required on every rule; if non-empty, pannings must include 'dualpan'.
+for _r in SOUND_TYPE_RULES:
+    _mt = _r['musical_grouping']
+    if 'dualpan_partners' not in _r:
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_mt}' is missing required key 'dualpan_partners'. "
+            f"Use [] if this type has no dualpan panning."
+        )
+    if _r['dualpan_partners'] and 'dualpan' not in _r['pannings']:
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_mt}' declares dualpan_partners {_r['dualpan_partners']} "
+            f"but has no 'dualpan' key under 'pannings'."
+        )
 
 
 def is_untouched_type(sound_type: str) -> bool:
@@ -233,6 +274,19 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
     'stab':      {'kickstab', 'snarestab'},
     'acappella': {'acappella'},
 }
+
+# Derived from SOUND_TYPE_RULES: which panning modes each sound group supports.
+# Populated immediately below from _SOUND_TYPE_RULE_MAP.
+PANNING_COMPAT: dict[str, set[str]] = {}
+for _gname, _gtypes in SOUND_GROUP_TYPES.items():
+    _compat: set[str] = set()
+    for _stype in _gtypes:
+        _r = _SOUND_TYPE_RULE_MAP.get(_stype)
+        if _r:
+            for _p in _r['pannings']:
+                if _p != 'untouched':
+                    _compat.add(_p)
+    PANNING_COMPAT[_gname] = _compat
 
 # Parse kicksnare_stab_acappella_percents (optional).
 # e.g. "30:20:50" → 30% kicksnare, 20% stab, 50% acappella of non-strings slots.
@@ -412,7 +466,6 @@ def dequeue_next_sample_of_types(sample_queue: deque, all_sample_names: list[str
 
 def reset_output_dir() -> None:
     """Clear and recreate the output directory."""
-    import shutil
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -548,20 +601,6 @@ def apply_volume_db(audio: np.ndarray, db_reduction: float) -> np.ndarray:
     return audio * gain
 
 
-def select_volume_level_from_pool(volume_pool: list[int]) -> tuple[float, int]:
-    """
-    Select a volume level from the remaining quota pool.
-    Returns (db_reduction, level_index)
-    """
-    if not volume_pool:
-        # Fallback: if pool is empty, use the loudest volume level
-        return volume_levels_db[LOUD_VOL_IDX], LOUD_VOL_IDX
-    
-    # Select random index from pool
-    selected_idx = random.choice(volume_pool)
-    return volume_levels_db[selected_idx], selected_idx
-
-
 def create_combination(sample_names: list[str], pan_assignments: dict[str, str],
                        sample_rate: int, volume_db: float, beat_length_seconds: float) -> np.ndarray:
     """
@@ -639,134 +678,9 @@ def select_pan_position(side: str) -> float:
     return -NON_CENTER_PAN if side == 'left' else NON_CENTER_PAN
 
 
-def generate_unique_combination(samples_by_type: dict[str, list[str]],
-                               center_quota: int, left_quota: int, right_quota: int, dualpan_quota: int,
-                               hard_left_quota: int, hard_right_quota: int,
-                               sample_round_robin: deque, all_sample_names: list[str],
-                               require_strings: bool | None = None,
-                               allowed_types: set[str] | None = None) -> tuple[list[str], dict[str, str]]:
-    """Generate a combination using round-robin sample selection + quota-based panning.
-
-    Sample selection: samples are drawn from a shuffled round-robin queue so that
-    every input file is used roughly the same number of times.  Once all samples
-    have been used once the queue is refilled in a new random order, giving the
-    next "round".
-
-    Panning patterns:
-    1. 1 sample, center only
-    2. 1 sample, diagonal left or right (quota-based for 50/50 distribution)
-    3. 2 samples, stereo pair (1 left + 1 right)
-    4. 1 sample, hard left or hard right (quota-based for 50/50 distribution)
-
-    SOLO samples: isolated, can pan left/center/right, no stereo pairs.
-    Regular samples: can be combined, use all patterns.
-
-    Returns (sample_names, pan_assignments)
-    """
-    # ----------------------------------------------------------------
-    # Step 1: dequeue the primary sample from the round-robin queue
-    # ----------------------------------------------------------------
-    if allowed_types is not None:
-        primary = dequeue_next_sample_of_types(sample_round_robin, all_sample_names, allowed_types)
-    else:
-        primary = dequeue_next_sample(sample_round_robin, all_sample_names, require_strings)
-    if primary is None:
-        return None, None
-
-    sound_type = get_sound_type(primary)
-
-    # ----------------------------------------------------------------
-    # Step 2: choose panning pattern based on type + remaining quotas
-    # ----------------------------------------------------------------
-    if sound_type == 'solo':
-        # SOLO: isolated but can pan left/center/right (no stereo pairs)
-        pattern_pool = (
-            ['center_only'] * center_quota +
-            ['left_only'] * left_quota +
-            ['right_only'] * right_quota +
-            ['hard_left_only'] * hard_left_quota +
-            ['hard_right_only'] * hard_right_quota
-        )
-    elif sound_type in _SOUND_TYPE_RULE_MAP:
-        # Types with explicit panning rules: build the pattern pool from pannings.
-        _rule = _SOUND_TYPE_RULE_MAP[sound_type]
-        _allowed = _rule['pannings']
-        if 'untouched' in _allowed:
-            pattern_pool = ['center_only']
-        else:
-            pattern_pool = []
-            if 'center' in _allowed:
-                pattern_pool += ['center_only'] * center_quota
-            if 'diagonal' in _allowed:
-                pattern_pool += ['left_only'] * left_quota + ['right_only'] * right_quota
-            if 'dualpan' in _allowed:
-                pattern_pool += ['stereo_pair'] * dualpan_quota
-            if 'leftorright' in _allowed:
-                pattern_pool += ['hard_left_only'] * hard_left_quota + ['hard_right_only'] * hard_right_quota
-    else:
-        # Regular: all types can appear in dualpan.
-        # All types are paired same-type-only by default in those blocks.
-        pattern_pool = (
-            ['center_only'] * center_quota +
-            ['left_only'] * left_quota +
-            ['right_only'] * right_quota +
-            ['stereo_pair'] * dualpan_quota +
-            ['hard_left_only'] * hard_left_quota +
-            ['hard_right_only'] * hard_right_quota
-        )
-
-    if not pattern_pool:
-        return None, None
-
-    pattern_type = random.choice(pattern_pool)
-
-    # ----------------------------------------------------------------
-    # Step 3: build sample list and pan assignments
-    # ----------------------------------------------------------------
-    if pattern_type == 'center_only':
-        sample_names = [primary]
-        pan_assignments = {primary: 'center'}
-
-    elif pattern_type == 'left_only':
-        sample_names = [primary]
-        pan_assignments = {primary: select_pan_position('left')}
-
-    elif pattern_type == 'right_only':
-        sample_names = [primary]
-        pan_assignments = {primary: select_pan_position('right')}
-
-    elif pattern_type == 'hard_left_only':
-        sample_names = [primary]
-        pan_assignments = {primary: 'hard_left'}
-
-    elif pattern_type == 'hard_right_only':
-        sample_names = [primary]
-        pan_assignments = {primary: 'hard_right'}
-
-    else:  # stereo_pair
-        # All types pair only with their own type by default.
-        # To add cross-group mixing for a new type, add a branch here.
-        _partner_allowed = {sound_type}
-        partner = dequeue_next_sample_of_types(
-            sample_round_robin, all_sample_names,
-            _partner_allowed, exclude_name=primary
-        )
-        if partner is None:
-            # Can't form a pair — fall back to an allowed single-channel panning.
-            # Types that don't allow center fall back to diagonal.
-            _rule = _SOUND_TYPE_RULE_MAP.get(sound_type)
-            if _rule and 'center' not in _rule['pannings']:
-                sample_names = [primary]
-                pan_assignments = {primary: select_pan_position('left')}
-            else:
-                sample_names = [primary]
-                pan_assignments = {primary: 'center'}
-        else:
-            sample_names = [primary, partner]
-            # Dualpan is always hard left + hard right — never mixed with center.
-            pan_assignments = {primary: 'hard_left', partner: 'hard_right'}
-
-    return sample_names, pan_assignments
+def gcd_multiple(*args: int) -> int:
+    """Return the GCD of all given integers."""
+    return reduce(gcd, args)
 
 
 def infer_pan_group(sample_names: list[str], pan_assignments: dict[str, str]) -> str:
@@ -840,6 +754,179 @@ def create_silence_file(sample_rate: int, length_seconds: float, index: int) -> 
 
 
 # -------------------------------------------------------------------
+# Pre-computed deck builder
+# -------------------------------------------------------------------
+def build_file_deck(
+    group_targets: dict[str, int],
+    panning_quotas: dict[str, int],
+    bpm_targets: dict[int, int],
+    vol_targets: dict[int, int],
+) -> list[tuple[str, str, str, str]]:
+    """Pre-compute the non-strings file deck.
+
+    Returns a shuffled list of (group, panning, vol_label, bpm_label) tuples —
+    one per non-strings output file.  Directional pannings are already resolved:
+      'diagonal' → 'diagonal_left' / 'diagonal_right' (50:50)
+      'leftorright' → 'hard_left' / 'hard_right' (50:50)
+
+    Groups are allocated most-constrained-first.  Overflow (when a group cannot
+    fill its target from compatible panning slots) is distributed equally among
+    the uncapped groups.  A startup summary is printed.
+    """
+    # Expand directional panning quotas into individual directional slots.
+    _diag = panning_quotas.get('diagonal', 0)
+    _lor  = panning_quotas.get('leftorright', 0)
+    remaining: dict[str, int] = {
+        'center':         panning_quotas.get('center', 0),
+        'diagonal_left':  _diag // 2,
+        'diagonal_right': _diag - _diag // 2,
+        'dualpan':        panning_quotas.get('dualpan', 0),
+        'hard_left':      _lor // 2,
+        'hard_right':     _lor - _lor // 2,
+    }
+
+    def compat_dir(group: str) -> set[str]:
+        """Directional panning types compatible with this sound group."""
+        result: set[str] = set()
+        for p in PANNING_COMPAT.get(group, set()):
+            if p == 'diagonal':
+                result.update({'diagonal_left', 'diagonal_right'})
+            elif p == 'leftorright':
+                result.update({'hard_left', 'hard_right'})
+            else:
+                result.add(p)
+        return result
+
+    actual_targets = dict(group_targets)
+    alloc: dict[str, dict[str, int]] = {g: {} for g in group_targets}
+    overflow = 0
+    capped: set[str] = set()
+
+    # Sort groups most-constrained first (fewest compatible panning slots available).
+    ordered = sorted(group_targets, key=lambda g: sum(remaining.get(p, 0) for p in compat_dir(g)))
+
+    def _fill(group: str, take: int) -> None:
+        """Allocate `take` panning slots for `group`, consuming from `remaining`."""
+        avail = {p: remaining[p] for p in compat_dir(group) if remaining.get(p, 0) > 0}
+        total_a = sum(avail.values())
+        left = take
+        for p in sorted(avail, key=lambda x: -avail[x]):
+            if left == 0 or total_a == 0:
+                break
+            share = round(avail[p] / total_a * take)
+            share = min(share, remaining[p], left)
+            alloc[group][p] = alloc[group].get(p, 0) + share
+            remaining[p] -= share
+            left -= share
+        # Assign any rounding remainder to the panning with most remaining quota.
+        while left > 0:
+            candidates = [(p, remaining[p]) for p in compat_dir(group) if remaining.get(p, 0) > 0]
+            if not candidates:
+                break
+            best_p = max(candidates, key=lambda x: x[1])[0]
+            alloc[group][best_p] = alloc[group].get(best_p, 0) + 1
+            remaining[best_p] -= 1
+            left -= 1
+
+    for group in ordered:
+        needed = actual_targets[group]
+        avail_total = sum(remaining.get(p, 0) for p in compat_dir(group))
+        take = min(needed, avail_total)
+        if take < needed:
+            overflow += needed - take
+            capped.add(group)
+        actual_targets[group] = take
+        _fill(group, take)
+
+    # Distribute overflow equally among uncapped groups.
+    if overflow > 0:
+        non_capped = [g for g in SOUND_GROUP_NAMES if g not in capped]
+        if non_capped:
+            per, rem = divmod(overflow, len(non_capped))
+            for i, group in enumerate(non_capped):
+                bonus = per + (1 if i < rem else 0)
+                avail_total = sum(remaining.get(p, 0) for p in compat_dir(group))
+                bonus = min(bonus, avail_total)
+                actual_targets[group] += bonus
+                _fill(group, bonus)
+
+    # Print startup allocation summary.
+    total_assigned = sum(sum(v.values()) for v in alloc.values())
+    print(f"  Deck: {total_assigned} non-strings slots")
+    if overflow > 0:
+        print(f"  ⚠  Panning overflow: {overflow} slot(s) redistributed among uncapped groups")
+    for g in SOUND_GROUP_NAMES:
+        if g in alloc:
+            print(f"    {g}: {sum(alloc[g].values())} files — {dict(alloc[g])}")
+
+    # --- Assign (vol_label, bpm_label) within each (group, panning) cell ---
+    def pan_key(panning: str) -> str:
+        """Map directional panning back to the high-level key in SOUND_TYPE_RULES."""
+        if panning.startswith('diagonal'):
+            return 'diagonal'
+        if panning in ('hard_left', 'hard_right'):
+            return 'leftorright'
+        return panning
+
+    def allowed_vb(group: str, panning: str) -> set[tuple[str, str]]:
+        """Allowed (vol_label, bpm_label) combos for this group + panning."""
+        result: set[tuple[str, str]] = set()
+        for stype in SOUND_GROUP_TYPES[group]:
+            rule = _SOUND_TYPE_RULE_MAP.get(stype)
+            if rule is None:
+                continue
+            pan_rule = rule['pannings'].get(pan_key(panning))
+            if pan_rule is None:
+                continue
+            for vol_lbl, bpm_info in pan_rule['volumes'].items():
+                for bpm_lbl in bpm_info.get('bpms', []):
+                    result.add((vol_lbl, bpm_lbl))
+        return result
+
+    forced: list[tuple[str, str, str, str]] = []
+    free:   list[tuple[str, str, list]]     = []
+    for group, pannings in alloc.items():
+        for panning, count in pannings.items():
+            opts = allowed_vb(group, panning)
+            if not opts:
+                forced += [(group, panning, 'loud', 'slow')] * count
+            elif len(opts) == 1:
+                v, b = next(iter(opts))
+                forced += [(group, panning, v, b)] * count
+            else:
+                free += [(group, panning, list(opts))] * count
+
+    # Greedily assign free slots to approach configured BPM/volume targets.
+    rem_slow  = max(0, bpm_targets.get(SLOW_BPM_IDX, 0) - sum(1 for *_, b in forced if b == 'slow'))
+    rem_fast  = max(0, bpm_targets.get(FAST_BPM_IDX, 0) - sum(1 for *_, b in forced if b == 'fast'))
+    rem_loud  = max(0, vol_targets.get(LOUD_VOL_IDX, 0) - sum(1 for _, _, v, _ in forced if v == 'loud'))
+    rem_quiet = max(0, vol_targets.get(QUIET_VOL_IDX, 0) - sum(1 for _, _, v, _ in forced if v == 'quiet'))
+
+    random.shuffle(free)
+    assigned: list[tuple[str, str, str, str]] = []
+    for group, panning, opts in free:
+        best: tuple[str, str] | None = None
+        best_score = -1
+        for v, b in opts:
+            score = (int(b == 'slow' and rem_slow > 0) + int(b == 'fast' and rem_fast > 0)
+                     + int(v == 'loud' and rem_loud > 0) + int(v == 'quiet' and rem_quiet > 0))
+            if score > best_score:
+                best_score = score
+                best = (v, b)
+        assert best is not None
+        v, b = best
+        assigned.append((group, panning, v, b))
+        if b == 'slow':    rem_slow  -= 1
+        elif b == 'fast':  rem_fast  -= 1
+        if v == 'loud':    rem_loud  -= 1
+        elif v == 'quiet': rem_quiet -= 1
+
+    deck = forced + assigned
+    random.shuffle(deck)
+    return deck
+
+
+# -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
 def main() -> None:
@@ -908,313 +995,191 @@ def main() -> None:
         else:
             leftorright_quota += remaining_samples
     
-    # Split diagonal quota evenly between left and right for 50/50 distribution
-    left_quota = diagonal_quota // 2
-    right_quota = diagonal_quota - left_quota  # Gives right any remainder for odd numbers
-    
-    # Split leftorright quota evenly between hard left and hard right for 50/50 distribution
-    hard_left_quota = leftorright_quota // 2
-    hard_right_quota = leftorright_quota - hard_left_quota  # Gives right any remainder for odd numbers
-    
     sample_round_robin, all_sample_names = build_sample_round_robin(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_sample_names}
-    
-    # Track combinations to ensure uniqueness
-    seen_combinations = set()
-    created_count = 0
-    attempts = 0
-    max_attempts = NUM_AUDIO_SAMPLES * 100  # Prevent infinite loop
-    
-    # Quota-based generation: track how many of each pattern we still need
-    center_quota_remaining = center_quota
-    left_quota_remaining = left_quota
-    right_quota_remaining = right_quota
-    dualpan_quota_remaining = dualpan_quota
-    hard_left_quota_remaining = hard_left_quota
-    hard_right_quota_remaining = hard_right_quota
 
-    # Strings vs non-strings quota tracking
-    strings_quota_remaining = num_strings_samples
-    non_strings_quota_remaining = num_non_strings_samples
+    # Track combinations to ensure uniqueness
+    seen_combinations: set = set()
+    created_count = 0
     strings_created_count = 0
     non_strings_created_count = 0
 
-    # Sound group quotas (kicksnare / stab / acappella) — only when configured.
+    # Pre-compute the full file deck: BPM targets, volume targets, panning quotas, group targets.
+    _bpm_targets: dict[int, int] = {
+        idx: int(num_non_strings_samples * pct / 100)
+        for idx, pct in enumerate(BPM_PERCENTS)
+    }
+    _vol_targets: dict[int, int] = {
+        idx: int(num_non_strings_samples * pct / 100)
+        for idx, pct in enumerate(volume_percentages)
+    }
+    _panning_quotas = {
+        'center':      center_quota,
+        'diagonal':    diagonal_quota,
+        'dualpan':     dualpan_quota,
+        'leftorright': leftorright_quota,
+    }
     if SOUND_GROUP_PERCENTS is not None:
-        group_quotas_remaining: dict[str, int] = {}
+        _group_targets: dict[str, int] = {}
         for _gname, _pct in zip(SOUND_GROUP_NAMES, SOUND_GROUP_PERCENTS):
-            group_quotas_remaining[_gname] = int(num_non_strings_samples * _pct / 100)
-        # Assign any rounding remainder to the largest group.
-        _total_group = sum(group_quotas_remaining.values())
-        _group_remainder = num_non_strings_samples - _total_group
-        if _group_remainder > 0:
-            _largest_group = max(SOUND_GROUP_NAMES, key=lambda n: group_quotas_remaining[n])
-            group_quotas_remaining[_largest_group] += _group_remainder
+            _group_targets[_gname] = int(num_non_strings_samples * _pct / 100)
+        _gt_total = sum(_group_targets.values())
+        if _gt_total < num_non_strings_samples:
+            _largest = max(SOUND_GROUP_NAMES, key=lambda g: _group_targets[g])
+            _group_targets[_largest] += num_non_strings_samples - _gt_total
+        _non_strings_deck = build_file_deck(
+            _group_targets, _panning_quotas,
+            _bpm_targets, _vol_targets,
+        )
     else:
-        group_quotas_remaining = None
-    group_counts: dict[str, int] = {name: 0 for name in SOUND_GROUP_NAMES}
+        raise ValueError("kicksnare_stab_acappella_percents must be set in config.json")
 
-    # Track panning distribution
+    # Interleave strings slots with the non-strings deck and shuffle.
+    _strings_slots: list[tuple] = [('strings', 'untouched', 'untouched', 'untouched')] * num_strings_samples
+    _deck_combined: list[tuple] = _non_strings_deck + _strings_slots
+    random.shuffle(_deck_combined)
+
+    # Telemetry counters (for end-of-run summary only).
+    group_appearances: dict[str, int] = {name: 0 for name in SOUND_GROUP_NAMES}
     center_count = 0
     left_count = 0
     right_count = 0
     dualpan_count = 0
     hard_left_count = 0
     hard_right_count = 0
-    
-    # Track volume level distribution
     volume_counts = [0] * len(volume_levels_db)
-    
-    # Build shared volume pool for all non-strings samples.
-    # Pools are sized against non-strings samples only — strings bypass both pools entirely.
-    volume_pool = []
-    for idx, pct in enumerate(volume_percentages):
-        quota = int(num_non_strings_samples * pct / 100)
-        volume_pool.extend([idx] * quota)
-
-    # Build beat length pool based on slow_to_fast_bpm_percents quota
-    beat_length_pool = []
-    for idx, pct in enumerate(BPM_PERCENTS):
-        quota = int(num_non_strings_samples * pct / 100)
-        beat_length_pool.extend([idx] * quota)
 
     # Get sample rate from first file
     first_sample_name = list(samples_by_type.values())[0][0]
     _, sample_rate = load_audio(first_sample_name)
-    
-    while created_count < NUM_AUDIO_SAMPLES and attempts < max_attempts:
-        attempts += 1
 
-        # Determine whether the next sample should be strings or non-strings
-        # based on remaining quotas to hit the configured ratio.
-        if strings_quota_remaining > 0 and non_strings_quota_remaining > 0:
-            total_remaining = strings_quota_remaining + non_strings_quota_remaining
-            require_strings = random.random() < (strings_quota_remaining / total_remaining)
-        elif strings_quota_remaining > 0:
-            require_strings = True
-        else:
-            require_strings = False
+    for _slot_group, _slot_panning, _slot_vol, _slot_bpm in _deck_combined:
+        _is_strings = (_slot_group == 'strings')
 
-        # Determine which sound group to draw from (if kicksnare_stab_acappella_percents is configured).
-        chosen_group: str | None = None
-        allowed_types: set[str] | None = None
-        if not require_strings and group_quotas_remaining is not None:
-            _total_group_remaining = sum(group_quotas_remaining.values())
-            if _total_group_remaining > 0:
-                _rand = random.random() * _total_group_remaining
-                _cumulative = 0
-                for _gname in SOUND_GROUP_NAMES:
-                    _cumulative += group_quotas_remaining[_gname]
-                    if _rand < _cumulative:
-                        chosen_group = _gname
-                        break
-                if chosen_group is None:
-                    chosen_group = SOUND_GROUP_NAMES[-1]  # safety fallback
-                allowed_types = SOUND_GROUP_TYPES[chosen_group]
-
-        # Generate combination with remaining quotas
-        sample_names, pan_assignments = generate_unique_combination(
-            samples_by_type,
-            center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-            hard_left_quota_remaining, hard_right_quota_remaining,
-            sample_round_robin, all_sample_names,
-            require_strings,
-            allowed_types
-        )
-
-        # Check if combination generation failed
-        if sample_names is None:
-            # If we were trying to find a strings sample and none are available, fall back
-            # to non-strings so we don't spin forever on an unsatisfiable quota.
-            if require_strings is True:
-                sample_names, pan_assignments = generate_unique_combination(
-                    samples_by_type,
-                    center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-                    hard_left_quota_remaining, hard_right_quota_remaining,
-                    sample_round_robin, all_sample_names,
-                    require_strings=False,
-                    allowed_types=allowed_types
-                )
-            # If a group constraint caused the failure (group exhausted), retry unconstrained.
-            if sample_names is None and allowed_types is not None:
-                sample_names, pan_assignments = generate_unique_combination(
-                    samples_by_type,
-                    center_quota_remaining, left_quota_remaining, right_quota_remaining, dualpan_quota_remaining,
-                    hard_left_quota_remaining, hard_right_quota_remaining,
-                    sample_round_robin, all_sample_names,
-                    require_strings=False,
-                    allowed_types=None
-                )
-                chosen_group = None  # Can't attribute to a specific group.
-            if sample_names is None:
+        if _is_strings:
+            primary = dequeue_next_sample(sample_round_robin, all_sample_names, require_strings=True)
+            if primary is None:
                 continue
-        
-        # Create unique key for this combination
-        combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
-        
-        # Enforce uniqueness (each unique pan+sample combo used once).
-        is_strings_combo = any(get_sound_type(name) == 'strings' for name in sample_names)
-        if combo_key in seen_combinations:
-            continue
-        seen_combinations.add(combo_key)
-        
-        # Track per-sample usage for the round-robin fairness report
-        for name in sample_names:
-            sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
-        
-        created_count += 1
-
-        # Track strings vs non-strings against quota
-        if is_strings_combo:
-            strings_created_count += 1
-            strings_quota_remaining = max(0, strings_quota_remaining - 1)
-        else:
-            non_strings_created_count += 1
-            non_strings_quota_remaining = max(0, non_strings_quota_remaining - 1)
-            # Decrement sound group quota and track realized counts.
-            if group_quotas_remaining is not None:
-                _primary_type = get_sound_type(sample_names[0])
-                _actual_group = next(
-                    (gname for gname, types in SOUND_GROUP_TYPES.items() if _primary_type in types),
-                    None
-                )
-                if _actual_group is not None:
-                    group_quotas_remaining[_actual_group] = max(0, group_quotas_remaining[_actual_group] - 1)
-                    group_counts[_actual_group] += 1
-
-        # Track panning pattern and update quotas (strings do not consume panning quotas)
-        pan_positions = list(pan_assignments.values())
-        
-        if len(pan_positions) == 1:
-            if pan_positions[0] == 'center':
-                center_count += 1
-                if not is_strings_combo:
-                    center_quota_remaining = max(0, center_quota_remaining - 1)
-            elif pan_positions[0] == 'hard_left':
-                hard_left_count += 1
-                hard_left_quota_remaining = max(0, hard_left_quota_remaining - 1)
-            elif pan_positions[0] == 'hard_right':
-                hard_right_count += 1
-                hard_right_quota_remaining = max(0, hard_right_quota_remaining - 1)
-            else:  # diagonal left or right (numeric pan value)
-                pan_value = float(pan_positions[0])
-                if pan_value < 0:  # left side
-                    left_count += 1
-                    left_quota_remaining = max(0, left_quota_remaining - 1)
-                else:  # right side
-                    right_count += 1
-                    right_quota_remaining = max(0, right_quota_remaining - 1)
-        else:  # 2 samples (stereo pair)
-            dualpan_count += 1
-            dualpan_quota_remaining = max(0, dualpan_quota_remaining - 1)
-        
-        # Determine sound type and pan group for SOUND_TYPE_RULES lookup.
-        primary_sound_type = get_sound_type(sample_names[0])
-        pan_group = infer_pan_group(sample_names, pan_assignments)
-        _rule = _SOUND_TYPE_RULE_MAP.get(primary_sound_type)
-
-        # Select volume. Types with 'untouched' panning (e.g. strings) are not volume-adjusted
-        # and do not consume from the pool. For all others, forced-loud/quiet assignments
-        # consume the matching slot from the pool so the overall ratio stays on target.
-        if _rule is not None:
-            if 'untouched' in _rule['pannings']:
-                volume_db = 0.0  # no volume adjustment
-                volume_idx = 0
-            else:
-                _pan_rule = _rule['pannings'].get(pan_group)
-                if _pan_rule is not None:
-                    _vols = set(_pan_rule['volumes'].keys())
-                    if _vols == {'loud'}:
-                        vol_constraint = 'loud_only'
-                    elif _vols == {'quiet'}:
-                        vol_constraint = 'quiet_only'
-                    else:
-                        vol_constraint = 'any'
-                else:
-                    vol_constraint = 'any'
-                if vol_constraint == 'loud_only':
-                    volume_db = volume_levels_db[LOUD_VOL_IDX]
-                    volume_idx = LOUD_VOL_IDX
-                    if volume_idx in volume_pool:  # consume quota so pool compensates
-                        volume_pool.remove(volume_idx)
-                elif vol_constraint == 'quiet_only':
-                    volume_db = volume_levels_db[QUIET_VOL_IDX]
-                    volume_idx = QUIET_VOL_IDX
-                    if volume_idx in volume_pool:  # consume quota so pool compensates
-                        volume_pool.remove(volume_idx)
-                else:  # 'any' — draw freely from pool
-                    volume_db, volume_idx = select_volume_level_from_pool(volume_pool)
-                    if volume_idx in volume_pool:
-                        volume_pool.remove(volume_idx)
-                volume_counts[volume_idx] += 1
-        else:
-            volume_db, volume_idx = select_volume_level_from_pool(volume_pool)
-            if volume_idx in volume_pool:
-                volume_pool.remove(volume_idx)
-            volume_counts[volume_idx] += 1
-
-        # Select BPM. Types with 'untouched' panning (e.g. strings) use their natural file
-        # length and do not consume from the pool. For all others, forced slow/fast assignments
-        # consume their slot from the pool so the overall BPM ratio stays on target.
-        is_loud = (volume_db == volume_levels_db[LOUD_VOL_IDX])
-        if _rule is not None:
-            if 'untouched' in _rule['pannings']:
-                selected_bpm_idx = SLOW_BPM_IDX  # untouched = natural file length, no BPM adjustment
-            else:
-                _pan_rule = _rule['pannings'].get(pan_group)
-                if _pan_rule is not None:
-                    _vol_key = 'loud' if is_loud else 'quiet'
-                    _vol_rule = _pan_rule['volumes'].get(_vol_key)
-                    _allowed_bpms = _vol_rule['bpms'] if _vol_rule is not None else ['slow', 'fast']
-                    if _allowed_bpms == ['slow']:
-                        bpm_constraint = 'slow_only'
-                    elif _allowed_bpms == ['fast']:
-                        bpm_constraint = 'fast_only'
-                    else:
-                        bpm_constraint = 'any'
-                else:
-                    bpm_constraint = 'any'
-                if bpm_constraint == 'slow_only':
-                    selected_bpm_idx = SLOW_BPM_IDX
-                    if SLOW_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
-                        beat_length_pool.remove(SLOW_BPM_IDX)
-                elif bpm_constraint == 'fast_only':
-                    selected_bpm_idx = FAST_BPM_IDX
-                    if FAST_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
-                        beat_length_pool.remove(FAST_BPM_IDX)
-                else:  # 'any'
-                    if beat_length_pool:
-                        selected_bpm_idx = random.choice(beat_length_pool)
-                        beat_length_pool.remove(selected_bpm_idx)
-                    else:
-                        selected_bpm_idx = SLOW_BPM_IDX
-        elif not is_loud:
-            # Quiet samples are always slow BPM, regardless of type.
+            sample_names = [primary]
+            pan_assignments = {primary: 'center'}
+            volume_db = 0.0
+            volume_idx = 0
             selected_bpm_idx = SLOW_BPM_IDX
-            if SLOW_BPM_IDX in beat_length_pool:  # consume quota so pool compensates
-                beat_length_pool.remove(SLOW_BPM_IDX)
-        elif beat_length_pool:
-            selected_bpm_idx = random.choice(beat_length_pool)
-            beat_length_pool.remove(selected_bpm_idx)
         else:
-            selected_bpm_idx = SLOW_BPM_IDX  # Fallback to slowest BPM
+            # Retry loop: if the first primary drawn causes a uniqueness conflict, try up to 20
+            # different primaries from the same group before giving up on this slot.
+            combo_key = None
+            for _retry in range(20):
+                primary = dequeue_next_sample_of_types(
+                    sample_round_robin, all_sample_names, SOUND_GROUP_TYPES[_slot_group]
+                )
+                if primary is None:
+                    break
+                primary_type = get_sound_type(primary)
+                _rule = _SOUND_TYPE_RULE_MAP.get(primary_type)
+
+                if _slot_panning == 'dualpan':
+                    _partner_types = set(_rule['dualpan_partners']) if _rule else {primary_type}
+                    partner = dequeue_next_sample_of_types(
+                        sample_round_robin, all_sample_names, _partner_types, exclude_name=primary
+                    )
+                    if partner:
+                        sample_names = [primary, partner]
+                        pan_assignments = {primary: 'hard_left', partner: 'hard_right'}
+                    else:
+                        # No partner available — fall back to solo diagonal.
+                        sample_names = [primary]
+                        pan_assignments = {primary: select_pan_position('left')}
+                elif _slot_panning == 'center':
+                    sample_names = [primary]
+                    pan_assignments = {primary: 'center'}
+                elif _slot_panning == 'diagonal_left':
+                    sample_names = [primary]
+                    pan_assignments = {primary: select_pan_position('left')}
+                elif _slot_panning == 'diagonal_right':
+                    sample_names = [primary]
+                    pan_assignments = {primary: select_pan_position('right')}
+                elif _slot_panning == 'hard_left':
+                    sample_names = [primary]
+                    pan_assignments = {primary: 'hard_left'}
+                elif _slot_panning == 'hard_right':
+                    sample_names = [primary]
+                    pan_assignments = {primary: 'hard_right'}
+                else:
+                    sample_names = [primary]
+                    pan_assignments = {primary: 'center'}
+
+                _ckey = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
+                if _ckey not in seen_combinations:
+                    combo_key = _ckey
+                    break  # Unique combo found — proceed with this slot.
+
+            if combo_key is None:
+                continue  # All retries exhausted — skip this slot.
+
+            volume_db = volume_levels_db[LOUD_VOL_IDX] if _slot_vol == 'loud' else volume_levels_db[QUIET_VOL_IDX]
+            volume_idx = LOUD_VOL_IDX if _slot_vol == 'loud' else QUIET_VOL_IDX
+            selected_bpm_idx = SLOW_BPM_IDX if _slot_bpm == 'slow' else FAST_BPM_IDX
+
         beat_length_sec = BEAT_LENGTHS_SECONDS[selected_bpm_idx]
 
-        # Create the audio
+        # Uniqueness check for strings slots (non-strings resolved within retry loop above).
+        if _is_strings:
+            combo_key = tuple(sorted([f"{name}:{pan_assignments[name]}" for name in sample_names]))
+            if combo_key in seen_combinations:
+                continue
+        seen_combinations.add(combo_key)
+
+        # Track per-sample usage for the round-robin fairness report.
+        for name in sample_names:
+            sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
+
+        created_count += 1
+
+        if _is_strings:
+            strings_created_count += 1
+        else:
+            non_strings_created_count += 1
+            # Count by the deck slot's group (not by scanning sample types, which would
+            # inflate stab/kicksnare counts for dualpan partners from other groups).
+            group_appearances[_slot_group] = group_appearances.get(_slot_group, 0) + 1
+
+        # Track panning distribution for the summary report.
+        pan_positions = list(pan_assignments.values())
+        if len(pan_positions) == 2:
+            dualpan_count += 1
+        else:
+            _pan = pan_positions[0]
+            if _pan == 'center':
+                center_count += 1
+            elif _pan == 'hard_left':
+                hard_left_count += 1
+            elif _pan == 'hard_right':
+                hard_right_count += 1
+            else:
+                if float(_pan) < 0:
+                    left_count += 1
+                else:
+                    right_count += 1
+
+        # Track volume.
+        if not _is_strings:
+            volume_counts[volume_idx] += 1
+
+        # Generate and save the file.
         combined_audio = create_combination(sample_names, pan_assignments, sample_rate, volume_db, beat_length_sec)
-        
         filename = format_filename(sample_names, pan_assignments, volume_db, created_count, BPM_VALUES[selected_bpm_idx])
         output_path = OUTPUT_DIR / filename
-        
-        # Save
         sf.write(output_path, combined_audio, sample_rate)
-        
+
         if created_count % 10 == 0 or created_count == NUM_AUDIO_SAMPLES:
             print(f"  Created {created_count}/{NUM_AUDIO_SAMPLES} samples...")
-    
+
     if created_count < NUM_AUDIO_SAMPLES:
         print(f"\nWarning: Only created {created_count} audio samples (expected {NUM_AUDIO_SAMPLES}).")
-        print("Consider reducing num_unique_samples or samples_to_silence_percents in config.json")
+        print("  Some deck slots were skipped because no unique (sample + pan) combination could be")
+        print("  found within the retry limit. This usually means the sample pool is small relative")
+        print("  to num_unique_samples. Try adding more input samples or reducing num_unique_samples.")
     else:
         print(f"\nComplete! Created {created_count} audio samples.")
     
@@ -1236,16 +1201,9 @@ def main() -> None:
             print(f"  ⚠  Spread of {max_uses - min_uses} ({len(outliers)} sample(s) at max)")
     
     # Display panning distribution
-    from math import gcd
-    from functools import reduce
-    
     diagonal_count = left_count + right_count
     leftorright_count = hard_left_count + hard_right_count
-    
-    def gcd_multiple(*args):
-        """Calculate GCD of multiple numbers."""
-        return reduce(gcd, args)
-    
+
     # Calculate GCD for ratio display
     counts = [c for c in [center_count, diagonal_count, dualpan_count, leftorright_count] if c > 0]
     if len(counts) > 1:
@@ -1298,13 +1256,6 @@ def main() -> None:
     print(f"  Config values: {config.get('loud_medium_soft_values', '0')} dB")
     
     # Calculate realized ratio
-    from math import gcd
-    from functools import reduce
-    
-    def gcd_multiple(*args):
-        """Calculate GCD of multiple numbers."""
-        return reduce(gcd, args)
-    
     non_zero_counts = [c for c in volume_counts if c > 0]
     if len(non_zero_counts) > 1:
         vol_ratio_gcd = gcd_multiple(*non_zero_counts)
@@ -1317,7 +1268,7 @@ def main() -> None:
     print(f"  Realized ratio: {realized_vol_ratio}")
     
     # Display counts for each level
-    for idx, (db_val, count) in enumerate(zip(volume_levels_db, volume_counts)):
+    for db_val, count in zip(volume_levels_db, volume_counts):
         pct = (count / created_count) * 100 if created_count > 0 else 0
         print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
     
@@ -1348,8 +1299,7 @@ def main() -> None:
         
         # Create silence files with appropriate lengths
         file_counter = 1
-        for length_idx, (length_sec, count) in enumerate(zip(SILENCE_LENGTHS_SECONDS, silence_counts_by_length)):
-            length_ms = int(length_sec * 1000)
+        for length_sec, count in zip(SILENCE_LENGTHS_SECONDS, silence_counts_by_length):
             for i in range(count):
                 create_silence_file(sample_rate, length_sec, file_counter)
                 file_counter += 1
@@ -1360,8 +1310,7 @@ def main() -> None:
         
         total_files_created = created_count + NUM_SILENCE_FILES
         print(f"\nTotal files created: {total_files_created} ({created_count} samples + {NUM_SILENCE_FILES} silence)")
-    else:
-        total_files_created = created_count
+    # (No else needed: when SILENCE_PERCENT == 0, total files == created_count.)
     
     # Display strings distribution
     if actual_untouched_count > 0:
@@ -1376,9 +1325,9 @@ def main() -> None:
         print(f"\nSound Group Distribution:")
         print(f"  Config: kicksnare_stab_acappella_percents = {config['kicksnare_stab_acappella_percents']}")
         for _gname, _target_pct in zip(SOUND_GROUP_NAMES, SOUND_GROUP_PERCENTS):
-            _count = group_counts[_gname]
+            _count = group_appearances[_gname]
             _realized_pct = (_count / non_strings_created_count) * 100
-            print(f"  {_gname}: {_count} samples ({_realized_pct:.1f}%, target {_target_pct}%)")
+            print(f"  {_gname}: {_count} files ({_realized_pct:.1f}%, target {_target_pct}%)")
 
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
 
