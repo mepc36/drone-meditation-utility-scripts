@@ -434,7 +434,7 @@ def main() -> None:
         print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
 
     print_sound_group_report(group_appearances, non_strings_created, conf)
-    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
+    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
 
 
 if __name__ == "__main__":

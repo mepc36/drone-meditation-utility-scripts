@@ -65,9 +65,9 @@ def main() -> None:
     print("Cleanup: Delete Files & Playlist")
     print("="*60 + "\n")
 
-    # Quit VLC before deleting files so it doesn't log 'cannot open file' errors
-    print("Quitting VLC (if running)...")
-    subprocess.run(["osascript", "-e", 'tell application "VLC" to quit'], capture_output=True)
+    # Quit mpv before deleting files so it doesn't log 'cannot open file' errors
+    print("Quitting mpv (if running)...")
+    subprocess.run(["pkill", "-x", "mpv"], capture_output=True)
 
     print("This script will:")
     print("  1. Delete physical .wav files from output directory")

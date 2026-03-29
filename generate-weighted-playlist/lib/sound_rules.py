@@ -22,11 +22,7 @@ _SIMPLE_RHYTHMIC_PATTERNS = [
     {
         'rhythmic_pattern': [QUARTER_NOTE, QUARTER_NOTE],
         'number': 1,
-    },
-    {
-        'rhythmic_pattern': [QUARTER_NOTE, QUARTER_NOTE_REST],
-        'number': 1,
-    },
+    }
 ]
 
 SIMPLE_RHYTHMIC_PATTERNS = _expand_rhythmic_patterns(_SIMPLE_RHYTHMIC_PATTERNS)
@@ -43,7 +39,7 @@ _KICK_SNARE_PANNINGS: dict = {
     HARD_LEFT: {
         'volumes': {
             LOUD: {
-                'bpms': [SLOW],
+                'bpms': [FAST],
                 'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
             },
         },
@@ -51,7 +47,7 @@ _KICK_SNARE_PANNINGS: dict = {
     HARD_RIGHT: {
         'volumes': {
             LOUD: {
-                'bpms': [SLOW, FAST],
+                'bpms': [FAST],
                 'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
             },
         },
@@ -59,7 +55,7 @@ _KICK_SNARE_PANNINGS: dict = {
     DUALPAN: {
         'volumes': {
             LOUD: {
-                'bpms': [SLOW, FAST],
+                'bpms': [FAST],
                 'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
             },
         },
@@ -87,7 +83,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
     HARD_LEFT: {
         'volumes': {
             LOUD: {
-                'bpms': [SLOW],
+                'bpms': [FAST],
                 'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
             },
         },
@@ -95,7 +91,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
     HARD_RIGHT: {
         'volumes': {
             LOUD: {
-                'bpms': [SLOW],
+                'bpms': [FAST],
                 'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
             },
         },
@@ -131,7 +127,7 @@ _SOUND_TYPE_RULES: list[dict] = [
             HARD_CENTER: {
                 'volumes': {
                     LOUD: {
-                        'bpms': [SLOW, FAST],
+                        'bpms': [FAST],
                         'rhythm_patterns': [[QUARTER_NOTE]],
                     },
                 },
@@ -139,7 +135,7 @@ _SOUND_TYPE_RULES: list[dict] = [
             HARD_LEFT: {
                 'volumes': {
                     QUIET: {
-                        'bpms': [SLOW, FAST],
+                        'bpms': [SLOW],
                         'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
                     },
                 },
@@ -147,7 +143,7 @@ _SOUND_TYPE_RULES: list[dict] = [
             HARD_RIGHT: {
                 'volumes': {
                     QUIET: {
-                        'bpms': [SLOW, FAST],
+                        'bpms': [SLOW],
                         'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS,
                     },
                 },
@@ -163,7 +159,7 @@ _SOUND_TYPE_RULES: list[dict] = [
             DIAGONAL_RIGHT: {
                 'volumes': {
                     QUIET: {
-                        'bpms': [SLOW, FAST],
+                        'bpms': [SLOW],
                         'rhythm_patterns': [[QUARTER_NOTE]],
                     },
                 },
