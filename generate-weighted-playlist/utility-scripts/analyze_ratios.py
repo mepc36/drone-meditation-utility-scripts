@@ -83,7 +83,7 @@ for fname in wav:
     # sound group
     if re.search(r'_(kickstab|snarestab)\.',  fname):
         grp_counts[STAB] += 1
-    elif re.search(r'_acapp?ela?_', fname):
+    elif re.search(r'_acap+el+a_', fname):
         grp_counts[ACAPPELLA] += 1
     else:
         grp_counts[KICKSNARE] += 1
