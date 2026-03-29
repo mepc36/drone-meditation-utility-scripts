@@ -55,7 +55,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
         'volumes': {
             'quiet': {
                 'bpms': ['slow'],
-                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
+                'rhythm_patterns': [[1]]
             }
         }
     },
@@ -98,7 +98,7 @@ SOUND_TYPE_RULES: list[dict] = [
                 'volumes': {
                     'loud': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': [[1], [1, 1]]
+                        'rhythm_patterns': [[1]]
                     }
                 }
             },
