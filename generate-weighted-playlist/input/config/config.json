@@ -1,6 +1,7 @@
 {
-  "bpms": "117:91",
-  "slow_to_fast_bpm_percents": "50:50",
+  "bpms": "100",
+  "slow_to_fast_bpm_percents": "100",
+  "rhythmicize_output_samples": true,
   "num_unique_samples": 200,
   "center_diagonal_dualpan_leftorright_percents": "28:17:38:17",
   "samples_to_silence_percents": "100",

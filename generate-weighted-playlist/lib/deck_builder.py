@@ -1,4 +1,5 @@
 import random
+import dataclasses
 from dataclasses import dataclass
 
 from .sound_rules import SOUND_GROUP_NAMES, SOUND_GROUP_TYPES, panning_compat, rules_by_sound_type
@@ -10,6 +11,7 @@ class SlotSpec:
     panning: str
     volume_label: str
     bpm_label: str
+    rhythm: tuple[float | str, ...] = ()
 
 
 def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict[str, int]:
@@ -163,6 +165,31 @@ def _assign_volume_and_bpm(
     return forced + assigned
 
 
+def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple[float | str, ...]]:
+    """Return rhythm patterns for this slot by looking up sound_rules.
+    Duplicates are preserved — repeat a pattern to give it more weight."""
+    found: list[tuple[float | str, ...]] = []
+    pan_key = _panning_key_for_rule_lookup(slot.panning)
+    for sound_type in SOUND_GROUP_TYPES.get(slot.sound_group, set()):
+        rule = rules_by_sound_type.get(sound_type)
+        if rule is None:
+            continue
+        pan_rule = rule['pannings'].get(pan_key)
+        if pan_rule is None:
+            continue
+        vol_rule = pan_rule['volumes'].get(slot.volume_label)
+        if vol_rule is None:
+            continue
+        for p in vol_rule.get('rhythm_patterns', []):
+            if p == 'untouched':
+                found.append(('untouched',))
+            elif isinstance(p, (int, float)):
+                found.append((float(p),))
+            else:
+                found.append(tuple(p))
+    return found
+
+
 def plan_output_files(
     group_targets: dict[str, int],
     panning_quotas: dict[str, int],
@@ -191,4 +218,35 @@ def plan_output_files(
         bpm_targets, vol_targets,
     )
     random.shuffle(deck)
+
+    # Assign rhythm patterns from sound rules, distributed evenly within each group
+    slot_patterns = [_rhythm_patterns_for_slot(s) for s in deck]
+    groups: dict[tuple, list[int]] = {}
+    for i, avail in enumerate(slot_patterns):
+        groups.setdefault(tuple(avail), []).append(i)
+
+    assigned: list[tuple[float, ...]] = [()] * len(deck)
+    for avail_tuple, indices in groups.items():
+        if not avail_tuple:
+            continue
+        patterns = list(avail_tuple)
+        n, p = len(indices), len(patterns)
+        counts = [n // p + (1 if i < n % p else 0) for i in range(p)]
+        flat: list[tuple[float, ...]] = [pat for pat, cnt in zip(patterns, counts) for _ in range(cnt)]
+        random.shuffle(flat)
+        for idx, rhythm in zip(indices, flat):
+            assigned[idx] = rhythm
+
+    deck = [dataclasses.replace(slot, rhythm=assigned[i]) for i, slot in enumerate(deck)]
+
+    missing = [s for s in deck if not s.rhythm]
+    if missing:
+        details = ', '.join(
+            f"{s.sound_group}/{s.panning}/{s.volume_label}" for s in missing[:5]
+        )
+        raise ValueError(
+            f"{len(missing)} slot(s) have no rhythm_patterns defined in sound_rules "
+            f"(first {min(5, len(missing))}: {details})"
+        )
+
     return deck

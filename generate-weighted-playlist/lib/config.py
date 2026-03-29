@@ -5,6 +5,7 @@ from pathlib import Path
 CONFIG_PATH = Path("./input/config/config.json")
 INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_AUDIO_DIR = Path("./output/audio")
+OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
 
 
 def parse_colon_ints(raw: str) -> list[int]:
@@ -100,6 +101,8 @@ def load() -> dict:
         "quietest_volume_index": volume_levels_db.index(min(volume_levels_db)),
 
         "sound_group_percents": sound_group_percents,
+
+        "rhythmicize_output_samples": bool(raw.get("rhythmicize_output_samples", False)),
 
         "raw": raw,
     }

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import soundfile as sf
 
 import lib.config as cfg
-from lib.audio_processing import load_audio, mix_samples_into_stereo_clip, write_silence_file
+from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, write_silence_file
 from lib.deck_builder import SlotSpec, plan_output_files
 from lib.sample_queue import (
     create_shuffled_sample_queue,
@@ -53,18 +53,35 @@ def pan_numeric_value(pan: str) -> float:
     return named[pan] if pan in named else float(pan)
 
 
+_BEAT_NAMES: dict[float, str] = {
+    0.25: 'sixteenth',
+    0.5:  'eighth',
+    1.0:  'quarter',
+    2.0:  'half',
+}
+
+
+def rhythm_to_name(rhythm: tuple[float | str, ...]) -> str:
+    if rhythm == ('untouched',):
+        return ''
+    return '-'.join(_BEAT_NAMES.get(v, str(v)) for v in rhythm)
+
+
 def build_output_filename(
     sample_names: list[str],
     pan_assignments: dict[str, str],
     volume_db: float,
     index: int,
     bpm: int,
+    rhythm: tuple[float, ...] = (),
 ) -> str:
     ordered_by_pan = sorted(sample_names, key=lambda n: pan_numeric_value(pan_assignments[n]))
     name_part = "_".join(n.lower() for n in ordered_by_pan)
     vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
     pan_group = panning_group_from_assignments(sample_names, pan_assignments)
-    return f"{name_part}_vol-{vol_str}_index-{index:03d}_length-1-beat_bpm-{bpm}_{pan_group}.wav"
+    rhythm_name = rhythm_to_name(rhythm) if rhythm else ""
+    rhythm_part = f"_{rhythm_name}" if rhythm_name else ""
+    return f"{name_part}_vol-{vol_str}_index-{index:03d}_bpm-{bpm}_{pan_group}{rhythm_part}.wav"
 
 
 def gcd_of(*values: int) -> int:
@@ -237,6 +254,8 @@ def main() -> None:
     conf = cfg.load()
     output_dir = cfg.OUTPUT_AUDIO_DIR
     input_audio_dir = cfg.INPUT_AUDIO_DIR
+    rhythmicize = conf['rhythmicize_output_samples']
+    rhythmicized_output_dir = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
     percents_str = ':'.join(str(p) for p in conf['bpm_percents'])
@@ -253,6 +272,8 @@ def main() -> None:
     print()
 
     clear_output_directory(output_dir)
+    if rhythmicize:
+        clear_output_directory(rhythmicized_output_dir)
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
     if num_pass_through > conf['num_unique_samples']:
@@ -361,8 +382,15 @@ def main() -> None:
 
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
         audio = mix_samples_into_stereo_clip(sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length)
-        filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx])
+        filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         sf.write(output_dir / filename, audio, sample_rate)
+
+        if rhythmicize and slot.rhythm:
+            if slot.rhythm == ('untouched',):
+                sf.write(rhythmicized_output_dir / filename, audio, sample_rate)
+            else:
+                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm)
+                sf.write(rhythmicized_output_dir / filename, rhythmicized_audio, sample_rate)
 
         if created_count % 10 == 0 or created_count == conf['num_audio_samples']:
             print(f"  Created {created_count}/{conf['num_audio_samples']} samples...")

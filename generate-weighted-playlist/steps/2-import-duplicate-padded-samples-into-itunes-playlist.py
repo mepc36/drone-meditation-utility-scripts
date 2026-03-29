@@ -2,19 +2,30 @@
 """
 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
-Generates an M3U playlist from ./output/audio/
-and plays it via mpv (shuffled, infinite loop).
+Generates an M3U playlist from ./output/audio/ (or ./output/rhythmicized-audio/
+when rhythmicize_output_samples is true in config) and plays it via mpv.
 """
 
 from pathlib import Path
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import lib.config as cfg
 
 
 # -------------------------------------------------------------------
 # CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
-# Source directory with final samples
-SOURCE_AUDIO_DIR = Path("./output/audio")
+_conf = cfg.load()
+
+# Source directory: rhythmicized-audio when flag is on, otherwise plain audio
+SOURCE_AUDIO_DIR = (
+    cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
+    if _conf['rhythmicize_output_samples']
+    else cfg.OUTPUT_AUDIO_DIR
+)
 
 # Output locations
 OUTPUT_DIR = Path("./output")
@@ -82,9 +93,8 @@ def main() -> None:
 
     print("\nStarting playback with mpv (Ctrl+C to stop)...\n")
     subprocess.run(
-        "find . -name '*.wav' | shuf | mpv --no-video --gapless-audio=yes --loop-playlist=inf --playlist=-",
-        shell=True,
-        cwd="./output",
+        ["mpv", "--no-video", "--gapless-audio=yes", "--loop-playlist=inf", "--shuffle",
+         str(PLAYLIST_PATH.resolve())],
     )
 
 

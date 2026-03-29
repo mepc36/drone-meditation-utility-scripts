@@ -15,6 +15,7 @@ from pathlib import Path
 # CONFIG: Load from input/config/config.json
 # -------------------------------------------------------------------
 OUTPUT_AUDIO_DIR = Path("./output/audio")
+OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
 PLAYLIST_PATH = Path("./output/playlists") / "playlist.m3u"
 
 
@@ -22,10 +23,12 @@ PLAYLIST_PATH = Path("./output/playlists") / "playlist.m3u"
 # File Deletion Functions
 # -------------------------------------------------------------------
 def get_output_files() -> list[Path]:
-    """Get all .wav files from the output directory."""
-    if not OUTPUT_AUDIO_DIR.exists():
-        return []
-    return list(OUTPUT_AUDIO_DIR.glob("*.wav"))
+    """Get all .wav files from the output directories."""
+    files: list[Path] = []
+    for d in (OUTPUT_AUDIO_DIR, OUTPUT_RHYTHMICIZED_AUDIO_DIR):
+        if d.exists():
+            files.extend(d.glob("*.wav"))
+    return files
 
 
 def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:

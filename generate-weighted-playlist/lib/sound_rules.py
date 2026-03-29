@@ -8,37 +8,149 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
     'acappella': {'acappella'},
 }
 
+QUARTER_NOTE_RHYTHMIC_PATTERNS = [
+        [1],
+        [1, 1],
+        [.5, .5, 1],
+        [1, .5, .5, 1],
+        [1, .5, .5, .5, .5],
+        [.5, .5, 1, .5, .5]
+    ]
+
+SIMPLE_RHYTHMIC_PATTERNS = [
+    [1],
+    [1],
+    [1],
+    [1],
+    [1],
+    [1],
+    [1],
+    [1],
+    [1, 1],
+    [1, 1],
+    [1, 1],
+    [0.5, 0.5, 1],
+    [1, 0.5, 0.5, 1],
+    [0.5, 0.5, 1, 1],
+]
+
 _KICK_SNARE_PANNINGS: dict = {
-    'leftorright': {'volumes': {'quiet': {'bpms': ['slow']}}},
-    'dualpan':     {'volumes': {'loud':  {'bpms': ['slow', 'fast']}}},
+    'leftorright': {
+        'volumes': {
+            'quiet': {
+                'bpms': ['slow'],
+                'rhythm_patterns': [1]
+            }
+        }
+    },
+    'dualpan': {
+        'volumes': {
+            'loud': {
+                'bpms': ['slow', 'fast'],
+                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+            }
+        }
+    },
 }
 
 _KICKSTAB_SNARESTAB_PANNINGS: dict = {
-    'center':     {'volumes': {'loud':  {'bpms': ['fast', 'slow']}}},
-    'diagonal':   {'volumes': {'quiet': {'bpms': ['slow']}}},
-    'dualpan':    {'volumes': {'loud':  {'bpms': ['slow', 'fast']}}},
-    'leftorright':{'volumes': {'quiet': {'bpms': ['slow']}}},
+    'center': {
+        'volumes': {
+            'quiet': {
+                'bpms': ['fast', 'slow'],
+                'rhythm_patterns': [1]
+            }
+        }
+    },
+    'diagonal': {
+        'volumes': {
+            'quiet': {
+                'bpms': ['slow'],
+                'rhythm_patterns': [1]
+            }
+        }
+    },
+    'dualpan': {
+        'volumes': {
+            'loud': {
+                'bpms': ['slow', 'fast'],
+                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+            }
+        }
+    },
+    'leftorright': {
+        'volumes': {
+            'quiet': {
+                'bpms': ['slow'],
+                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+            }
+        }
+    },
 }
 
 SOUND_TYPE_RULES: list[dict] = [
-    {'musical_grouping': 'kick',      'dualpan_partners': ['kick'],      'pannings': _KICK_SNARE_PANNINGS},
-    {'musical_grouping': 'snare',     'dualpan_partners': ['snare'],     'pannings': _KICK_SNARE_PANNINGS},
-    {'musical_grouping': 'kickstab',  'dualpan_partners': ['kickstab'],  'pannings': _KICKSTAB_SNARESTAB_PANNINGS},
-    {'musical_grouping': 'snarestab', 'dualpan_partners': ['snarestab'], 'pannings': _KICKSTAB_SNARESTAB_PANNINGS},
+    {
+        'musical_grouping': 'kick',
+        'dualpan_partners': ['kick'],
+        'pannings': _KICK_SNARE_PANNINGS
+    },
+    {
+        'musical_grouping': 'snare',
+        'dualpan_partners': ['snare'],
+        'pannings': _KICK_SNARE_PANNINGS
+    },
+    {
+        'musical_grouping': 'kickstab',
+        'dualpan_partners': ['kickstab'],
+        'pannings': _KICKSTAB_SNARESTAB_PANNINGS
+    },
+    {
+        'musical_grouping': 'snarestab',
+        'dualpan_partners': ['snarestab'],
+        'pannings': _KICKSTAB_SNARESTAB_PANNINGS
+    },
     {
         'musical_grouping': 'acappella',
         'dualpan_partners': [],
         'pannings': {
-            'center':     {'volumes': {'quiet': {'bpms': ['slow']}}},
-            'leftorright':{'volumes': {'loud':  {'bpms': ['slow']}}},
-            'diagonal':   {'volumes': {'quiet': {'bpms': ['slow']}}},
+            'center': {
+                'volumes': {
+                    'quiet': {
+                        'bpms': ['slow'],
+                        'rhythm_patterns': [1]
+                    }
+                }
+            },
+            'leftorright': {
+                'volumes': {
+                    'loud': {
+                        'bpms': ['slow'],
+                        'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+                    }
+                }
+            },
+            'diagonal': {
+                'volumes': {
+                    'quiet': {
+                        'bpms': ['slow'],
+                        'rhythm_patterns': [1]
+                    }
+                }
+            },
         },
     },
     {
         'musical_grouping': 'strings',
         'dualpan_partners': [],
         'pannings': {
-            'untouched': {'volumes': {'untouched': {'bpms': ['untouched']}}},
+            'untouched': {
+                'volumes': {
+                    'untouched': {
+                        'bpms': ['untouched'],
+                        'rhythm_patterns': ['untouched']
+                    }
+                }
+            },
         },
     },
 ]
@@ -50,12 +162,17 @@ rules_by_sound_type: dict[str, dict] = {
 for _rule in SOUND_TYPE_RULES:
     _name = _rule['musical_grouping']
     if 'dualpan_partners' not in _rule:
-        raise ValueError(f"SOUND_TYPE_RULES entry '{_name}' is missing 'dualpan_partners'. Use [] if no dualpan.")
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_name}' is missing 'dualpan_partners'. Use [] if no dualpan."
+        )
     if _rule['dualpan_partners'] and 'dualpan' not in _rule['pannings']:
-        raise ValueError(f"SOUND_TYPE_RULES entry '{_name}' declares dualpan_partners but has no 'dualpan' panning.")
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_name}' declares dualpan_partners but has no 'dualpan' panning."
+        )
 
 panning_compat: dict[str, set[str]] = {
-    group: {
+    group:
+    {
         pan
         for sound_type in types
         for pan in rules_by_sound_type.get(sound_type, {}).get('pannings', {})

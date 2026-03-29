@@ -109,6 +109,43 @@ def mix_samples_into_stereo_clip(
     return mixed
 
 
+def apply_rhythm_pattern(
+    audio: np.ndarray,
+    sample_rate: int,
+    beat_length_seconds: float,
+    pattern: tuple[float, ...],
+) -> np.ndarray:
+    """Chop audio into rhythmic segments and concatenate into a new clip.
+
+    Each value in `pattern` is the total slot duration in beats. Audio fills
+    min(value, 1.0) beats from the start of the clip; any remaining duration
+    is silence. Examples:
+        0.5  → 0.5 beats of audio (eighth note), no silence
+        1.0  → 1 beat of audio (quarter note), no silence
+        2.0  → 1 beat of audio + 1 beat of silence
+    """
+    n_channels = audio.shape[1] if audio.ndim == 2 else 1
+
+    def _silence(n_samples: int) -> np.ndarray:
+        return np.zeros((n_samples, n_channels) if n_channels > 1 else (n_samples,))
+
+    chunks = []
+    for duration_beats in pattern:
+        sound_beats = min(duration_beats, 1.0)
+        silence_beats = duration_beats - sound_beats
+
+        sound_samples = int(sound_beats * beat_length_seconds * sample_rate)
+        chunk = audio[:sound_samples]
+        if len(chunk) < sound_samples:
+            chunk = np.concatenate([chunk, _silence(sound_samples - len(chunk))])
+        chunks.append(chunk)
+
+        if silence_beats > 0:
+            chunks.append(_silence(int(silence_beats * beat_length_seconds * sample_rate)))
+
+    return np.concatenate(chunks)
+
+
 def write_silence_file(output_dir: Path, sample_rate: int, length_seconds: float, index: int) -> None:
     length_ms = int(length_seconds * 1000)
     filename = f"silence_{length_ms}ms_{index:03d}.wav"
