@@ -1,5 +1,5 @@
 {
-  "bpms": "100:133",
+  "bpms": "94:117.5",
   "slow_to_fast_bpm_percents": "50:50",
   "num_unique_samples": 200,
   "center_diagonal_dualpan_left_right_percents": "28:28:16:14:14",

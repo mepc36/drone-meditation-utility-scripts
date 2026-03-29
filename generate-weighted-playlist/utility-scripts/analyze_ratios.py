@@ -31,7 +31,7 @@ pan_pcts   = parse_pct(cfg[_cfg_mod.CFG_PANNING_PERCENTS])
 pan_target = pan_pcts[:3] + [pan_pcts[3] + pan_pcts[4]]   # combine left+right → leftorright
 ks_target  = parse_pct(cfg[_cfg_mod.CFG_SOUND_GROUP_PERCENTS])
 vol_target = parse_pct(cfg[_cfg_mod.CFG_LOUD_QUIET_PERCENTS])
-bpms       = [int(x) for x in str(cfg[_cfg_mod.CFG_BPMS]).split(":")]
+bpms       = [float(x) for x in str(cfg[_cfg_mod.CFG_BPMS]).split(":")]
 bpm_target = parse_pct(cfg.get(_cfg_mod.CFG_BPM_PERCENTS, "100"))
 rp_weights = cfg.get(_cfg_mod.CFG_RHYTHM_WEIGHTS, {})
 rp_total   = sum(rp_weights.values()) or 1
@@ -98,12 +98,12 @@ for fname in wav:
         vol_counts['loud' if int(m.group(1)) == 0 else 'quiet'] += 1
 
     # bpm
-    m = re.search(r'_bpm-(\d+)_', fname)
+    m = re.search(r'_bpm-([\d.]+)_', fname)
     if m:
-        bpm_counts[int(m.group(1))] += 1
+        bpm_counts[float(m.group(1))] += 1
 
     # rhythm pattern suffix
-    m = re.search(r'_bpm-\d+_[\w]+_(.+?)\.wav$', fname)
+    m = re.search(r'_bpm-[\d.]+_[\w]+_(.+?)\.wav$', fname)
     if m:
         suffix = m.group(1)
         for pat_suffix, pat_name in SUFFIX_MAP.items():
@@ -134,7 +134,7 @@ DIMS = [
     },
     {
         "title": "BPM",
-        "labels": [str(b) for b in bpms],
+        "labels": [str(int(b)) if b == int(b) else str(b) for b in bpms],
         "targets": bpm_target,
         "actuals": [bpm_counts[b] for b in bpms],
     },

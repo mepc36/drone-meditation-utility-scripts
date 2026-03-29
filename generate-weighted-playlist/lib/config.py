@@ -51,7 +51,7 @@ def load() -> dict:
     if CFG_BPMS not in raw:
         raise ValueError(f"'{CFG_BPMS}' is required in config.json")
 
-    bpm_values = parse_colon_ints(raw[CFG_BPMS])
+    bpm_values = parse_colon_floats(raw[CFG_BPMS])
     bpm_percents = parse_colon_ints(raw.get(CFG_BPM_PERCENTS, "100"))
     require_sums_to_100(bpm_percents, CFG_BPM_PERCENTS)
     require_same_length(bpm_percents, bpm_values, CFG_BPM_PERCENTS, CFG_BPMS)

@@ -18,7 +18,7 @@ class SlotSpec:
     sound_group: str
     panning: float | str       # float position or 'dualpan' / 'untouched'
     volume_label: float | str  # actual dB float, or 'untouched' for strings slots
-    bpm_label: int | str       # actual BPM int, or 'untouched' for strings slots
+    bpm_label: float | str     # actual BPM float, or 'untouched' for strings slots
     rhythm: tuple[float | str, ...] = ()
     beat_pannings: tuple[float | str, ...] = ()  # per-beat chosen pannings, parallel to rhythm
 
