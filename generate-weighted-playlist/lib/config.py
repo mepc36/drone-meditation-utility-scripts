@@ -18,7 +18,6 @@ CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
 CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
 CFG_LOUD_QUIET_PERCENTS  = 'loud_quiet_percents'
 CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
-CFG_RHYTHMICIZE          = 'rhythmicize_output_samples'
 CFG_RHYTHM_WEIGHTS       = 'rhythm_pattern_weights'
 
 # ── Config validation counts ───────────────────────────────────────────────────
@@ -123,8 +122,6 @@ def load() -> dict:
         "quietest_volume_index": volume_levels_db.index(min(volume_levels_db)),
 
         "sound_group_percents": sound_group_percents,
-
-        "rhythmicize_output_samples": bool(raw.get(CFG_RHYTHMICIZE, False)),
 
         "rhythm_pattern_weights": raw.get(CFG_RHYTHM_WEIGHTS, {}),
 

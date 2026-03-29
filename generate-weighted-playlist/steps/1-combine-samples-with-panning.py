@@ -263,7 +263,6 @@ def main() -> None:
     conf = cfg.load()
     output_dir = cfg.OUTPUT_AUDIO_DIR
     input_audio_dir = cfg.INPUT_AUDIO_DIR
-    rhythmicize = conf['rhythmicize_output_samples']
     rhythmicized_output_dir = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
@@ -281,8 +280,7 @@ def main() -> None:
     print()
 
     clear_output_directory(output_dir)
-    if rhythmicize:
-        clear_output_directory(rhythmicized_output_dir)
+    clear_output_directory(rhythmicized_output_dir)
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
     if num_pass_through > conf['num_unique_samples']:
@@ -397,7 +395,7 @@ def main() -> None:
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         sf.write(output_dir / filename, audio, sample_rate)
 
-        if rhythmicize and slot.rhythm:
+        if slot.rhythm:
             if slot.rhythm == (UNTOUCHED,):
                 sf.write(rhythmicized_output_dir / filename, audio, sample_rate)
             else:
