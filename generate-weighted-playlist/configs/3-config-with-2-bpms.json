@@ -2,10 +2,10 @@
   "bpms": "100:133",
   "slow_to_fast_bpm_percents": "66:34",
   "num_unique_samples": 100,
-  "center_diagonal_dualpan_leftorright_percents": "25:25:25:25",
+  "center_diagonal_dualpan_left_right_percents": "25:25:25:13:12",
   "samples_to_silence_percents": "100",
-  "loud_medium_soft_values": "0",
-  "loud_medium_soft_percents": "100",
+  "loud_quiet_values": "0",
+  "loud_quiet_percents": "100",
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "60:30:10"

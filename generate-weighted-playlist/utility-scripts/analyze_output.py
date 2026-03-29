@@ -13,9 +13,10 @@ with open(cfg_path) as f:
 def parse_pct(s):
     return [int(x) for x in str(s).split(":")]
 
-pan_target = parse_pct(cfg["center_diagonal_dualpan_leftorright_percents"])   # center:diag:dual:lor
+pan_pcts = parse_pct(cfg["center_diagonal_dualpan_left_right_percents"])   # center:diag:dual:left:right
+pan_target = pan_pcts[:3] + [pan_pcts[3] + pan_pcts[4]]                    # combine left+right → leftorright
 ks_target  = parse_pct(cfg["kicksnare_stab_acappella_percents"])               # kicksnare:stab:acap
-vol_target = parse_pct(cfg["loud_medium_soft_percents"])                        # loud:soft
+vol_target = parse_pct(cfg["loud_quiet_percents"])                        # loud:quiet
 bpms       = [int(x) for x in str(cfg["bpms"]).split(":")]
 bpm_target = parse_pct(cfg.get("slow_to_fast_bpm_percents", "100"))
 n_target   = int(cfg["num_unique_samples"])
@@ -46,7 +47,7 @@ vol_counts = Counter()
 for fname in wav:
     m = re.search(r'_vol(-?\d+)_', fname)
     if m:
-        vol_counts['loud' if int(m.group(1)) == 0 else 'soft'] += 1
+        vol_counts['loud' if int(m.group(1)) == 0 else 'quiet'] += 1
     else:
         vol_counts['unknown'] += 1
 
@@ -60,76 +61,74 @@ for fname in wav:
 # ══════════════════════════════════════════════════════════════════════
 # Rendering
 # ══════════════════════════════════════════════════════════════════════
-W = 25  # bar width
 
-def bar(pct):
-    filled = round(pct / 100 * W)
-    return "█" * filled + "░" * (W - filled)
+def status(delta_pct):
+    a = abs(delta_pct)
+    if a <= 3:   return "✅"
+    if a <= 10:  return "⚠️"
+    return "❌"
 
-def section(title, labels, actuals, targets, total):
-    print(f"\n{'═'*70}")
-    print(f"  {title}")
-    print(f"{'═'*70}")
-    print(f"  {'Label':<16}  {'Target':>6}  {'Actual':>6}  {'Delta':>7}  Actual / Target")
-    print(f"  {'-'*66}")
-    for lbl, act, tgt in zip(labels, actuals, targets):
-        pct = act / total * 100 if total else 0.0
-        delta = pct - tgt
-        dsym = f"{delta:+.1f}%" if abs(delta) >= 0.5 else "   ~0%"
-        print(f"  {lbl:<16}  {tgt:>5}%   {pct:>5.1f}%  {dsym:>7}  A:{bar(pct)}")
-        print(f"  {'':16}                          T:{bar(tgt)}")
+rows = []
 
-print("=" * 70)
-print("  OUTPUT vs CONFIG — DELTA ANALYSIS")
-print("=" * 70)
-print(f"\n  Files in output/audio : {N}")
-print(f"  config num_unique_samples : {n_target}")
-print(f"  Count delta : {N - n_target:+d}")
+# Files (absolute, not percentage)
+file_delta = N - n_target
+rows.append(("Files", str(n_target), str(N), str(file_delta), "✅" if file_delta == 0 else "❌"))
 
-section(
-    f"PANNING  (config: center:diagonal:dualpan:leftorright = {cfg['center_diagonal_dualpan_leftorright_percents']})",
-    ["center", "diagonal", "dualpan", "leftorright"],
-    [pan_counts["center"], pan_counts["diagonal"], pan_counts["dualpan"], pan_counts["leftorright"]],
-    pan_target, N,
-)
+# Panning
+pan_labels = ["Panning: center", "Panning: diagonal", "Panning: dualpan", "Panning: leftorright"]
+pan_actuals = [pan_counts[k] for k in ("center", "diagonal", "dualpan", "leftorright")]
+for lbl, act, tgt in zip(pan_labels, pan_actuals, pan_target):
+    pct = act / N * 100 if N else 0.0
+    delta = pct - tgt
+    dsym = f"~0" if abs(delta) < 0.5 else f"{delta:+.1f}%"
+    rows.append((lbl, f"{tgt}%", f"{pct:.1f}%", dsym, status(delta)))
 
-section(
-    f"SOUND GROUP  (config: kicksnare:stab:acappella = {cfg['kicksnare_stab_acappella_percents']})",
-    ["kicksnare", "stab", "acappella"],
-    [grp_counts["kicksnare"], grp_counts["stab"], grp_counts["acappella"]],
-    ks_target, N,
-)
+# Sound group
+snd_labels = ["Sound: kicksnare", "Sound: stab", "Sound: acappella"]
+snd_actuals = [grp_counts[k] for k in ("kicksnare", "stab", "acappella")]
+for lbl, act, tgt in zip(snd_labels, snd_actuals, ks_target):
+    pct = act / N * 100 if N else 0.0
+    delta = pct - tgt
+    dsym = f"~0" if abs(delta) < 0.5 else f"{delta:+.1f}%"
+    rows.append((lbl, f"{tgt}%", f"{pct:.1f}%", dsym, status(delta)))
 
-section(
-    f"VOLUME  (config: loud:soft = {cfg['loud_medium_soft_percents']})",
-    ["loud  (vol=0)", "soft  (vol=-22)"],
-    [vol_counts["loud"], vol_counts["soft"]],
-    vol_target, N,
-)
+# Volume
+vol_labels = ["Volume: loud", "Volume: quiet"]
+vol_actuals = [vol_counts["loud"], vol_counts["quiet"]]
+for lbl, act, tgt in zip(vol_labels, vol_actuals, vol_target):
+    pct = act / N * 100 if N else 0.0
+    delta = pct - tgt
+    dsym = f"~0" if abs(delta) < 0.5 else f"{delta:+.1f}%"
+    rows.append((lbl, f"{tgt}%", f"{pct:.1f}%", dsym, status(delta)))
 
-section(
-    f"BPM  (config bpms={bpms}  percents={bpm_target})",
-    [f"bpm-{b}" for b in bpms],
-    [bpm_counts[b] for b in bpms],
-    bpm_target, N,
-)
+# BPM
+bpm_speed = ["slow", "fast"]
+for i, (b, tgt) in enumerate(zip(bpms, bpm_target)):
+    act = bpm_counts[b]
+    pct = act / N * 100 if N else 0.0
+    delta = pct - tgt
+    dsym = f"~0" if abs(delta) < 0.5 else f"{delta:+.1f}%"
+    rows.append((f"BPM: {b} ({bpm_speed[i]})", f"{tgt}%", f"{pct:.1f}%", dsym, status(delta)))
 
-print(f"\n{'═'*70}")
-print("  RAW COUNTS")
-print(f"{'═'*70}")
-print(f"  panning     : {dict(pan_counts)}")
-print(f"  sound group : {dict(grp_counts)}")
-print(f"  volume      : {dict(vol_counts)}")
-print(f"  bpm         : {dict(bpm_counts)}")
+# Print table
+col_w = [max(len(r[i]) for r in rows) for i in range(5)]
+col_w[0] = max(col_w[0], len("Dimension"))
+header = ("Dimension", "Target", "Actual", "Delta", "Status")
+sep = "  ".join("─" * w for w in col_w)
+print()
+print("  ".join(h.ljust(col_w[i]) for i, h in enumerate(header)))
+print(sep)
+for row in rows:
+    print("  ".join(cell.ljust(col_w[i]) for i, cell in enumerate(row)))
 
 # ── Rhythmic patterns ─────────────────────────────────────────────────
 # Load QUARTER_NOTE_RHYTHMIC_PATTERNS from sound_rules without side effects
-sys.path.insert(0, os.path.join(BASE, "lib"))
+sys.path.insert(0, BASE)
 import importlib, unittest.mock
 with unittest.mock.patch("builtins.print"):  # suppress the $$$ debug print
-    sr = importlib.import_module("sound_rules")
+    sr = importlib.import_module("lib.sound_rules")
 
-pool = sr.QUARTER_NOTE_RHYTHMIC_PATTERNS
+pool = sr.SIMPLE_RHYTHMIC_PATTERNS
 pool_total = len(pool)
 
 # Map pattern → filename suffix
@@ -139,7 +138,7 @@ def pattern_to_suffix(p):
         if beat == 1:
             parts.append("quarter")
         elif beat == 0:
-            parts.append("0")
+            parts.append("quarternoterest")
         else:
             parts.append(str(beat))
     return "-".join(parts)

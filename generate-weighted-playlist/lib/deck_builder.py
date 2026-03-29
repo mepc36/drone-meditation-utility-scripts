@@ -2,41 +2,40 @@ import random
 import dataclasses
 from dataclasses import dataclass
 
-from .sound_rules import SOUND_GROUP_NAMES, SOUND_GROUP_TYPES, panning_compat, rules_by_sound_type
+from .constants import (
+    HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    DUALPAN, UNTOUCHED,
+    LOUD, QUIET, SLOW, FAST,
+    SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
+)
+from .sound_rules import panning_compat, rules_by_sound_type
 
 
 @dataclass(frozen=True)
 class SlotSpec:
     sound_group: str
-    panning: str
-    volume_label: str
-    bpm_label: str
+    panning: float | str       # float position or 'dualpan' / 'untouched'
+    volume_label: float | str  # actual dB float, or 'untouched' for strings slots
+    bpm_label: int | str       # actual BPM int, or 'untouched' for strings slots
     rhythm: tuple[float | str, ...] = ()
+    beat_pannings: tuple[float | str, ...] = ()  # per-beat chosen pannings, parallel to rhythm
 
 
-def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict[str, int]:
+def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:
     diagonal = panning_quotas.get('diagonal', 0)
-    leftorright = panning_quotas.get('leftorright', 0)
     return {
-        'center':         panning_quotas.get('center', 0),
-        'diagonal_left':  diagonal // 2,
-        'diagonal_right': diagonal - diagonal // 2,
-        'dualpan':        panning_quotas.get('dualpan', 0),
-        'hard_left':      leftorright // 2,
-        'hard_right':     leftorright - leftorright // 2,
+        HARD_CENTER:    panning_quotas.get('center', 0),
+        DIAGONAL_LEFT:  diagonal // 2,
+        DIAGONAL_RIGHT: diagonal - diagonal // 2,
+        DUALPAN:        panning_quotas.get('dualpan', 0),
+        HARD_LEFT:      panning_quotas.get('left', 0),
+        HARD_RIGHT:     panning_quotas.get('right', 0),
     }
 
 
-def _directional_pannings_for_group(group: str) -> set[str]:
-    result: set[str] = set()
-    for pan in panning_compat.get(group, set()):
-        if pan == 'diagonal':
-            result.update({'diagonal_left', 'diagonal_right'})
-        elif pan == 'leftorright':
-            result.update({'hard_left', 'hard_right'})
-        else:
-            result.add(pan)
-    return result
+def _directional_pannings_for_group(group: str) -> set:
+    # panning_compat already contains concrete numeric panning values
+    return panning_compat.get(group, set())
 
 
 def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict[str, int]) -> dict[str, dict[str, int]]:
@@ -92,21 +91,48 @@ def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict
     return allocation, overflow
 
 
-def _panning_key_for_rule_lookup(panning: str) -> str:
-    if panning.startswith('diagonal'):
-        return 'diagonal'
-    if panning in ('hard_left', 'hard_right'):
-        return 'leftorright'
-    return panning
+def _hashable_beat(b) -> tuple | float | str:
+    """Convert a beat element to a hashable form for use as a dict key.
+
+    Plain floats/ints are returned as-is.  Beat dicts are converted to
+    (duration, (panning, ...)) tuples.
+    """
+    if isinstance(b, dict):
+        return (float(b['duration']), tuple(b['pannings']))
+    return b
 
 
-def _allowed_volume_bpm_combos(group: str, panning: str) -> set[tuple[str, str]]:
+def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
+    """Split a raw (hashable) beat pattern into separate duration and panning tuples.
+
+    For plain-float beats the panning entry is '' (empty string), meaning the
+    slot-level panning will be used by audio_processing unchanged.
+    For beat-object beats the panning entry is randomly chosen from the beat's
+    candidate list.
+    """
+    if raw_pattern == (UNTOUCHED,):
+        return (UNTOUCHED,), ()
+    durations: list = []
+    pannings: list[str] = []
+    for b in raw_pattern:
+        if isinstance(b, tuple) and len(b) == 2 and isinstance(b[1], tuple):
+            duration, pan_options = b
+            durations.append(float(duration))
+            pannings.append(random.choice(pan_options) if pan_options else '')
+        else:
+            durations.append(float(b))
+            pannings.append('')
+    return tuple(durations), tuple(pannings)
+
+
+
+def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
     result: set[tuple[str, str]] = set()
     for sound_type in SOUND_GROUP_TYPES[group]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['pannings'].get(_panning_key_for_rule_lookup(panning))
+        pan_rule = rule['pannings'].get(panning)
         if pan_rule is None:
             continue
         for vol_label, bpm_info in pan_rule['volumes'].items():
@@ -131,17 +157,17 @@ def _assign_volume_and_bpm(
         for panning, count in pannings.items():
             opts = _allowed_volume_bpm_combos(group, panning)
             if not opts:
-                forced += [SlotSpec(group, panning, 'loud', 'slow')] * count
+                forced += [SlotSpec(group, panning, LOUD, SLOW)] * count
             elif len(opts) == 1:
                 vol, bpm = next(iter(opts))
                 forced += [SlotSpec(group, panning, vol, bpm)] * count
             else:
                 free += [(group, panning, list(opts))] * count
 
-    remaining_slow  = max(0, bpm_targets.get(slowest_bpm_index, 0)   - sum(1 for s in forced if s.bpm_label == 'slow'))
-    remaining_fast  = max(0, bpm_targets.get(fastest_bpm_index, 0)    - sum(1 for s in forced if s.bpm_label == 'fast'))
-    remaining_loud  = max(0, vol_targets.get(loudest_volume_index, 0) - sum(1 for s in forced if s.volume_label == 'loud'))
-    remaining_quiet = max(0, vol_targets.get(quietest_volume_index, 0)- sum(1 for s in forced if s.volume_label == 'quiet'))
+    remaining_slow  = max(0, bpm_targets.get(slowest_bpm_index, 0)   - sum(1 for s in forced if s.bpm_label == SLOW))
+    remaining_fast  = max(0, bpm_targets.get(fastest_bpm_index, 0)    - sum(1 for s in forced if s.bpm_label == FAST))
+    remaining_loud  = max(0, vol_targets.get(loudest_volume_index, 0) - sum(1 for s in forced if s.volume_label == LOUD))
+    remaining_quiet = max(0, vol_targets.get(quietest_volume_index, 0)- sum(1 for s in forced if s.volume_label == QUIET))
 
     random.shuffle(free)
     assigned: list[SlotSpec] = []
@@ -149,42 +175,43 @@ def _assign_volume_and_bpm(
         best_combo = max(
             opts,
             key=lambda vb: (
-                int(vb[1] == 'slow' and remaining_slow > 0) +
-                int(vb[1] == 'fast' and remaining_fast > 0) +
-                int(vb[0] == 'loud' and remaining_loud > 0) +
-                int(vb[0] == 'quiet' and remaining_quiet > 0)
+                int(vb[1] == SLOW  and remaining_slow  > 0) +
+                int(vb[1] == FAST  and remaining_fast  > 0) +
+                int(vb[0] == LOUD  and remaining_loud  > 0) +
+                int(vb[0] == QUIET and remaining_quiet > 0)
             ),
         )
         vol, bpm = best_combo
         assigned.append(SlotSpec(group, panning, vol, bpm))
-        if bpm == 'slow':    remaining_slow  -= 1
-        elif bpm == 'fast':  remaining_fast  -= 1
-        if vol == 'loud':    remaining_loud  -= 1
-        elif vol == 'quiet': remaining_quiet -= 1
+        if bpm == SLOW:    remaining_slow  -= 1
+        elif bpm == FAST:  remaining_fast  -= 1
+        if vol == LOUD:    remaining_loud  -= 1
+        elif vol == QUIET: remaining_quiet -= 1
 
     return forced + assigned
 
 
-def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple[float | str, ...]]:
+def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
     """Return rhythm patterns for this slot by looking up sound_rules.
     Duplicates are preserved — repeat a pattern to give it more weight."""
-    found: list[tuple[float | str, ...]] = []
-    pan_key = _panning_key_for_rule_lookup(slot.panning)
+    found: list[tuple] = []
     for sound_type in SOUND_GROUP_TYPES.get(slot.sound_group, set()):
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['pannings'].get(pan_key)
+        pan_rule = rule['pannings'].get(slot.panning)
         if pan_rule is None:
             continue
         vol_rule = pan_rule['volumes'].get(slot.volume_label)
         if vol_rule is None:
             continue
         for p in vol_rule.get('rhythm_patterns', []):
-            if p == 'untouched':
-                found.append(('untouched',))
+            if p == UNTOUCHED:
+                found.append((UNTOUCHED,))
             elif isinstance(p, (int, float)):
                 found.append((float(p),))
+            elif isinstance(p, list):
+                found.append(tuple(_hashable_beat(b) for b in p))
             else:
                 found.append(tuple(p))
     return found
@@ -225,19 +252,22 @@ def plan_output_files(
     for i, avail in enumerate(slot_patterns):
         groups.setdefault(tuple(avail), []).append(i)
 
-    assigned: list[tuple[float, ...]] = [()] * len(deck)
+    assigned_rhythms: list[tuple] = [()] * len(deck)
+    assigned_pannings: list[tuple] = [()] * len(deck)
     for avail_tuple, indices in groups.items():
         if not avail_tuple:
             continue
         patterns = list(avail_tuple)
         n, p = len(indices), len(patterns)
         counts = [n // p + (1 if i < n % p else 0) for i in range(p)]
-        flat: list[tuple[float, ...]] = [pat for pat, cnt in zip(patterns, counts) for _ in range(cnt)]
+        flat: list[tuple] = [pat for pat, cnt in zip(patterns, counts) for _ in range(cnt)]
         random.shuffle(flat)
-        for idx, rhythm in zip(indices, flat):
-            assigned[idx] = rhythm
+        for idx, raw_pattern in zip(indices, flat):
+            rhythm, beat_pannings = _extract_rhythm_and_pannings(raw_pattern)
+            assigned_rhythms[idx] = rhythm
+            assigned_pannings[idx] = beat_pannings
 
-    deck = [dataclasses.replace(slot, rhythm=assigned[i]) for i, slot in enumerate(deck)]
+    deck = [dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i]) for i, slot in enumerate(deck)]
 
     missing = [s for s in deck if not s.rhythm]
     if missing:

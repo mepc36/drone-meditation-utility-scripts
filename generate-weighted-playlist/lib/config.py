@@ -38,10 +38,10 @@ def load() -> dict:
     require_sums_to_100(bpm_percents, "slow_to_fast_bpm_percents")
     require_same_length(bpm_percents, bpm_values, "slow_to_fast_bpm_percents", "bpms")
 
-    panning_percents = parse_colon_ints(raw.get("center_diagonal_dualpan_leftorright_percents", "25:25:25:25"))
-    if len(panning_percents) != 4:
-        raise ValueError("center_diagonal_dualpan_leftorright_percents must have exactly 4 values (center:diagonal:dualpan:leftorright)")
-    require_sums_to_100(panning_percents, "center_diagonal_dualpan_leftorright_percents")
+    panning_percents = parse_colon_ints(raw.get("center_diagonal_dualpan_left_right_percents", "25:25:25:13:12"))
+    if len(panning_percents) != 5:
+        raise ValueError("center_diagonal_dualpan_left_right_percents must have exactly 5 values (center:diagonal:dualpan:left:right)")
+    require_sums_to_100(panning_percents, "center_diagonal_dualpan_left_right_percents")
 
     silence_ratio = parse_colon_ints(raw.get("samples_to_silence_percents", "100:0"))
     require_sums_to_100(silence_ratio, "samples_to_silence_percents")
@@ -62,10 +62,12 @@ def load() -> dict:
     require_sums_to_100(silence_length_percents, "silence_lengths_percents")
     require_same_length(silence_lengths_ms, silence_length_percents, "silence_lengths_millisec", "silence_lengths_percents")
 
-    volume_levels_db = parse_colon_floats(raw.get("loud_medium_soft_values", "0"))
-    volume_percents = parse_colon_ints(raw.get("loud_medium_soft_percents", "100"))
-    require_sums_to_100(volume_percents, "loud_medium_soft_percents")
-    require_same_length(volume_levels_db, volume_percents, "loud_medium_soft_values", "loud_medium_soft_percents")
+    volume_levels_db = parse_colon_floats(raw.get("loud_quiet_values", "0:-26"))
+    volume_percents = parse_colon_ints(raw.get("loud_quiet_percents", "50:50"))
+    if len(volume_levels_db) != 2:
+        raise ValueError("loud_quiet_values must have exactly 2 values (loud:quiet)")
+    require_sums_to_100(volume_percents, "loud_quiet_percents")
+    require_same_length(volume_levels_db, volume_percents, "loud_quiet_values", "loud_quiet_percents")
 
     if "kicksnare_stab_acappella_percents" not in raw:
         raise ValueError("kicksnare_stab_acappella_percents must be set in config.json")
@@ -90,7 +92,8 @@ def load() -> dict:
         "center_weight": panning_percents[0],
         "diagonal_weight": panning_percents[1],
         "dualpan_weight": panning_percents[2],
-        "leftorright_weight": panning_percents[3],
+        "left_weight": panning_percents[3],
+        "right_weight": panning_percents[4],
 
         "silence_lengths_seconds": [ms / 1000.0 for ms in silence_lengths_ms],
         "silence_length_percents": silence_length_percents,

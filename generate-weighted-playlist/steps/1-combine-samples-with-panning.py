@@ -22,12 +22,16 @@ from lib.sample_queue import (
     load_samples_grouped_by_type,
 )
 from lib.sound_rules import (
-    SOUND_GROUP_NAMES,
-    SOUND_GROUP_TYPES,
-    diagonal_pan_value_for_side,
     passes_through_unmodified,
     rules_by_sound_type,
     sound_type_of,
+)
+from lib.constants import (
+    HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    DUALPAN, UNTOUCHED,
+    LOUD, QUIET, SLOW, FAST,
+    SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
+    STRINGS,
 )
 
 
@@ -37,23 +41,23 @@ def clear_output_directory(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
-def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict[str, str]) -> str:
+def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict) -> str:
     if len(sample_names) == 2:
         return 'dualpan'
     pan = pan_assignments[sample_names[0]]
-    if pan == 'center':
+    if pan == HARD_CENTER:
         return 'center'
-    if pan in ('hard_left', 'hard_right'):
+    if pan in (HARD_LEFT, HARD_RIGHT):
         return 'leftorright'
     return 'diagonal'
 
 
-def pan_numeric_value(pan: str) -> float:
-    named = {'center': 0.0, 'hard_left': -1.0, 'hard_right': 1.0}
-    return named[pan] if pan in named else float(pan)
+def pan_numeric_value(pan: float) -> float:
+    return float(pan)
 
 
-_BEAT_NAMES: dict[float, str] = {
+BEAT_NAMES: dict[float, str] = {
+    0.0:  'quarternoterest',
     0.25: 'sixteenth',
     0.5:  'eighth',
     1.0:  'quarter',
@@ -62,9 +66,9 @@ _BEAT_NAMES: dict[float, str] = {
 
 
 def rhythm_to_name(rhythm: tuple[float | str, ...]) -> str:
-    if rhythm == ('untouched',):
+    if rhythm == (UNTOUCHED,):
         return ''
-    return '-'.join(_BEAT_NAMES.get(v, str(v)) for v in rhythm)
+    return '-'.join(BEAT_NAMES.get(v, str(v)) for v in rhythm)
 
 
 def build_output_filename(
@@ -101,12 +105,12 @@ def resolve_slot(
     fastest_idx = conf['fastest_bpm_index']
     volume_levels_db = conf['volume_levels_db']
 
-    if slot.sound_group == 'strings':
+    if slot.sound_group == STRINGS:
         primary = draw_next_strings_sample(sample_queue, all_samples)
         if primary is None:
             return None
         sample_names = [primary]
-        pan_assignments = {primary: 'center'}
+        pan_assignments = {primary: HARD_CENTER}
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
         if combo_key in seen_combinations:
             return None
@@ -119,33 +123,33 @@ def resolve_slot(
 
         rule = rules_by_sound_type.get(sound_type_of(primary))
 
-        if slot.panning == 'dualpan':
+        if slot.panning == DUALPAN:
             partner_types = set(rule['dualpan_partners']) if rule else {sound_type_of(primary)}
             partner = draw_next_sample_of_types(sample_queue, all_samples, partner_types, exclude_name=primary)
             if partner:
                 sample_names = [primary, partner]
-                pan_assignments = {primary: 'hard_left', partner: 'hard_right'}
+                pan_assignments = {primary: HARD_LEFT, partner: HARD_RIGHT}
             else:
                 sample_names = [primary]
-                pan_assignments = {primary: diagonal_pan_value_for_side('left')}
-        elif slot.panning == 'center':
-            sample_names, pan_assignments = [primary], {primary: 'center'}
-        elif slot.panning == 'diagonal_left':
-            sample_names, pan_assignments = [primary], {primary: diagonal_pan_value_for_side('left')}
-        elif slot.panning == 'diagonal_right':
-            sample_names, pan_assignments = [primary], {primary: diagonal_pan_value_for_side('right')}
-        elif slot.panning == 'hard_left':
-            sample_names, pan_assignments = [primary], {primary: 'hard_left'}
-        elif slot.panning == 'hard_right':
-            sample_names, pan_assignments = [primary], {primary: 'hard_right'}
+                pan_assignments = {primary: DIAGONAL_LEFT}
+        elif slot.panning == HARD_CENTER:
+            sample_names, pan_assignments = [primary], {primary: HARD_CENTER}
+        elif slot.panning == DIAGONAL_LEFT:
+            sample_names, pan_assignments = [primary], {primary: DIAGONAL_LEFT}
+        elif slot.panning == DIAGONAL_RIGHT:
+            sample_names, pan_assignments = [primary], {primary: DIAGONAL_RIGHT}
+        elif slot.panning == HARD_LEFT:
+            sample_names, pan_assignments = [primary], {primary: HARD_LEFT}
+        elif slot.panning == HARD_RIGHT:
+            sample_names, pan_assignments = [primary], {primary: HARD_RIGHT}
         else:
-            sample_names, pan_assignments = [primary], {primary: 'center'}
+            sample_names, pan_assignments = [primary], {primary: HARD_CENTER}
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
         if combo_key not in seen_combinations:
-            volume_db = volume_levels_db[loudest_idx if slot.volume_label == 'loud' else quietest_idx]
-            volume_idx = loudest_idx if slot.volume_label == 'loud' else quietest_idx
-            bpm_idx = slowest_idx if slot.bpm_label == 'slow' else fastest_idx
+            volume_db = volume_levels_db[loudest_idx if slot.volume_label == LOUD else quietest_idx]
+            volume_idx = loudest_idx if slot.volume_label == LOUD else quietest_idx
+            bpm_idx = slowest_idx if slot.bpm_label == SLOW else fastest_idx
             return sample_names, pan_assignments, volume_db, volume_idx, bpm_idx
 
     return None
@@ -171,10 +175,12 @@ def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_
     ratio_gcd = gcd_of(*counts) if len(counts) > 1 else 1
     realized_parts = [center // ratio_gcd, diagonal // ratio_gcd, dualpan // ratio_gcd, leftorright // ratio_gcd]
     realized_ratio = ':'.join(map(str, realized_parts))
-    config_ratio_str = conf['raw'].get('center_diagonal_dualpan_leftorright_percents', '25:25:25:25')
+    config_ratio_str = conf['raw'].get('center_diagonal_dualpan_left_right_percents', '25:25:25:13:12')
     config_parts = [int(x) for x in config_ratio_str.split(':')]
-    scale = realized_parts[0] / config_parts[0] if config_parts[0] != 0 else 1
-    perfect_parts = [int(x * scale) for x in config_parts]
+    # Combine left+right into a single leftorright bucket to compare against realized totals
+    config_parts_combined = config_parts[:3] + [config_parts[3] + config_parts[4]]
+    scale = realized_parts[0] / config_parts_combined[0] if config_parts_combined[0] != 0 else 1
+    perfect_parts = [int(x * scale) for x in config_parts_combined]
     differential = ':'.join(f"{'+' if d > 0 else ''}{d}" for d in [perfect_parts[i] - realized_parts[i] for i in range(4)])
     print(f"\nPanning Distribution:")
     print(f"  Config ratio: {config_ratio_str}")
@@ -187,8 +193,13 @@ def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_
         print(f"  Realized: {left}:{right} = {left/diagonal*100:.1f}% : {right/diagonal*100:.1f}%")
         print(f"  Differential: {left - right:+d} (left - right)")
     if leftorright > 0:
+        left_w = conf['left_weight']
+        right_w = conf['right_weight']
+        lr_total = left_w + right_w
+        left_pct_target = left_w / lr_total * 100 if lr_total > 0 else 50.0
+        right_pct_target = right_w / lr_total * 100 if lr_total > 0 else 50.0
         print(f"\nHard Left/Right Distribution:")
-        print(f"  Target: 50.0% hard left : 50.0% hard right")
+        print(f"  Target: {left_pct_target:.1f}% hard left : {right_pct_target:.1f}% hard right")
         print(f"  Realized: {hard_left}:{hard_right} = {hard_left/leftorright*100:.1f}% : {hard_right/leftorright*100:.1f}%")
         print(f"  Differential: {hard_left - hard_right:+d} (hard left - hard right)")
 
@@ -199,8 +210,8 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     vol_gcd = gcd_of(*non_zero) if len(non_zero) > 1 else (non_zero[0] if non_zero else 1)
     realized_ratio = ':'.join(str(c // vol_gcd) for c in volume_counts)
     print(f"\nVolume Distribution:")
-    print(f"  Config ratio: {conf['raw'].get('loud_medium_soft_percents', '100')}")
-    print(f"  Config values: {conf['raw'].get('loud_medium_soft_values', '0')} dB")
+    print(f"  Config ratio: {conf['raw'].get('loud_quiet_percents', '50:50')}")
+    print(f"  Config values: {conf['raw'].get('loud_quiet_values', '0:-26')} dB")
     print(f"  Realized ratio: {realized_ratio}")
     for db_val, count in zip(volume_levels_db, volume_counts):
         pct = (count / total_created * 100) if total_created > 0 else 0
@@ -288,31 +299,34 @@ def main() -> None:
     center_quota  = int(num_non_strings_samples * conf['center_weight']     / 100)
     diagonal_quota = int(num_non_strings_samples * conf['diagonal_weight']   / 100)
     dualpan_quota  = int(num_non_strings_samples * conf['dualpan_weight']    / 100)
-    leftorright_quota = int(num_non_strings_samples * conf['leftorright_weight'] / 100)
+    left_quota     = int(num_non_strings_samples * conf['left_weight']       / 100)
+    right_quota    = int(num_non_strings_samples * conf['right_weight']      / 100)
 
     if center_quota > total_non_strings_input:
         center_overflow = center_quota - total_non_strings_input
         center_quota = total_non_strings_input
-        non_center_weight = conf['diagonal_weight'] + conf['dualpan_weight'] + conf['leftorright_weight']
+        non_center_weight = conf['diagonal_weight'] + conf['dualpan_weight'] + conf['left_weight'] + conf['right_weight']
         if non_center_weight > 0:
-            diagonal_quota  += int(center_overflow * conf['diagonal_weight']    / non_center_weight)
-            leftorright_quota += int(center_overflow * conf['leftorright_weight'] / non_center_weight)
-            dualpan_quota   += center_overflow - int(center_overflow * conf['diagonal_weight'] / non_center_weight) - int(center_overflow * conf['leftorright_weight'] / non_center_weight)
+            diagonal_quota += int(center_overflow * conf['diagonal_weight'] / non_center_weight)
+            left_quota     += int(center_overflow * conf['left_weight']     / non_center_weight)
+            right_quota    += int(center_overflow * conf['right_weight']    / non_center_weight)
+            dualpan_quota  += center_overflow - int(center_overflow * conf['diagonal_weight'] / non_center_weight) - int(center_overflow * conf['left_weight'] / non_center_weight) - int(center_overflow * conf['right_weight'] / non_center_weight)
         else:
             dualpan_quota += center_overflow
-        print(f"⚠️  Center quota capped at {total_non_strings_input}. Overflow redistributed to diagonal/dualpan/leftorright.\n")
+        print(f"⚠️  Center quota capped at {total_non_strings_input}. Overflow redistributed to diagonal/dualpan/left/right.\n")
 
-    rounding_remainder = num_non_strings_samples - (center_quota + diagonal_quota + dualpan_quota + leftorright_quota)
+    rounding_remainder = num_non_strings_samples - (center_quota + diagonal_quota + dualpan_quota + left_quota + right_quota)
     if rounding_remainder > 0:
         heaviest_panning = max(
             [('center', conf['center_weight']), ('diagonal', conf['diagonal_weight']),
-             ('dualpan', conf['dualpan_weight']), ('leftorright', conf['leftorright_weight'])],
+             ('dualpan', conf['dualpan_weight']), ('left', conf['left_weight']), ('right', conf['right_weight'])],
             key=lambda x: x[1],
         )[0]
-        if heaviest_panning == 'center':       center_quota      += rounding_remainder
-        elif heaviest_panning == 'diagonal':   diagonal_quota    += rounding_remainder
-        elif heaviest_panning == 'dualpan':    dualpan_quota     += rounding_remainder
-        else:                                  leftorright_quota  += rounding_remainder
+        if heaviest_panning == 'center':       center_quota   += rounding_remainder
+        elif heaviest_panning == 'diagonal':   diagonal_quota += rounding_remainder
+        elif heaviest_panning == 'dualpan':    dualpan_quota  += rounding_remainder
+        elif heaviest_panning == 'left':       left_quota     += rounding_remainder
+        else:                                  right_quota    += rounding_remainder
 
     group_targets = {
         group: int(num_non_strings_samples * pct / 100)
@@ -325,14 +339,14 @@ def main() -> None:
 
     bpm_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['bpm_percents'])}
     vol_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['volume_percents'])}
-    panning_quotas = {'center': center_quota, 'diagonal': diagonal_quota, 'dualpan': dualpan_quota, 'leftorright': leftorright_quota}
+    panning_quotas = {'center': center_quota, 'diagonal': diagonal_quota, 'dualpan': dualpan_quota, 'left': left_quota, 'right': right_quota}
 
     non_strings_deck = plan_output_files(
         group_targets, panning_quotas, bpm_targets, vol_targets,
         conf['slowest_bpm_index'], conf['fastest_bpm_index'],
         conf['loudest_volume_index'], conf['quietest_volume_index'],
     )
-    strings_slots = [SlotSpec('strings', 'untouched', 'untouched', 'untouched')] * num_strings_samples
+    strings_slots = [SlotSpec(STRINGS, UNTOUCHED, UNTOUCHED, UNTOUCHED)] * num_strings_samples
     full_deck = non_strings_deck + strings_slots
     random.shuffle(full_deck)
 
@@ -360,7 +374,7 @@ def main() -> None:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
 
         created_count += 1
-        if slot.sound_group == 'strings':
+        if slot.sound_group == STRINGS:
             strings_created += 1
         else:
             non_strings_created += 1
@@ -371,13 +385,13 @@ def main() -> None:
             dualpan_count += 1
         else:
             pan = pan_values[0]
-            if pan == 'center':         center_count    += 1
-            elif pan == 'hard_left':    hard_left_count += 1
-            elif pan == 'hard_right':   hard_right_count += 1
+            if pan == HARD_CENTER:           center_count    += 1
+            elif pan == HARD_LEFT:      hard_left_count += 1
+            elif pan == HARD_RIGHT:     hard_right_count += 1
             elif float(pan) < 0:        left_count      += 1
             else:                       right_count     += 1
 
-        if slot.sound_group != 'strings':
+        if slot.sound_group != STRINGS:
             volume_counts[volume_idx] += 1
 
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
@@ -386,10 +400,10 @@ def main() -> None:
         sf.write(output_dir / filename, audio, sample_rate)
 
         if rhythmicize and slot.rhythm:
-            if slot.rhythm == ('untouched',):
+            if slot.rhythm == (UNTOUCHED,):
                 sf.write(rhythmicized_output_dir / filename, audio, sample_rate)
             else:
-                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm)
+                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm, slot.beat_pannings)
                 sf.write(rhythmicized_output_dir / filename, rhythmicized_audio, sample_rate)
 
         if created_count % 10 == 0 or created_count == conf['num_audio_samples']:

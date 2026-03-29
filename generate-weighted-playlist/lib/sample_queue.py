@@ -2,6 +2,7 @@ import random
 from collections import defaultdict, deque
 from pathlib import Path
 
+from .constants import STRINGS
 from .sound_rules import sound_type_of, passes_through_unmodified
 
 
@@ -46,7 +47,7 @@ def _draw_from_queue_with_filter(queue: deque, all_samples: list[str], predicate
 def draw_next_strings_sample(queue: deque, all_samples: list[str]) -> str | None:
     return _draw_from_queue_with_filter(
         queue, all_samples,
-        lambda s: sound_type_of(s) == 'strings',
+        lambda s: sound_type_of(s) == STRINGS,
     )
 
 

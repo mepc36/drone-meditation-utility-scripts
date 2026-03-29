@@ -20,6 +20,8 @@ import json
 import math
 from pathlib import Path
 
+STRINGS = 'strings'
+
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "input" / "config" / "config.json"
 AUDIO_DIR = ROOT / "input" / "audio"
@@ -62,7 +64,7 @@ for wav in AUDIO_DIR.glob("*.wav"):
         n_stab += 1
     elif st == "acappella":
         n_acappella += 1
-    elif st == "strings":
+    elif st == STRINGS:
         n_strings += 1
 
 print(f"Sample counts from {AUDIO_DIR.relative_to(ROOT)}:")
