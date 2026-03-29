@@ -22,26 +22,6 @@ _QUARTER_NOTE_NUM_PATTERNS = [
 QUARTER_NOTE_RHYTHMIC_PATTERNS = expand_rhythmic_patterns(_QUARTER_NOTE_NUM_PATTERNS)
 print('$$$ QUARTER_NOTE_RHYTHMIC_PATTERNS:', QUARTER_NOTE_RHYTHMIC_PATTERNS)
 
-SIMPLE_RHYTHMIC_PATTERNS = [
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1],
-    [1, 1],
-    [1, 1],
-    [0.5, 0.5, 1],
-    [0.5, 0.5, 1, 1],
-    [1, 1, 1],
-]
-
 
 _KICK_SNARE_PANNINGS: dict = {
     'center': {
@@ -79,14 +59,6 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
             }
         }
     },
-    'dualpan': {
-        'volumes': {
-            'quiet': {
-                'bpms': ['slow', 'fast'],
-                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
-            }
-        }
-    },
     'leftorright': {
         'volumes': {
             'loud': {
@@ -110,12 +82,12 @@ SOUND_TYPE_RULES: list[dict] = [
     },
     {
         'musical_grouping': 'kickstab',
-        'dualpan_partners': ['kickstab'],
+        'dualpan_partners': [],
         'pannings': _KICKSTAB_SNARESTAB_PANNINGS
     },
     {
         'musical_grouping': 'snarestab',
-        'dualpan_partners': ['snarestab'],
+        'dualpan_partners': [],
         'pannings': _KICKSTAB_SNARESTAB_PANNINGS
     },
     {
