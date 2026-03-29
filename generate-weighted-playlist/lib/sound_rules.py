@@ -10,11 +10,10 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
 
 QUARTER_NOTE_RHYTHMIC_PATTERNS = [
         [1],
+        [1],
+        [1],
+        [1],
         [1, 1],
-        [.5, .5, 1],
-        [1, .5, .5, 1],
-        [1, .5, .5, .5, .5],
-        [.5, .5, 1, .5, .5]
     ]
 
 SIMPLE_RHYTHMIC_PATTERNS = [
@@ -26,20 +25,24 @@ SIMPLE_RHYTHMIC_PATTERNS = [
     [1],
     [1],
     [1],
-    [1, 1],
+    [1],
+    [1],
+    [1],
+    [1],
     [1, 1],
     [1, 1],
     [0.5, 0.5, 1],
-    [1, 0.5, 0.5, 1],
     [0.5, 0.5, 1, 1],
+    [1, 1, 1],
 ]
+
 
 _KICK_SNARE_PANNINGS: dict = {
     'leftorright': {
         'volumes': {
             'quiet': {
                 'bpms': ['slow'],
-                'rhythm_patterns': [1]
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
@@ -58,7 +61,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
         'volumes': {
             'quiet': {
                 'bpms': ['fast', 'slow'],
-                'rhythm_patterns': [1]
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
@@ -66,7 +69,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
         'volumes': {
             'quiet': {
                 'bpms': ['slow'],
-                'rhythm_patterns': [1]
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
@@ -117,7 +120,7 @@ SOUND_TYPE_RULES: list[dict] = [
                 'volumes': {
                     'quiet': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': [1]
+                        'rhythm_patterns': [[1]]
                     }
                 }
             },
@@ -125,7 +128,7 @@ SOUND_TYPE_RULES: list[dict] = [
                 'volumes': {
                     'loud': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+                        'rhythm_patterns': [[1]]
                     }
                 }
             },
@@ -133,7 +136,7 @@ SOUND_TYPE_RULES: list[dict] = [
                 'volumes': {
                     'quiet': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': [1]
+                        'rhythm_patterns': [[1]]
                     }
                 }
             },
