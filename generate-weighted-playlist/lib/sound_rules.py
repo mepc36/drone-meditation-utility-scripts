@@ -1,4 +1,4 @@
-DIAGONAL_PAN_OFFSET = 0.63
+DIAGONAL_PAN_OFFSET = 0.65
 
 SOUND_GROUP_NAMES: list[str] = ['kicksnare', 'stab', 'acappella']
 
@@ -16,7 +16,6 @@ _QUARTER_NOTE_NUM_PATTERNS = [
     {'rhythmic_pattern': [1],    'number': 21},
     {'rhythmic_pattern': [1, 1], 'number': 1},
     {'rhythmic_pattern': [1, 1, 0], 'number': 1},
-    {'rhythmic_pattern': [0, 1], 'number': 1},
     {'rhythmic_pattern': [1, 0], 'number': 1},
 ]
 
