@@ -32,6 +32,12 @@ from lib.constants import (
     LOUD, SLOW,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     STRINGS,
+    PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
+    PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
+    QUARTER_NOTE, QUARTER_NOTE_REST, SIXTEENTH_NOTE, EIGHTH_NOTE, HALF_NOTE,
+    BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_SIXTEENTH, BEAT_NAME_EIGHTH,
+    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_HALF_NOTE,
+    MAX_DRAW_RETRIES,
 )
 
 
@@ -43,13 +49,13 @@ def clear_output_directory(output_dir: Path) -> None:
 
 def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict) -> str:
     if len(sample_names) == 2:
-        return 'dualpan'
+        return PANNING_DUALPAN
     pan = pan_assignments[sample_names[0]]
     if pan == HARD_CENTER:
-        return 'center'
+        return PANNING_CENTER
     if pan in (HARD_LEFT, HARD_RIGHT):
-        return 'leftorright'
-    return 'diagonal'
+        return PANNING_LEFT_OR_RIGHT
+    return PANNING_DIAGONAL
 
 
 def pan_numeric_value(pan: float) -> float:
@@ -57,11 +63,11 @@ def pan_numeric_value(pan: float) -> float:
 
 
 BEAT_NAMES: dict[float, str] = {
-    0.0:  'quarternoterest',
-    0.25: 'sixteenth',
-    0.5:  'eighth',
-    1.0:  'quarter',
-    2.0:  'half',
+    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    SIXTEENTH_NOTE:    BEAT_NAME_SIXTEENTH,
+    EIGHTH_NOTE:       BEAT_NAME_EIGHTH,
+    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
+    HALF_NOTE:         BEAT_NAME_HALF_NOTE,
 }
 
 
@@ -116,7 +122,7 @@ def resolve_slot(
             return None
         return sample_names, pan_assignments, 0.0, 0, slowest_idx
 
-    for _ in range(20):
+    for _ in range(MAX_DRAW_RETRIES):
         primary = draw_next_sample_of_types(sample_queue, all_samples, SOUND_GROUP_TYPES[slot.sound_group])
         if primary is None:
             return None
@@ -175,7 +181,7 @@ def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_
     ratio_gcd = gcd_of(*counts) if len(counts) > 1 else 1
     realized_parts = [center // ratio_gcd, diagonal // ratio_gcd, dualpan // ratio_gcd, leftorright // ratio_gcd]
     realized_ratio = ':'.join(map(str, realized_parts))
-    config_ratio_str = conf['raw'].get('center_diagonal_dualpan_left_right_percents', '25:25:25:13:12')
+    config_ratio_str = conf['raw'].get(cfg.CFG_PANNING_PERCENTS, '25:25:25:13:12')
     config_parts = [int(x) for x in config_ratio_str.split(':')]
     # Combine left+right into a single leftorright bucket to compare against realized totals
     config_parts_combined = config_parts[:3] + [config_parts[3] + config_parts[4]]
@@ -210,8 +216,8 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     vol_gcd = gcd_of(*non_zero) if len(non_zero) > 1 else (non_zero[0] if non_zero else 1)
     realized_ratio = ':'.join(str(c // vol_gcd) for c in volume_counts)
     print(f"\nVolume Distribution:")
-    print(f"  Config ratio: {conf['raw'].get('loud_quiet_percents', '50:50')}")
-    print(f"  Config values: {conf['raw'].get('loud_quiet_values', '0:-26')} dB")
+    print(f"  Config ratio: {conf['raw'].get(cfg.CFG_LOUD_QUIET_PERCENTS, '50:50')}")
+    print(f"  Config values: {conf['raw'].get(cfg.CFG_LOUD_QUIET_VALUES, '0:-26')} dB")
     print(f"  Realized ratio: {realized_ratio}")
     for db_val, count in zip(volume_levels_db, volume_counts):
         pct = (count / total_created * 100) if total_created > 0 else 0
@@ -220,7 +226,7 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
 
 def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict) -> None:
     print(f"\nSound Group Distribution:")
-    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw']['kicksnare_stab_acappella_percents']}")
+    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}")
     for group, target_pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
         count = group_appearances[group]
         realized_pct = (count / non_strings_created * 100) if non_strings_created > 0 else 0
@@ -322,11 +328,11 @@ def main() -> None:
              ('dualpan', conf['dualpan_weight']), ('left', conf['left_weight']), ('right', conf['right_weight'])],
             key=lambda x: x[1],
         )[0]
-        if heaviest_panning == 'center':       center_quota   += rounding_remainder
-        elif heaviest_panning == 'diagonal':   diagonal_quota += rounding_remainder
-        elif heaviest_panning == 'dualpan':    dualpan_quota  += rounding_remainder
-        elif heaviest_panning == 'left':       left_quota     += rounding_remainder
-        else:                                  right_quota    += rounding_remainder
+        if heaviest_panning == PANNING_CENTER:    center_quota   += rounding_remainder
+        elif heaviest_panning == PANNING_DIAGONAL: diagonal_quota += rounding_remainder
+        elif heaviest_panning == PANNING_DUALPAN:  dualpan_quota  += rounding_remainder
+        elif heaviest_panning == PANNING_LEFT:     left_quota     += rounding_remainder
+        else:                                      right_quota    += rounding_remainder
 
     group_targets = {
         group: int(num_non_strings_samples * pct / 100)
@@ -339,7 +345,7 @@ def main() -> None:
 
     bpm_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['bpm_percents'])}
     vol_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['volume_percents'])}
-    panning_quotas = {'center': center_quota, 'diagonal': diagonal_quota, 'dualpan': dualpan_quota, 'left': left_quota, 'right': right_quota}
+    panning_quotas = {PANNING_CENTER: center_quota, PANNING_DIAGONAL: diagonal_quota, PANNING_DUALPAN: dualpan_quota, PANNING_LEFT: left_quota, PANNING_RIGHT: right_quota}
 
     non_strings_deck = plan_output_files(
         group_targets, panning_quotas, bpm_targets, vol_targets,

@@ -1,11 +1,21 @@
 """Analyze rhythmicized output vs config targets and plot one chart per musical param."""
-import os, re, json
+import os, re, json, sys
+from pathlib import Path
 from collections import Counter
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from lib.constants import (
+    KICKSNARE, STAB, ACAPPELLA, STRINGS,
+    PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
+    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM,
+    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+)
+import lib.config as _cfg_mod
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cfg_path        = os.path.join(BASE, "input/config/config.json")
@@ -17,19 +27,19 @@ with open(cfg_path) as f:
 def parse_pct(s):
     return [int(x) for x in str(s).split(":")]
 
-pan_pcts   = parse_pct(cfg["center_diagonal_dualpan_left_right_percents"])
+pan_pcts   = parse_pct(cfg[_cfg_mod.CFG_PANNING_PERCENTS])
 pan_target = pan_pcts[:3] + [pan_pcts[3] + pan_pcts[4]]   # combine left+right → leftorright
-ks_target  = parse_pct(cfg["kicksnare_stab_acappella_percents"])
-vol_target = parse_pct(cfg["loud_quiet_percents"])
-bpms       = [int(x) for x in str(cfg["bpms"]).split(":")]
-bpm_target = parse_pct(cfg.get("slow_to_fast_bpm_percents", "100"))
-rp_weights = cfg.get("rhythm_pattern_weights", {})
+ks_target  = parse_pct(cfg[_cfg_mod.CFG_SOUND_GROUP_PERCENTS])
+vol_target = parse_pct(cfg[_cfg_mod.CFG_LOUD_QUIET_PERCENTS])
+bpms       = [int(x) for x in str(cfg[_cfg_mod.CFG_BPMS]).split(":")]
+bpm_target = parse_pct(cfg.get(_cfg_mod.CFG_BPM_PERCENTS, "100"))
+rp_weights = cfg.get(_cfg_mod.CFG_RHYTHM_WEIGHTS, {})
 rp_total   = sum(rp_weights.values()) or 1
 
 SUFFIX_MAP = {
-    "quarter-quarternoterest": "single_and_rest",
-    "quarter-quarter":          "double",
-    "quarter":                  "single",
+    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE_REST}": SINGLE_AND_REST_RHYTHM,
+    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE}": DOUBLE_RHYTHM,
+    BEAT_NAME_QUARTER_NOTE: SINGLE_RHYTHM,
 }
 
 # ── Parse filenames ───────────────────────────────────────────────────────────
@@ -46,7 +56,7 @@ def _is_strings_file(fname: str) -> bool:
     parts = stem.split("_")
     if len(parts) < 3:
         return False
-    return parts[2].split(".")[0].lower() == "strings"
+    return parts[2].split(".")[0].lower() == STRINGS
 
 
 all_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
@@ -65,18 +75,18 @@ rhy_counts = Counter()
 
 for fname in wav:
     # panning
-    for p in ("center", "diagonal", "dualpan", "leftorright"):
+    for p in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT):
         if f"_{p}_" in fname:
             pan_counts[p] += 1
             break
 
     # sound group
-    if re.search(r'_(kickstab|snarestab)\.\d+_', fname):
-        grp_counts['stab'] += 1
+    if re.search(r'_(kickstab|snarestab)\.',  fname):
+        grp_counts[STAB] += 1
     elif re.search(r'_acapp?ela?_', fname):
-        grp_counts['acappella'] += 1
+        grp_counts[ACAPPELLA] += 1
     else:
-        grp_counts['kicksnare'] += 1
+        grp_counts[KICKSNARE] += 1
 
     # volume
     m = re.search(r'_vol(-?\d+)_', fname)
@@ -101,15 +111,15 @@ for fname in wav:
 DIMS = [
     {
         "title": "Panning",
-        "labels": ["center", "diagonal", "dualpan", "leftorright"],
+        "labels": [PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT],
         "targets": pan_target,
-        "actuals": [pan_counts[k] for k in ("center", "diagonal", "dualpan", "leftorright")],
+        "actuals": [pan_counts[k] for k in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT)],
     },
     {
         "title": "Sound Group",
-        "labels": ["kicksnare", "stab", "acappella"],
+        "labels": [KICKSNARE, STAB, ACAPPELLA],
         "targets": ks_target,
-        "actuals": [grp_counts[k] for k in ("kicksnare", "stab", "acappella")],
+        "actuals": [grp_counts[k] for k in (KICKSNARE, STAB, ACAPPELLA)],
     },
     {
         "title": "Volume",

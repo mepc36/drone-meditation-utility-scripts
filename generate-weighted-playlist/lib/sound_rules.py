@@ -6,35 +6,39 @@ from .constants import (
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
+    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM,
+    ACAPPELLA_PREFIX,
+    MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
+    MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
 )
 
 _conf = _cfg.load()
-pattern_weights = _conf.get('rhythm_pattern_weights', {})
+pattern_weights = _conf.get(_cfg.CFG_RHYTHM_WEIGHTS, {})
 
 
 def derive_type(pattern: list) -> str:
-    if len(pattern) == 1 and pattern[0]['musical_duration'] == QUARTER_NOTE:
-        return 'single'
+    if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE:
+        return SINGLE_RHYTHM
     if (len(pattern) == 2
-            and pattern[0]['musical_duration'] == QUARTER_NOTE
-            and pattern[1]['musical_duration'] == QUARTER_NOTE):
-        return 'double'
+            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
+            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE):
+        return DOUBLE_RHYTHM
     if (len(pattern) == 2
-            and pattern[0]['musical_duration'] == QUARTER_NOTE
-            and pattern[1]['musical_duration'] == QUARTER_NOTE_REST):
-        return 'single_and_rest'
+            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
+            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST):
+        return SINGLE_AND_REST_RHYTHM
     raise ValueError(
         f"Cannot derive pattern type from: {pattern!r}. "
-        f"Must be single (len=1, QN), double (len=2, QN+QN), "
-        f"or single_and_rest (len=2, QN+QNR)."
+        f"Must be {SINGLE_RHYTHM} (len=1, QN), {DOUBLE_RHYTHM} (len=2, QN+QN), "
+        f"or {SINGLE_AND_REST_RHYTHM} (len=2, QN+QNR)."
     )
 
 
 def _derive_panning_key(entry: dict):
-    rp = entry['rhythm_patterns']
+    rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
-    return rp[0][0]['possible_pannings'][0]
+    return rp[0][0][POSSIBLE_PANNINGS][0]
 
 
 def _pannings_to_dict(pannings_list: list) -> dict:
@@ -54,8 +58,8 @@ def single_rhythm(pannings: list) -> list:
         )
     return [
         {
-            'musical_duration': QUARTER_NOTE,
-            'possible_pannings': pannings[0],
+            MUSICAL_DURATION: QUARTER_NOTE,
+            POSSIBLE_PANNINGS: pannings[0],
         },
     ]
 
@@ -67,12 +71,12 @@ def double_rhythm(pannings: list) -> list:
         )
     return [
         {
-            'musical_duration': QUARTER_NOTE,
-            'possible_pannings': pannings[0],
+            MUSICAL_DURATION: QUARTER_NOTE,
+            POSSIBLE_PANNINGS: pannings[0],
         },
         {
-            'musical_duration': QUARTER_NOTE,
-            'possible_pannings': pannings[1],
+            MUSICAL_DURATION: QUARTER_NOTE,
+            POSSIBLE_PANNINGS: pannings[1],
         },
     ]
 
@@ -84,12 +88,12 @@ def single_and_rest_rhythm(pannings: list) -> list:
         )
     return [
         {
-            'musical_duration': QUARTER_NOTE,
-            'possible_pannings': pannings[0],
+            MUSICAL_DURATION: QUARTER_NOTE,
+            POSSIBLE_PANNINGS: pannings[0],
         },
         {
-            'musical_duration': QUARTER_NOTE_REST,
-            'possible_pannings': [HARD_CENTER],
+            MUSICAL_DURATION: QUARTER_NOTE_REST,
+            POSSIBLE_PANNINGS: [HARD_CENTER],
         },
     ]
 
@@ -112,34 +116,34 @@ def single_and_rest_rhythm(pannings: list) -> list:
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
-        'volumes': [QUIET],
-        'bpms': [SLOW],
-        'rhythm_patterns': [
+        VOLUMES: [QUIET],
+        BPMS: [SLOW],
+        RHYTHM_PATTERNS: [
             single_rhythm([[HARD_CENTER]]),
         ],
     },
     {
-        'volumes': [LOUD],
-        'bpms': [FAST],
-        'rhythm_patterns': [
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
             double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
             single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
     {
-        'volumes': [LOUD],
-        'bpms': [FAST],
-        'rhythm_patterns': [
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
             double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
             single_and_rest_rhythm([[HARD_RIGHT]]),
         ],
     },
     {
-        'volumes': [LOUD],
-        'bpms': [FAST],
-        'rhythm_patterns': [
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
             single_rhythm([[DUALPAN]]),
             double_rhythm([[DUALPAN], [DUALPAN]]),
             single_and_rest_rhythm([[DUALPAN]]),
@@ -150,32 +154,32 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
-        'volumes': [QUIET],
-        'bpms': [SLOW],
-        'rhythm_patterns': [
+        VOLUMES: [QUIET],
+        BPMS: [SLOW],
+        RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_LEFT]]),
         ],
     },
     {
-        'volumes': [QUIET],
-        'bpms': [SLOW],
-        'rhythm_patterns': [
+        VOLUMES: [QUIET],
+        BPMS: [SLOW],
+        RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_RIGHT]]),
         ],
     },
     {
-        'volumes': [LOUD],
-        'bpms': [FAST],
-        'rhythm_patterns': [
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
             double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
             single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
     {
-        'volumes': [LOUD],
-        'bpms': [FAST],
-        'rhythm_patterns': [
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
             double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
             single_and_rest_rhythm([[HARD_RIGHT]]),
@@ -185,40 +189,40 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
 
 ACAPPELLA_MUSICAL_PATTERNS = [
             {
-                'volumes': [LOUD],
-                'bpms': [FAST],
-                'rhythm_patterns': [
+                VOLUMES: [LOUD],
+                BPMS: [FAST],
+                RHYTHM_PATTERNS: [
                     single_rhythm([[HARD_CENTER]]),
                 ],
             },
             {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
+                VOLUMES: [QUIET],
+                BPMS: [SLOW],
+                RHYTHM_PATTERNS: [
                     single_rhythm([[HARD_LEFT]]),
                     double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
                 ],
             },
             {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
+                VOLUMES: [QUIET],
+                BPMS: [SLOW],
+                RHYTHM_PATTERNS: [
                     single_rhythm([[HARD_RIGHT]]),
                     double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
                 ],
             },
             {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
+                VOLUMES: [QUIET],
+                BPMS: [SLOW],
+                RHYTHM_PATTERNS: [
                     single_rhythm([[DIAGONAL_LEFT]]),
                     double_rhythm([[DIAGONAL_LEFT], [DIAGONAL_RIGHT]]),
                 ],
             },
             {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
+                VOLUMES: [QUIET],
+                BPMS: [SLOW],
+                RHYTHM_PATTERNS: [
                     single_rhythm([[DIAGONAL_RIGHT]]),
                     double_rhythm([[DIAGONAL_RIGHT], [DIAGONAL_LEFT]]),
                 ],
@@ -228,38 +232,38 @@ ACAPPELLA_MUSICAL_PATTERNS = [
 
 _SOUND_TYPE_RULES: list[dict] = [
     {
-        'musical_grouping': KICK,
-        'dualpan_partners': [KICK],
-        'musical_patterns': KICK_SNARE_MUSICAL_PATTERNS,
+        MUSICAL_GROUPING: KICK,
+        DUALPAN_PARTNERS: [KICK],
+        MUSICAL_PATTERNS: KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
-        'musical_grouping': SNARE,
-        'dualpan_partners': [SNARE],
-        'musical_patterns': KICK_SNARE_MUSICAL_PATTERNS,
+        MUSICAL_GROUPING: SNARE,
+        DUALPAN_PARTNERS: [SNARE],
+        MUSICAL_PATTERNS: KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
-        'musical_grouping': KICKSTAB,
-        'dualpan_partners': [],
-        'musical_patterns': KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
+        MUSICAL_GROUPING: KICKSTAB,
+        DUALPAN_PARTNERS: [],
+        MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
-        'musical_grouping': SNARESTAB,
-        'dualpan_partners': [],
-        'musical_patterns': KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
+        MUSICAL_GROUPING: SNARESTAB,
+        DUALPAN_PARTNERS: [],
+        MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
-        'musical_grouping': ACAPPELLA,
-        'dualpan_partners': [],
-        'musical_patterns': ACAPPELLA_MUSICAL_PATTERNS
+        MUSICAL_GROUPING: ACAPPELLA,
+        DUALPAN_PARTNERS: [],
+        MUSICAL_PATTERNS: ACAPPELLA_MUSICAL_PATTERNS,
     },
     {
-        'musical_grouping': STRINGS,
-        'dualpan_partners': [],
-        'musical_patterns': [
+        MUSICAL_GROUPING: STRINGS,
+        DUALPAN_PARTNERS: [],
+        MUSICAL_PATTERNS: [
             {
-                'volumes': [UNTOUCHED],
-                'bpms': [UNTOUCHED],
-                'rhythm_patterns': [UNTOUCHED],
+                VOLUMES: [UNTOUCHED],
+                BPMS: [UNTOUCHED],
+                RHYTHM_PATTERNS: [UNTOUCHED],
             },
         ],
     },
@@ -268,25 +272,25 @@ _SOUND_TYPE_RULES: list[dict] = [
 _VALID_MUSICAL_GROUPINGS = {KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS}
 
 for _rule in _SOUND_TYPE_RULES:
-    if _rule['musical_grouping'] not in _VALID_MUSICAL_GROUPINGS:
+    if _rule[MUSICAL_GROUPING] not in _VALID_MUSICAL_GROUPINGS:
         raise ValueError(
-            f"SOUND_TYPE_RULES entry has unknown musical_grouping: {_rule['musical_grouping']!r}. "
+            f"SOUND_TYPE_RULES entry has unknown musical_grouping: {_rule[MUSICAL_GROUPING]!r}. "
             f"Must be one of {sorted(_VALID_MUSICAL_GROUPINGS)!r}."
         )
 
 # Validate pattern shapes and first-beat panning consistency within each panning group,
 # then derive the panning key and convert lists to lookup dicts.
 for _rule in _SOUND_TYPE_RULES:
-    _name = _rule['musical_grouping']
-    for _group_entry in _rule['musical_patterns']:
-        _rp = _group_entry['rhythm_patterns']
+    _name = _rule[MUSICAL_GROUPING]
+    for _group_entry in _rule[MUSICAL_PATTERNS]:
+        _rp = _group_entry[RHYTHM_PATTERNS]
         if _rp and _rp[0] is UNTOUCHED:
             continue
         for _pat in _rp:
             if isinstance(_pat, list):
                 derive_type(_pat)  # raises ValueError on invalid shape
         _first_pannings = {
-            _pat[0]['possible_pannings'][0]
+            _pat[0][POSSIBLE_PANNINGS][0]
             for _pat in _rp
             if isinstance(_pat, list)
         }
@@ -297,19 +301,19 @@ for _rule in _SOUND_TYPE_RULES:
             )
 
 for _rule in _SOUND_TYPE_RULES:
-    _rule['musical_patterns'] = _pannings_to_dict(_rule['musical_patterns'])
+    _rule[MUSICAL_PATTERNS] = _pannings_to_dict(_rule[MUSICAL_PATTERNS])
 
 rules_by_sound_type: dict[str, dict] = {
-    rule['musical_grouping']: rule for rule in _SOUND_TYPE_RULES
+    rule[MUSICAL_GROUPING]: rule for rule in _SOUND_TYPE_RULES
 }
 
 for _rule in _SOUND_TYPE_RULES:
-    _name = _rule['musical_grouping']
-    if 'dualpan_partners' not in _rule:
+    _name = _rule[MUSICAL_GROUPING]
+    if DUALPAN_PARTNERS not in _rule:
         raise ValueError(
-            f"SOUND_TYPE_RULES entry '{_name}' is missing 'dualpan_partners'. Use [] if no dualpan."
+            f"SOUND_TYPE_RULES entry '{_name}' is missing '{DUALPAN_PARTNERS}'. Use [] if no dualpan."
         )
-    if _rule['dualpan_partners'] and DUALPAN not in _rule['musical_patterns']:
+    if _rule[DUALPAN_PARTNERS] and DUALPAN not in _rule[MUSICAL_PATTERNS]:
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' declares dualpan_partners but has no 'dualpan' panning."
         )
@@ -318,7 +322,7 @@ panning_compat: dict[str, set] = {
     group: {
         pan
         for sound_type in types
-        for pan in rules_by_sound_type.get(sound_type, {}).get('musical_patterns', {})
+        for pan in rules_by_sound_type.get(sound_type, {}).get(MUSICAL_PATTERNS, {})
         if pan is not UNTOUCHED
     }
     for group, types in SOUND_GROUP_TYPES.items()
@@ -328,11 +332,11 @@ panning_compat: dict[str, set] = {
 def sound_type_of(sample_name: str) -> str:
     parts = sample_name.split('_')
     raw = parts[2].split('.')[0].lower() if len(parts) >= 3 else sample_name.split('.')[0].lower()
-    return ACAPPELLA if raw.startswith('acap') else raw
+    return ACAPPELLA if raw.startswith(ACAPPELLA_PREFIX) else raw
 
 
 def passes_through_unmodified(sound_type: str) -> bool:
     rule = rules_by_sound_type.get(sound_type)
-    return rule is not None and UNTOUCHED in rule['musical_patterns']
+    return rule is not None and UNTOUCHED in rule[MUSICAL_PATTERNS]
 
 

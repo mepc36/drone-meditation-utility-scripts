@@ -13,14 +13,17 @@ print('SLOW:', constants.SLOW, type(constants.SLOW).__name__)
 print('FAST:', constants.FAST, type(constants.FAST).__name__)
 
 import lib.sound_rules as sr
-from lib.constants import HARD_CENTER, HARD_LEFT, DIAGONAL_LEFT, DIAGONAL_RIGHT
+from lib.constants import (
+    HARD_CENTER, HARD_LEFT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    MUSICAL_PATTERNS, KICKSNARE, STAB,
+)
 rule = sr.rules_by_sound_type['kick']
-print('kick rule panning keys:', list(rule['pannings'].keys()))
-print('center vol rule (lookup by float 0.0):', rule['pannings'].get(HARD_CENTER))
-print('panning_compat kicksnare:', sr.panning_compat['kicksnare'])
-print('panning_compat stab:', sr.panning_compat['stab'])
+print('kick rule panning keys:', list(rule[MUSICAL_PATTERNS].keys()))
+print('center vol rule (lookup by float 0.0):', rule[MUSICAL_PATTERNS].get(HARD_CENTER))
+print('panning_compat kicksnare:', sr.panning_compat[KICKSNARE])
+print('panning_compat stab:', sr.panning_compat[STAB])
 
 # Verify diagonal_left and diagonal_right are in stab compat
-stab_compat = sr.panning_compat['stab']
+stab_compat = sr.panning_compat[STAB]
 print('DIAGONAL_LEFT in stab:', DIAGONAL_LEFT in stab_compat)
 print('DIAGONAL_RIGHT in stab:', DIAGONAL_RIGHT in stab_compat)

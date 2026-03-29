@@ -57,3 +57,44 @@ LOUD:  float = _get_loud_db(_conf['volume_levels_db'])
 QUIET: float = _get_quiet_db(_conf['volume_levels_db'])
 SLOW:  int   = min(_conf['bpm_values'])
 FAST:  int   = max(_conf['bpm_values'])
+
+# ── Rhythm pattern type identifiers ──────────────────────────────────────────
+SINGLE_RHYTHM          = 'single'
+DOUBLE_RHYTHM          = 'double'
+SINGLE_AND_REST_RHYTHM = 'single_and_rest'
+
+# ── Sound type detection ───────────────────────────────────────────────────────
+ACAPPELLA_PREFIX = 'acap'
+
+# ── Musical pattern dict keys ─────────────────────────────────────────────────
+MUSICAL_DURATION  = 'musical_duration'
+POSSIBLE_PANNINGS = 'possible_pannings'
+RHYTHM_PATTERNS   = 'rhythm_patterns'
+VOLUMES           = 'volumes'
+BPMS              = 'bpms'
+MUSICAL_GROUPING  = 'musical_grouping'
+DUALPAN_PARTNERS  = 'dualpan_partners'
+MUSICAL_PATTERNS  = 'musical_patterns'
+
+# ── Panning group label strings ────────────────────────────────────────────────
+PANNING_CENTER        = 'center'
+PANNING_DIAGONAL      = 'diagonal'
+PANNING_LEFT          = 'left'
+PANNING_RIGHT         = 'right'
+PANNING_DUALPAN       = 'dualpan'
+PANNING_LEFT_OR_RIGHT = 'leftorright'
+
+# ── Fractional note durations in beats ────────────────────────────────────────
+SIXTEENTH_NOTE = 0.25
+EIGHTH_NOTE    = 0.5
+HALF_NOTE      = 2.0
+
+# ── Beat name strings for output filenames ────────────────────────────────────
+BEAT_NAME_QUARTER_NOTE_REST = 'quarternoterest'
+BEAT_NAME_SIXTEENTH         = 'sixteenth'
+BEAT_NAME_EIGHTH            = 'eighth'
+BEAT_NAME_QUARTER_NOTE      = 'quarter'
+BEAT_NAME_HALF_NOTE         = 'half'
+
+# ── Operational limits ────────────────────────────────────────────────────────
+MAX_DRAW_RETRIES = 20

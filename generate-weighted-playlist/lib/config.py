@@ -7,6 +7,25 @@ INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_AUDIO_DIR = Path("./output/audio")
 OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
 
+# ── Config JSON key names ──────────────────────────────────────────────────────
+CFG_BPMS                 = 'bpms'
+CFG_BPM_PERCENTS         = 'slow_to_fast_bpm_percents'
+CFG_PANNING_PERCENTS     = 'center_diagonal_dualpan_left_right_percents'
+CFG_SILENCE_RATIO        = 'samples_to_silence_percents'
+CFG_NUM_UNIQUE_SAMPLES   = 'num_unique_samples'
+CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
+CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
+CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
+CFG_LOUD_QUIET_PERCENTS  = 'loud_quiet_percents'
+CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
+CFG_RHYTHMICIZE          = 'rhythmicize_output_samples'
+CFG_RHYTHM_WEIGHTS       = 'rhythm_pattern_weights'
+
+# ── Config validation counts ───────────────────────────────────────────────────
+NUM_PANNING_PERCENTS     = 5
+NUM_SOUND_GROUP_PERCENTS = 3
+NUM_VOLUME_VALUES        = 2
+
 
 def parse_colon_ints(raw: str) -> list[int]:
     return [int(x) for x in str(raw).split(":")]
@@ -30,25 +49,25 @@ def load() -> dict:
     with open(CONFIG_PATH) as f:
         raw = json.load(f)
 
-    if "bpms" not in raw:
-        raise ValueError("'bpms' is required in config.json")
+    if CFG_BPMS not in raw:
+        raise ValueError(f"'{CFG_BPMS}' is required in config.json")
 
-    bpm_values = parse_colon_ints(raw["bpms"])
-    bpm_percents = parse_colon_ints(raw.get("slow_to_fast_bpm_percents", "100"))
-    require_sums_to_100(bpm_percents, "slow_to_fast_bpm_percents")
-    require_same_length(bpm_percents, bpm_values, "slow_to_fast_bpm_percents", "bpms")
+    bpm_values = parse_colon_ints(raw[CFG_BPMS])
+    bpm_percents = parse_colon_ints(raw.get(CFG_BPM_PERCENTS, "100"))
+    require_sums_to_100(bpm_percents, CFG_BPM_PERCENTS)
+    require_same_length(bpm_percents, bpm_values, CFG_BPM_PERCENTS, CFG_BPMS)
 
-    panning_percents = parse_colon_ints(raw.get("center_diagonal_dualpan_left_right_percents", "25:25:25:13:12"))
-    if len(panning_percents) != 5:
-        raise ValueError("center_diagonal_dualpan_left_right_percents must have exactly 5 values (center:diagonal:dualpan:left:right)")
-    require_sums_to_100(panning_percents, "center_diagonal_dualpan_left_right_percents")
+    panning_percents = parse_colon_ints(raw.get(CFG_PANNING_PERCENTS, "25:25:25:13:12"))
+    if len(panning_percents) != NUM_PANNING_PERCENTS:
+        raise ValueError(f"{CFG_PANNING_PERCENTS} must have exactly {NUM_PANNING_PERCENTS} values (center:diagonal:dualpan:left:right)")
+    require_sums_to_100(panning_percents, CFG_PANNING_PERCENTS)
 
-    silence_ratio = parse_colon_ints(raw.get("samples_to_silence_percents", "100:0"))
-    require_sums_to_100(silence_ratio, "samples_to_silence_percents")
+    silence_ratio = parse_colon_ints(raw.get(CFG_SILENCE_RATIO, "100:0"))
+    require_sums_to_100(silence_ratio, CFG_SILENCE_RATIO)
     samples_percent = silence_ratio[0]
     silence_percent = silence_ratio[1] if len(silence_ratio) > 1 else 0
 
-    num_unique_samples = raw["num_unique_samples"]
+    num_unique_samples = raw[CFG_NUM_UNIQUE_SAMPLES]
     if silence_percent == 0:
         num_silence_files = 0
         num_audio_samples = num_unique_samples
@@ -57,24 +76,24 @@ def load() -> dict:
         num_silence_files = round(num_unique_samples * silence_fraction / (1.0 + silence_fraction))
         num_audio_samples = num_unique_samples - num_silence_files
 
-    silence_lengths_ms = parse_colon_ints(raw.get("silence_lengths_millisec", "2000"))
-    silence_length_percents = parse_colon_ints(raw.get("silence_lengths_percents", "100"))
-    require_sums_to_100(silence_length_percents, "silence_lengths_percents")
-    require_same_length(silence_lengths_ms, silence_length_percents, "silence_lengths_millisec", "silence_lengths_percents")
+    silence_lengths_ms = parse_colon_ints(raw.get(CFG_SILENCE_LENGTHS_MS, "2000"))
+    silence_length_percents = parse_colon_ints(raw.get(CFG_SILENCE_LEN_PCTS, "100"))
+    require_sums_to_100(silence_length_percents, CFG_SILENCE_LEN_PCTS)
+    require_same_length(silence_lengths_ms, silence_length_percents, CFG_SILENCE_LENGTHS_MS, CFG_SILENCE_LEN_PCTS)
 
-    volume_levels_db = parse_colon_floats(raw.get("loud_quiet_values", "0:-26"))
-    volume_percents = parse_colon_ints(raw.get("loud_quiet_percents", "50:50"))
-    if len(volume_levels_db) != 2:
-        raise ValueError("loud_quiet_values must have exactly 2 values (loud:quiet)")
-    require_sums_to_100(volume_percents, "loud_quiet_percents")
-    require_same_length(volume_levels_db, volume_percents, "loud_quiet_values", "loud_quiet_percents")
+    volume_levels_db = parse_colon_floats(raw.get(CFG_LOUD_QUIET_VALUES, "0:-26"))
+    volume_percents = parse_colon_ints(raw.get(CFG_LOUD_QUIET_PERCENTS, "50:50"))
+    if len(volume_levels_db) != NUM_VOLUME_VALUES:
+        raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
+    require_sums_to_100(volume_percents, CFG_LOUD_QUIET_PERCENTS)
+    require_same_length(volume_levels_db, volume_percents, CFG_LOUD_QUIET_VALUES, CFG_LOUD_QUIET_PERCENTS)
 
-    if "kicksnare_stab_acappella_percents" not in raw:
-        raise ValueError("kicksnare_stab_acappella_percents must be set in config.json")
-    sound_group_percents = parse_colon_ints(raw["kicksnare_stab_acappella_percents"])
-    if len(sound_group_percents) != 3:
-        raise ValueError("kicksnare_stab_acappella_percents must have exactly 3 values (kicksnare:stab:acappella)")
-    require_sums_to_100(sound_group_percents, "kicksnare_stab_acappella_percents")
+    if CFG_SOUND_GROUP_PERCENTS not in raw:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
+    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
+    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
+    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
 
     return {
         "bpm_values": bpm_values,
@@ -105,9 +124,9 @@ def load() -> dict:
 
         "sound_group_percents": sound_group_percents,
 
-        "rhythmicize_output_samples": bool(raw.get("rhythmicize_output_samples", False)),
+        "rhythmicize_output_samples": bool(raw.get(CFG_RHYTHMICIZE, False)),
 
-        "rhythm_pattern_weights": raw.get("rhythm_pattern_weights", {}),
+        "rhythm_pattern_weights": raw.get(CFG_RHYTHM_WEIGHTS, {}),
 
         "raw": raw,
     }

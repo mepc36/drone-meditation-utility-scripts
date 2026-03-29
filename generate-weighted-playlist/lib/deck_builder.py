@@ -7,6 +7,8 @@ from .constants import (
     DUALPAN, UNTOUCHED,
     LOUD, QUIET, SLOW, FAST,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
+    PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
+    VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
 )
 from .sound_rules import derive_type, panning_compat, pattern_weights, rules_by_sound_type
 
@@ -22,14 +24,14 @@ class SlotSpec:
 
 
 def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:
-    diagonal = panning_quotas.get('diagonal', 0)
+    diagonal = panning_quotas.get(PANNING_DIAGONAL, 0)
     return {
-        HARD_CENTER:    panning_quotas.get('center', 0),
+        HARD_CENTER:    panning_quotas.get(PANNING_CENTER, 0),
         DIAGONAL_LEFT:  diagonal // 2,
         DIAGONAL_RIGHT: diagonal - diagonal // 2,
-        DUALPAN:        panning_quotas.get('dualpan', 0),
-        HARD_LEFT:      panning_quotas.get('left', 0),
-        HARD_RIGHT:     panning_quotas.get('right', 0),
+        DUALPAN:        panning_quotas.get(PANNING_DUALPAN, 0),
+        HARD_LEFT:      panning_quotas.get(PANNING_LEFT, 0),
+        HARD_RIGHT:     panning_quotas.get(PANNING_RIGHT, 0),
     }
 
 
@@ -95,7 +97,7 @@ def _hashable_beat(b) -> tuple:
     """Convert a beat dict to a hashable (duration, (panning, ...)) tuple."""
     if not isinstance(b, dict):
         raise TypeError(f"Beat must be a dict with 'musical_duration' and 'possible_pannings', got {b!r}")
-    return (float(b['musical_duration']), tuple(b['possible_pannings']))
+    return (float(b[MUSICAL_DURATION]), tuple(b[POSSIBLE_PANNINGS]))
 
 
 def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
@@ -124,11 +126,11 @@ def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['musical_patterns'].get(panning)
+        pan_rule = rule[MUSICAL_PATTERNS].get(panning)
         if pan_rule is None:
             continue
-        for vol_label in pan_rule['volumes']:
-            for bpm_label in pan_rule['bpms']:
+        for vol_label in pan_rule[VOLUMES]:
+            for bpm_label in pan_rule[BPMS]:
                 result.add((vol_label, bpm_label))
     return result
 
@@ -193,14 +195,14 @@ def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['musical_patterns'].get(slot.panning)
+        pan_rule = rule[MUSICAL_PATTERNS].get(slot.panning)
         if pan_rule is None:
             continue
-        if slot.volume_label not in pan_rule['volumes']:
+        if slot.volume_label not in pan_rule[VOLUMES]:
             continue
-        if slot.bpm_label not in pan_rule['bpms']:
+        if slot.bpm_label not in pan_rule[BPMS]:
             continue
-        for entry in pan_rule.get('rhythm_patterns', []):
+        for entry in pan_rule.get(RHYTHM_PATTERNS, []):
             if entry is UNTOUCHED:
                 pat = (UNTOUCHED,)
             elif isinstance(entry, list):

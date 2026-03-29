@@ -1,6 +1,16 @@
 """Analyze output/audio files vs config targets and print a delta chart."""
-import os, re, json
+import os, re, json, sys
+from pathlib import Path
 from collections import Counter
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from lib.constants import (
+    KICKSNARE, STAB, ACAPPELLA,
+    PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
+    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM,
+    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+)
+import lib.config as _cfg_mod
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cfg_path  = os.path.join(BASE, "input/config/config.json")
@@ -13,13 +23,13 @@ with open(cfg_path) as f:
 def parse_pct(s):
     return [int(x) for x in str(s).split(":")]
 
-pan_pcts = parse_pct(cfg["center_diagonal_dualpan_left_right_percents"])   # center:diag:dual:left:right
-pan_target = pan_pcts[:3] + [pan_pcts[3] + pan_pcts[4]]                    # combine left+right → leftorright
-ks_target  = parse_pct(cfg["kicksnare_stab_acappella_percents"])               # kicksnare:stab:acap
-vol_target = parse_pct(cfg["loud_quiet_percents"])                        # loud:quiet
-bpms       = [int(x) for x in str(cfg["bpms"]).split(":")]
-bpm_target = parse_pct(cfg.get("slow_to_fast_bpm_percents", "100"))
-n_target   = int(cfg["num_unique_samples"])
+pan_pcts = parse_pct(cfg[_cfg_mod.CFG_PANNING_PERCENTS])   # center:diag:dual:left:right
+pan_target = pan_pcts[:3] + [pan_pcts[3] + pan_pcts[4]]    # combine left+right → leftorright
+ks_target  = parse_pct(cfg[_cfg_mod.CFG_SOUND_GROUP_PERCENTS])  # kicksnare:stab:acap
+vol_target = parse_pct(cfg[_cfg_mod.CFG_LOUD_QUIET_PERCENTS])  # loud:quiet
+bpms       = [int(x) for x in str(cfg[_cfg_mod.CFG_BPMS]).split(":")]
+bpm_target = parse_pct(cfg.get(_cfg_mod.CFG_BPM_PERCENTS, "100"))
+n_target   = int(cfg[_cfg_mod.CFG_NUM_UNIQUE_SAMPLES])
 
 wav = [f for f in os.listdir(audio_dir) if f.endswith(".wav")]
 N = len(wav)
@@ -27,7 +37,7 @@ N = len(wav)
 # ── Panning ──────────────────────────────────────────────────────────
 pan_counts = Counter()
 for fname in wav:
-    for p in ("center", "diagonal", "dualpan", "leftorright"):
+    for p in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT):
         if f"_{p}_" in fname:
             pan_counts[p] += 1
             break
@@ -35,12 +45,12 @@ for fname in wav:
 # ── Sound group ──────────────────────────────────────────────────────
 grp_counts = Counter()
 for fname in wav:
-    if re.search(r'_(kickstab|snarestab)\.\d+_', fname):
-        grp_counts['stab'] += 1
+    if re.search(r'_(kickstab|snarestab)\.',  fname):
+        grp_counts[STAB] += 1
     elif re.search(r'_acapp?ella_', fname):
-        grp_counts['acappella'] += 1
+        grp_counts[ACAPPELLA] += 1
     else:
-        grp_counts['kicksnare'] += 1
+        grp_counts[KICKSNARE] += 1
 
 # ── Volume ────────────────────────────────────────────────────────────
 vol_counts = Counter()
@@ -76,7 +86,7 @@ rows.append(("Files", str(n_target), str(N), str(file_delta), "✅" if file_delt
 
 # Panning
 pan_labels = ["Panning: center", "Panning: diagonal", "Panning: dualpan", "Panning: leftorright"]
-pan_actuals = [pan_counts[k] for k in ("center", "diagonal", "dualpan", "leftorright")]
+pan_actuals = [pan_counts[k] for k in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT)]
 for lbl, act, tgt in zip(pan_labels, pan_actuals, pan_target):
     pct = act / N * 100 if N else 0.0
     delta = pct - tgt
@@ -85,7 +95,7 @@ for lbl, act, tgt in zip(pan_labels, pan_actuals, pan_target):
 
 # Sound group
 snd_labels = ["Sound: kicksnare", "Sound: stab", "Sound: acappella"]
-snd_actuals = [grp_counts[k] for k in ("kicksnare", "stab", "acappella")]
+snd_actuals = [grp_counts[k] for k in (KICKSNARE, STAB, ACAPPELLA)]
 for lbl, act, tgt in zip(snd_labels, snd_actuals, ks_target):
     pct = act / N * 100 if N else 0.0
     delta = pct - tgt
@@ -134,9 +144,9 @@ rhy_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
 rhy_total = len(rhy_wav)
 
 SUFFIX_MAP = {
-    "quarter-quarternoterest": "single_and_rest",
-    "quarter-quarter":          "double",
-    "quarter":                  "single",
+    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE_REST}": SINGLE_AND_REST_RHYTHM,
+    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE}": DOUBLE_RHYTHM,
+    BEAT_NAME_QUARTER_NOTE: SINGLE_RHYTHM,
 }
 
 rhy_counts = Counter()
