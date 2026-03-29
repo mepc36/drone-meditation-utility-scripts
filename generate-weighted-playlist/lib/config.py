@@ -107,5 +107,7 @@ def load() -> dict:
 
         "rhythmicize_output_samples": bool(raw.get("rhythmicize_output_samples", False)),
 
+        "rhythm_pattern_weights": raw.get("rhythm_pattern_weights", {}),
+
         "raw": raw,
     }

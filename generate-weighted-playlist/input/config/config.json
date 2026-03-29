@@ -9,5 +9,10 @@
   "loud_quiet_percents": "40:60",
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",
-  "kicksnare_stab_acappella_percents": "60:30:10"
+  "kicksnare_stab_acappella_percents": "60:30:10",
+  "rhythm_pattern_weights": {
+    "single": 17,
+    "double": 1,
+    "single_and_rest": 1
+  }
 }

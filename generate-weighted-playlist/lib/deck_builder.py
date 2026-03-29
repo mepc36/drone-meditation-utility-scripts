@@ -8,7 +8,7 @@ from .constants import (
     LOUD, QUIET, SLOW, FAST,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
 )
-from .sound_rules import panning_compat, rules_by_sound_type
+from .sound_rules import derive_type, panning_compat, pattern_weights, rules_by_sound_type
 
 
 @dataclass(frozen=True)
@@ -91,37 +91,29 @@ def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict
     return allocation, overflow
 
 
-def _hashable_beat(b) -> tuple | float | str:
-    """Convert a beat element to a hashable form for use as a dict key.
-
-    Plain floats/ints are returned as-is.  Beat dicts are converted to
-    (duration, (panning, ...)) tuples.
-    """
-    if isinstance(b, dict):
-        return (float(b['duration']), tuple(b['pannings']))
-    return b
+def _hashable_beat(b) -> tuple:
+    """Convert a beat dict to a hashable (duration, (panning, ...)) tuple."""
+    if not isinstance(b, dict):
+        raise TypeError(f"Beat must be a dict with 'musical_duration' and 'possible_pannings', got {b!r}")
+    return (float(b['musical_duration']), tuple(b['possible_pannings']))
 
 
 def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
     """Split a raw (hashable) beat pattern into separate duration and panning tuples.
 
-    For plain-float beats the panning entry is '' (empty string), meaning the
-    slot-level panning will be used by audio_processing unchanged.
-    For beat-object beats the panning entry is randomly chosen from the beat's
-    candidate list.
+    Format: (type_str, (duration, (pannings,...)), ...).
+    A panning is randomly chosen from the candidate list for each beat.
     """
     if raw_pattern == (UNTOUCHED,):
         return (UNTOUCHED,), ()
     durations: list = []
-    pannings: list[str] = []
-    for b in raw_pattern:
-        if isinstance(b, tuple) and len(b) == 2 and isinstance(b[1], tuple):
-            duration, pan_options = b
-            durations.append(float(duration))
-            pannings.append(random.choice(pan_options) if pan_options else '')
-        else:
-            durations.append(float(b))
-            pannings.append('')
+    pannings: list = []
+    for b in raw_pattern[1:]:  # skip the type string at index 0
+        if not (isinstance(b, tuple) and len(b) == 2 and isinstance(b[1], tuple)):
+            raise TypeError(f"Hashed beat must be a (duration, (pannings,...)) tuple, got {b!r}")
+        duration, pan_options = b
+        durations.append(float(duration))
+        pannings.append(random.choice(pan_options) if pan_options else '')
     return tuple(durations), tuple(pannings)
 
 
@@ -132,11 +124,11 @@ def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['pannings'].get(panning)
+        pan_rule = rule['musical_patterns'].get(panning)
         if pan_rule is None:
             continue
-        for vol_label, bpm_info in pan_rule['volumes'].items():
-            for bpm_label in bpm_info.get('bpms', []):
+        for vol_label in pan_rule['volumes']:
+            for bpm_label in pan_rule['bpms']:
                 result.add((vol_label, bpm_label))
     return result
 
@@ -192,28 +184,32 @@ def _assign_volume_and_bpm(
 
 
 def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
-    """Return rhythm patterns for this slot by looking up sound_rules.
-    Duplicates are preserved — repeat a pattern to give it more weight."""
+    """Return unique hashable rhythm patterns for this slot from sound_rules.
+    Each tuple starts with a type string (for weight lookup), followed by
+    (duration, (pannings,...)) beat tuples."""
+    seen: set[tuple] = set()
     found: list[tuple] = []
     for sound_type in SOUND_GROUP_TYPES.get(slot.sound_group, set()):
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule['pannings'].get(slot.panning)
+        pan_rule = rule['musical_patterns'].get(slot.panning)
         if pan_rule is None:
             continue
-        vol_rule = pan_rule['volumes'].get(slot.volume_label)
-        if vol_rule is None:
+        if slot.volume_label not in pan_rule['volumes']:
             continue
-        for p in vol_rule.get('rhythm_patterns', []):
-            if p == UNTOUCHED:
-                found.append((UNTOUCHED,))
-            elif isinstance(p, (int, float)):
-                found.append((float(p),))
-            elif isinstance(p, list):
-                found.append(tuple(_hashable_beat(b) for b in p))
+        if slot.bpm_label not in pan_rule['bpms']:
+            continue
+        for entry in pan_rule.get('rhythm_patterns', []):
+            if entry is UNTOUCHED:
+                pat = (UNTOUCHED,)
+            elif isinstance(entry, list):
+                pat = (derive_type(entry),) + tuple(_hashable_beat(b) for b in entry)
             else:
-                found.append(tuple(p))
+                raise TypeError(f"Unexpected rhythm_pattern entry: {entry!r}")
+            if pat not in seen:
+                seen.add(pat)
+                found.append(pat)
     return found
 
 
@@ -258,8 +254,13 @@ def plan_output_files(
         if not avail_tuple:
             continue
         patterns = list(avail_tuple)
-        n, p = len(indices), len(patterns)
-        counts = [n // p + (1 if i < n % p else 0) for i in range(p)]
+        n = len(indices)
+        weights = [pattern_weights.get(pat[0], 1) if pat != (UNTOUCHED,) else 1 for pat in patterns]
+        total_w = sum(weights)
+        counts = [round(n * w / total_w) for w in weights]
+        diff = n - sum(counts)
+        for i in range(abs(diff)):
+            counts[i % len(counts)] += 1 if diff > 0 else -1
         flat: list[tuple] = [pat for pat, cnt in zip(patterns, counts) for _ in range(cnt)]
         random.shuffle(flat)
         for idx, raw_pattern in zip(indices, flat):
@@ -268,6 +269,20 @@ def plan_output_files(
             assigned_pannings[idx] = beat_pannings
 
     deck = [dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i]) for i, slot in enumerate(deck)]
+
+    # Decrement quota for secondary beats (beat 2+). The primary beat is already
+    # counted by _allocate_panning_slots; secondary beats consume additional quota.
+    secondary_usage: dict[float | str, int] = {}
+    for slot in deck:
+        for bp in slot.beat_pannings[1:]:
+            if bp and bp is not UNTOUCHED:
+                secondary_usage[bp] = secondary_usage.get(bp, 0) + 1
+    if secondary_usage:
+        for pan, count in secondary_usage.items():
+            available_slots[pan] = available_slots.get(pan, 0) - count
+        over = {pan: -cnt for pan, cnt in available_slots.items() if cnt < 0}
+        if over:
+            print(f"  ⚠  Secondary beat quota exceeded: {over} extra use(s)")
 
     missing = [s for s in deck if not s.rhythm]
     if missing:
