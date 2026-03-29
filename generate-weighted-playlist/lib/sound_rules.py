@@ -7,7 +7,6 @@ from .constants import (
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
     SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM,
-    ACAPPELLA_PREFIX,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
 )
@@ -112,7 +111,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
-            double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
+            double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
         ],
     },
     {
@@ -120,7 +119,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
-            double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
+            double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
         ],
     },
     {
@@ -314,7 +313,7 @@ panning_compat: dict[str, set] = {
 def sound_type_of(sample_name: str) -> str:
     parts = sample_name.split('_')
     raw = parts[2].split('.')[0].lower() if len(parts) >= 3 else sample_name.split('.')[0].lower()
-    return ACAPPELLA if raw.startswith(ACAPPELLA_PREFIX) else raw
+    return ACAPPELLA if raw == ACAPPELLA else raw
 
 
 def passes_through_unmodified(sound_type: str) -> bool:

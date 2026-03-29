@@ -72,6 +72,7 @@ grp_counts = Counter()
 vol_counts = Counter()
 bpm_counts = Counter()
 rhy_counts = Counter()
+uncategorized_files = []
 
 for fname in wav:
     # panning
@@ -81,12 +82,15 @@ for fname in wav:
             break
 
     # sound group
-    if re.search(r'_(kickstab|snarestab)\.',  fname):
+    if re.search(r'_(kickstab|snarestab)\.', fname):
         grp_counts[STAB] += 1
-    elif re.search(r'_acap+el+a_', fname):
+    elif re.search(r'_acappella_', fname):
         grp_counts[ACAPPELLA] += 1
-    else:
+    elif re.search(r'_(kick|snare)[._]', fname):
         grp_counts[KICKSNARE] += 1
+    else:
+        grp_counts['uncategorized'] += 1
+        uncategorized_files.append(fname)
 
     # volume
     m = re.search(r'_vol(-?\d+)_', fname)
@@ -121,6 +125,7 @@ DIMS = [
         "targets": ks_target,
         "actuals": [grp_counts[k] for k in (KICKSNARE, STAB, ACAPPELLA)],
     },
+
     {
         "title": "Volume",
         "labels": ["loud", "quiet"],
@@ -149,32 +154,56 @@ def status(delta, total):
     if pct <= 10:  return "⚠️"
     return "❌"
 
-rows = []
+# ── Collect all data rows to calculate column widths ─────────────────────────
 _n_target = int(cfg.get("num_unique_samples", 0))
 _file_delta = N_all - _n_target
-rows.append(("Files (total)", str(_n_target), str(N_all),
-             f"{_file_delta:+d}", "✅" if _file_delta == 0 else "❌"))
-rows.append(("  of which strings", "—", str(N_all - N), "—", "ℹ️"))
+_uncategorized = grp_counts["uncategorized"]
+
+# Each entry is either a section header (str) or a data row (tuple of 4: lbl, exp, act, diff, status)
+_sections = []
+
+# Files block
+_sections.append(("FILES", [
+    ("total",       str(_n_target),  str(N_all),     f"{_file_delta:+d}", "✅" if _file_delta == 0 else "❌"),
+    ("  strings",   "—",             str(N_all - N), "—",                 "ℹ️"),
+]))
 
 for dim in DIMS:
     total = N if dim["title"] != "Rhythm Pattern" else sum(dim["actuals"])
+    dim_rows = []
     for lbl, tgt, act in zip(dim["labels"], dim["targets"], dim["actuals"]):
         tgt_count = round(tgt / 100 * total) if total else 0
         delta     = act - tgt_count
         dsym      = "~0" if delta == 0 else f"{delta:+d}"
-        rows.append((f"{dim['title']}: {lbl}", str(tgt_count), str(act), dsym, status(delta, total)))
+        dim_rows.append((lbl, str(tgt_count), str(act), dsym, status(delta, total)))
+    _sections.append((dim["title"].upper(), dim_rows))
 
-col_w  = [max(len(r[i]) for r in rows) for i in range(5)]
-header = ("Dimension", "Expected", "Actual", "Diff", "Status")
+# Uncategorized files row
+_sections.append(("UNCATEGORIZED", [
+    ("files", "0", str(_uncategorized), f"{_uncategorized:+d}" if _uncategorized else "~0", "✅" if _uncategorized == 0 else "❌"),
+]))
+
+# Calculate column widths across all data rows
+all_rows = [r for _, rows in _sections for r in rows]
+col_w  = [max(len(r[i]) for r in all_rows) for i in range(5)]
+header = ("", "Expected", "Actual", "Diff", "Status")
 col_w  = [max(col_w[i], len(header[i])) for i in range(5)]
 sep    = "  ".join("─" * w for w in col_w)
 
 print()
 print("  ".join(h.ljust(col_w[i]) for i, h in enumerate(header)))
 print(sep)
-for row in rows:
-    print("  ".join(cell.ljust(col_w[i]) for i, cell in enumerate(row)))
+for section_title, section_rows in _sections:
+    print(f"\n{section_title}:")
+    for row in section_rows:
+        print("  ".join(cell.ljust(col_w[i]) for i, cell in enumerate(row)))
 print()
+
+if uncategorized_files:
+    print(f"Uncategorized files:")
+    for f in sorted(uncategorized_files):
+        print(f"  {f}")
+    print()
 
 # ── Charts  (one figure with one subplot per musical param) ───────────────────
 fig, axes = plt.subplots(1, len(DIMS), figsize=(5 * len(DIMS), 6))
