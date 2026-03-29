@@ -143,10 +143,10 @@ DIMS = [
 
 # ── Text table ────────────────────────────────────────────────────────────────
 # NOTE: all DIMS use only non-strings files (N) as their denominator.
-def status(delta_pct):
-    a = abs(delta_pct)
-    if a <= 3:   return "✅"
-    if a <= 10:  return "⚠️"
+def status(delta, total):
+    pct = abs(delta) / total * 100 if total else 0
+    if pct <= 3:   return "✅"
+    if pct <= 10:  return "⚠️"
     return "❌"
 
 rows = []
@@ -159,13 +159,13 @@ rows.append(("  of which strings", "—", str(N_all - N), "—", "ℹ️"))
 for dim in DIMS:
     total = N if dim["title"] != "Rhythm Pattern" else sum(dim["actuals"])
     for lbl, tgt, act in zip(dim["labels"], dim["targets"], dim["actuals"]):
-        pct   = act / total * 100 if total else 0.0
-        delta = pct - tgt
-        dsym  = f"~0%" if abs(delta) < 0.5 else f"{delta:+.1f}%"
-        rows.append((f"{dim['title']}: {lbl}", f"{tgt:.1f}%", f"{pct:.1f}%", dsym, status(delta)))
+        tgt_count = round(tgt / 100 * total) if total else 0
+        delta     = act - tgt_count
+        dsym      = "~0" if delta == 0 else f"{delta:+d}"
+        rows.append((f"{dim['title']}: {lbl}", str(tgt_count), str(act), dsym, status(delta, total)))
 
 col_w  = [max(len(r[i]) for r in rows) for i in range(5)]
-header = ("Dimension", "Target", "Actual", "Delta", "Status")
+header = ("Dimension", "Expected", "Actual", "Diff", "Status")
 col_w  = [max(col_w[i], len(header[i])) for i in range(5)]
 sep    = "  ".join("─" * w for w in col_w)
 
@@ -183,48 +183,44 @@ fig.suptitle(
     fontsize=14, fontweight="bold", y=1.01,
 )
 
-COLOR_TARGET = "#4472C4"
-COLOR_ACTUAL = "#ED7D31"
-COLOR_POS    = "#70AD47"   # delta bar positive  (actual > target)
-COLOR_NEG    = "#FF0000"   # delta bar negative  (actual < target)
+COLOR_TARGET = "#1B7837"   # dark green  – Expected
+COLOR_ACTUAL = "#762A83"   # deep purple – Actual
 
 for ax, dim in zip(axes, DIMS):
     labels  = dim["labels"]
-    targets = dim["targets"]
     total   = N if dim["title"] != "Rhythm Pattern" else sum(dim["actuals"])
-    actuals_pct = [a / total * 100 if total else 0.0 for a in dim["actuals"]]
-    deltas      = [a - t for a, t in zip(actuals_pct, targets)]
+    targets_count = [round(t / 100 * total) if total else 0 for t in dim["targets"]]
+    actuals_count = dim["actuals"]
 
     x = np.arange(len(labels))
-    w = 0.25
+    w = 0.35
 
-    bars_t = ax.bar(x - w,     targets,       w, label="Target", color=COLOR_TARGET, alpha=0.85)
-    bars_a = ax.bar(x,         actuals_pct,   w, label="Actual", color=COLOR_ACTUAL, alpha=0.85)
-    bars_d = ax.bar(x + w,     deltas,        w, label="Delta",
-                    color=[COLOR_POS if d >= 0 else COLOR_NEG for d in deltas], alpha=0.85)
+    bars_t = ax.bar(x - w/2, targets_count, w, label="Expected", color=COLOR_TARGET, alpha=0.85)
+    bars_a = ax.bar(x + w/2, actuals_count, w, label="Actual",   color=COLOR_ACTUAL, alpha=0.85)
 
     ax.axhline(0, color="black", linewidth=0.6)
     ax.set_title(dim["title"], fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=9)
-    ax.set_ylabel("%" )
+    ax.set_ylabel("Files")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
 
-    # Annotate delta bars with the numeric value
-    for bar, d in zip(bars_d, deltas):
-        vert = bar.get_height()
-        ax_y = vert + 0.4 if vert >= 0 else vert - 1.2
-        ax.text(bar.get_x() + bar.get_width() / 2, ax_y,
-                f"{d:+.1f}", ha="center", va="bottom", fontsize=7.5, fontweight="bold")
+    # Annotate all bars with raw counts
+    for bar, v in zip(bars_t, targets_count):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.4,
+                str(v), ha="center", va="bottom", fontsize=7.5)
+    for bar, v in zip(bars_a, actuals_count):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.4,
+                str(v), ha="center", va="bottom", fontsize=7.5)
 
-patch_t = mpatches.Patch(color=COLOR_TARGET, alpha=0.85, label="Target")
+patch_t = mpatches.Patch(color=COLOR_TARGET, alpha=0.85, label="Expected")
 patch_a = mpatches.Patch(color=COLOR_ACTUAL, alpha=0.85, label="Actual")
-patch_pos = mpatches.Patch(color=COLOR_POS,  alpha=0.85, label="Delta (+)")
-patch_neg = mpatches.Patch(color=COLOR_NEG,  alpha=0.85, label="Delta (−)")
-fig.legend(handles=[patch_t, patch_a, patch_pos, patch_neg],
-           loc="lower center", ncol=4, fontsize=9, bbox_to_anchor=(0.5, -0.06))
+fig.legend(handles=[patch_t, patch_a],
+           loc="lower center", ncol=2, fontsize=10, bbox_to_anchor=(0.5, -0.06))
 
 plt.tight_layout()
-out_path = os.path.join(BASE, "output/rhythmicized-ratios.png")
+out_dir = os.path.join(BASE, "output/analyze-ratios")
+os.makedirs(out_dir, exist_ok=True)
+out_path = os.path.join(out_dir, "rhythmicized-ratios.png")
 plt.savefig(out_path, dpi=140, bbox_inches="tight")
 print(f"Chart saved → {out_path}")
