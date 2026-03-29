@@ -13,7 +13,7 @@ def expand_rhythmic_patterns(num_patterns: list[dict]) -> list[list]:
 
 
 _QUARTER_NOTE_NUM_PATTERNS = [
-    {'rhythmic_pattern': [1],    'number': 21},
+    {'rhythmic_pattern': [1],    'number': 17},
     {'rhythmic_pattern': [1, 1], 'number': 1},
     {'rhythmic_pattern': [1, 1, 0], 'number': 1},
     {'rhythmic_pattern': [1, 0], 'number': 1},

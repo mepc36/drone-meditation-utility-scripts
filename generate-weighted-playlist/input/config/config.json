@@ -5,7 +5,7 @@
   "num_unique_samples": 200,
   "center_diagonal_dualpan_leftorright_percents": "28:28:16:28",
   "samples_to_silence_percents": "100",
-  "loud_medium_soft_values": "0:-22",
+  "loud_medium_soft_values": "0:-26",
   "loud_medium_soft_percents": "40:60",
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",

@@ -1,10 +1,11 @@
 """Analyze output/audio files vs config targets and print a delta chart."""
-import os, re, json
+import os, re, json, sys
 from collections import Counter
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cfg_path  = os.path.join(BASE, "input/config/config.json")
 audio_dir = os.path.join(BASE, "output/audio")
+rhythmicized_dir = os.path.join(BASE, "output/rhythmicized-audio")
 
 with open(cfg_path) as f:
     cfg = json.load(f)
@@ -120,4 +121,54 @@ print(f"  panning     : {dict(pan_counts)}")
 print(f"  sound group : {dict(grp_counts)}")
 print(f"  volume      : {dict(vol_counts)}")
 print(f"  bpm         : {dict(bpm_counts)}")
+
+# ── Rhythmic patterns ─────────────────────────────────────────────────
+# Load QUARTER_NOTE_RHYTHMIC_PATTERNS from sound_rules without side effects
+sys.path.insert(0, os.path.join(BASE, "lib"))
+import importlib, unittest.mock
+with unittest.mock.patch("builtins.print"):  # suppress the $$$ debug print
+    sr = importlib.import_module("sound_rules")
+
+pool = sr.QUARTER_NOTE_RHYTHMIC_PATTERNS
+pool_total = len(pool)
+
+# Map pattern → filename suffix
+def pattern_to_suffix(p):
+    parts = []
+    for beat in p:
+        if beat == 1:
+            parts.append("quarter")
+        elif beat == 0:
+            parts.append("0")
+        else:
+            parts.append(str(beat))
+    return "-".join(parts)
+
+pool_counts = Counter(pattern_to_suffix(p) for p in pool)
+
+# Count suffixes in rhythmicized output
+rhy_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
+rhy_total = len(rhy_wav)
+
+rhy_counts = Counter()
+for fname in rhy_wav:
+    m = re.search(r'_bpm-\d+_\w+_(.+)\.wav$', fname)
+    if m:
+        rhy_counts[m.group(1)] += 1
+
+all_suffixes = sorted(set(list(pool_counts.keys()) + list(rhy_counts.keys())))
+
+print(f"\n{'═'*70}")
+print(f"  RHYTHMIC PATTERNS  (pool size: {pool_total}  |  rhythmicized files: {rhy_total})")
+print(f"{'═'*70}")
+print(f"  {'Pattern':<22}  {'Pool':>6}  {'Pool%':>6}  {'Output':>7}  {'Out%':>6}  {'Delta':>7}")
+print(f"  {'-'*66}")
+for suffix in all_suffixes:
+    pool_n   = pool_counts.get(suffix, 0)
+    pool_pct = pool_n / pool_total * 100 if pool_total else 0
+    out_n    = rhy_counts.get(suffix, 0)
+    out_pct  = out_n / rhy_total * 100 if rhy_total else 0
+    delta    = out_pct - pool_pct
+    dsym     = f"{delta:+.1f}%" if abs(delta) >= 0.5 else "   ~0%"
+    print(f"  {suffix:<22}  {pool_n:>6}  {pool_pct:>5.1f}%  {out_n:>7}  {out_pct:>5.1f}%  {dsym:>7}")
 print()
