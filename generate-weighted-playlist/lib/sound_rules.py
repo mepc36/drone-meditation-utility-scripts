@@ -1,4 +1,4 @@
-DIAGONAL_PAN_OFFSET = 0.53
+DIAGONAL_PAN_OFFSET = 0.63
 
 SOUND_GROUP_NAMES: list[str] = ['kicksnare', 'stab', 'acappella']
 
@@ -45,9 +45,17 @@ SIMPLE_RHYTHMIC_PATTERNS = [
 
 
 _KICK_SNARE_PANNINGS: dict = {
+    'center': {
+        'volumes': {
+        'quiet': {
+            'bpms': ['slow'],
+            'rhythm_patterns': [[1]]
+        }
+        }
+    },
     'leftorright': {
         'volumes': {
-            'quiet': {
+            'loud': {
                 'bpms': ['slow'],
                 'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
@@ -64,14 +72,6 @@ _KICK_SNARE_PANNINGS: dict = {
 }
 
 _KICKSTAB_SNARESTAB_PANNINGS: dict = {
-    'center': {
-        'volumes': {
-            'quiet': {
-                'bpms': ['fast', 'slow'],
-                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
-            }
-        }
-    },
     'diagonal': {
         'volumes': {
             'quiet': {
@@ -82,7 +82,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
     },
     'dualpan': {
         'volumes': {
-            'loud': {
+            'quiet': {
                 'bpms': ['slow', 'fast'],
                 'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
@@ -90,7 +90,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
     },
     'leftorright': {
         'volumes': {
-            'quiet': {
+            'loud': {
                 'bpms': ['slow'],
                 'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
@@ -125,26 +125,18 @@ SOUND_TYPE_RULES: list[dict] = [
         'pannings': {
             'center': {
                 'volumes': {
-                    'quiet': {
+                    'loud': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': [[1]]
+                        'rhythm_patterns': [[1], [1, 1]]
                     }
                 }
             },
             'leftorright': {
                 'volumes': {
-                    'loud': {
-                        'bpms': ['slow'],
-                        'rhythm_patterns': [[1]]
-                    }
-                }
-            },
-            'diagonal': {
-                'volumes': {
                     'quiet': {
                         'bpms': ['slow'],
-                        'rhythm_patterns': [[1]]
-                    }
+                        'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
+                    },
                 }
             },
         },
