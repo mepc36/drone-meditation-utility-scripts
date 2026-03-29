@@ -110,6 +110,14 @@ SOUND_TYPE_RULES: list[dict] = [
                     },
                 }
             },
+                'diagonal': {
+        'volumes': {
+            'quiet': {
+                'bpms': ['slow'],
+                'rhythm_patterns': [[1]]
+            }
+        }
+    },
         },
     },
     {
