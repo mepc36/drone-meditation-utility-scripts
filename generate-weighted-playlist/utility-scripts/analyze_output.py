@@ -1,5 +1,5 @@
 """Analyze output/audio files vs config targets and print a delta chart."""
-import os, re, json, sys
+import os, re, json
 from collections import Counter
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -122,51 +122,46 @@ for row in rows:
     print("  ".join(cell.ljust(col_w[i]) for i, cell in enumerate(row)))
 
 # ── Rhythmic patterns ─────────────────────────────────────────────────
-# Load QUARTER_NOTE_RHYTHMIC_PATTERNS from sound_rules without side effects
-sys.path.insert(0, BASE)
-import importlib
-sr = importlib.import_module("lib.sound_rules")
+# Targets come from rhythm_pattern_weights in config
+rp_weights = cfg.get("rhythm_pattern_weights", {})
+rp_total_weight = sum(rp_weights.values()) if rp_weights else 0
 
-pool = sr.SIMPLE_RHYTHMIC_PATTERNS
-pool_total = len(pool)
-
-# Map pattern → filename suffix
-def pattern_to_suffix(p):
-    parts = []
-    for beat in p:
-        if beat == 1:
-            parts.append("quarter")
-        elif beat == 0:
-            parts.append("quarternoterest")
-        else:
-            parts.append(str(beat))
-    return "-".join(parts)
-
-pool_counts = Counter(pattern_to_suffix(p) for p in pool)
-
-# Count suffixes in rhythmicized output
+# Suffix patterns in filenames:
+#   single           → ends with _<panning>_quarter.wav
+#   double           → ends with _<panning>_quarter-quarter.wav
+#   single_and_rest  → ends with _<panning>_quarter-quarternoterest.wav
 rhy_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
 rhy_total = len(rhy_wav)
 
+SUFFIX_MAP = {
+    "quarter-quarternoterest": "single_and_rest",
+    "quarter-quarter":          "double",
+    "quarter":                  "single",
+}
+
 rhy_counts = Counter()
 for fname in rhy_wav:
-    m = re.search(r'_bpm-\d+_\w+_(.+)\.wav$', fname)
+    m = re.search(r'_bpm-\d+_[\w]+_(.+?)\.wav$', fname)
     if m:
-        rhy_counts[m.group(1)] += 1
+        suffix = m.group(1)
+        for pat_suffix, pat_name in SUFFIX_MAP.items():
+            if suffix == pat_suffix:
+                rhy_counts[pat_name] += 1
+                break
 
-all_suffixes = sorted(set(list(pool_counts.keys()) + list(rhy_counts.keys())))
+pattern_names = list(rp_weights.keys()) if rp_weights else sorted(rhy_counts.keys())
 
-print(f"\n{'═'*70}")
-print(f"  RHYTHMIC PATTERNS  (pool size: {pool_total}  |  rhythmicized files: {rhy_total})")
-print(f"{'═'*70}")
-print(f"  {'Pattern':<22}  {'Pool':>6}  {'Pool%':>6}  {'Output':>7}  {'Out%':>6}  {'Delta':>7}")
-print(f"  {'-'*66}")
-for suffix in all_suffixes:
-    pool_n   = pool_counts.get(suffix, 0)
-    pool_pct = pool_n / pool_total * 100 if pool_total else 0
-    out_n    = rhy_counts.get(suffix, 0)
-    out_pct  = out_n / rhy_total * 100 if rhy_total else 0
-    delta    = out_pct - pool_pct
+print(f"\n{'═'*72}")
+print(f"  RHYTHMIC PATTERNS  (rhythmicized files: {rhy_total})")
+print(f"{'═'*72}")
+print(f"  {'Pattern':<20}  {'Weight':>7}  {'Target%':>8}  {'Actual':>7}  {'Actual%':>8}  {'Delta':>7}")
+print(f"  {'-'*67}")
+for name in pattern_names:
+    weight   = rp_weights.get(name, 0)
+    tgt_pct  = weight / rp_total_weight * 100 if rp_total_weight else 0
+    act_n    = rhy_counts.get(name, 0)
+    act_pct  = act_n / rhy_total * 100 if rhy_total else 0
+    delta    = act_pct - tgt_pct
     dsym     = f"{delta:+.1f}%" if abs(delta) >= 0.5 else "   ~0%"
-    print(f"  {suffix:<22}  {pool_n:>6}  {pool_pct:>5.1f}%  {out_n:>7}  {out_pct:>5.1f}%  {dsym:>7}")
+    print(f"  {name:<20}  {weight:>7}  {tgt_pct:>7.1f}%  {act_n:>7}  {act_pct:>7.1f}%  {dsym:>7}")
 print()

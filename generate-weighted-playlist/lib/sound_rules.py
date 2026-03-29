@@ -47,6 +47,53 @@ def _pannings_to_dict(pannings_list: list) -> dict:
     return result
 
 
+def get_single_rhythm_pattern(pannings: list) -> list:
+    if len(pannings) > 1:
+        raise ValueError(
+            f"get_single_rhythm_pattern expects exactly 1 panning entry, got {len(pannings)}"
+        )
+    return [
+        {
+            'musical_duration': QUARTER_NOTE,
+            'possible_pannings': pannings[0],
+        },
+    ]
+
+
+def get_double_rhythm_pattern(pannings: list) -> list:
+    if len(pannings) == 1 or len(pannings) > 2:
+        raise ValueError(
+            f"get_double_rhythm_pattern expects exactly 2 panning entries, got {len(pannings)}"
+        )
+    return [
+        {
+            'musical_duration': QUARTER_NOTE,
+            'possible_pannings': pannings[0],
+        },
+        {
+            'musical_duration': QUARTER_NOTE,
+            'possible_pannings': pannings[1],
+        },
+    ]
+
+
+def get_single_and_rest_rhythm_pattern(pannings: list) -> list:
+    if len(pannings) > 1:
+        raise ValueError(
+            f"get_single_and_rest_rhythm_pattern expects exactly 1 panning entry, got {len(pannings)}"
+        )
+    return [
+        {
+            'musical_duration': QUARTER_NOTE,
+            'possible_pannings': pannings[0],
+        },
+        {
+            'musical_duration': QUARTER_NOTE_REST,
+            'possible_pannings': [HARD_CENTER],
+        },
+    ]
+
+
 # ── Per-panning rhythm pattern pools ─────────────────────────────────────────
 # Named <sound_group>_<panning>_<volume>_RHYTHM_PATTERNS.
 # 2nd-beat possible_pannings by parent panning position (PPP):
@@ -63,336 +110,147 @@ def _pannings_to_dict(pannings_list: list) -> dict:
 
 # ── acappella ─────────────────────────────────────────────────────────────────
 
-_KICK_SNARE_PANNINGS: list = [
+KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[HARD_CENTER]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE_REST,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[HARD_LEFT]]),
+            get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
+            get_single_and_rest_rhythm_pattern([[HARD_LEFT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE_REST,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[HARD_RIGHT]]),
+            get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
+            get_single_and_rest_rhythm_pattern([[HARD_RIGHT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DUALPAN],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DUALPAN],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DUALPAN],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DUALPAN],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE_REST,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[DUALPAN]]),
+            get_double_rhythm_pattern([[DUALPAN], [DUALPAN]]),
+            get_single_and_rest_rhythm_pattern([[DUALPAN]]),
         ],
     },
 ]
 
 
-_KICKSTAB_SNARESTAB_PANNINGS: list = [
+KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DIAGONAL_LEFT],
-                },
-            ],
+            get_single_rhythm_pattern([[DIAGONAL_LEFT]]),
         ],
     },
     {
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [DIAGONAL_RIGHT],
-                },
-            ],
+            get_single_rhythm_pattern([[DIAGONAL_RIGHT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE_REST,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[HARD_LEFT]]),
+            get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
+            get_single_and_rest_rhythm_pattern([[HARD_LEFT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_LEFT],
-                },
-            ],
-            [
-                {
-                    'musical_duration': QUARTER_NOTE,
-                    'possible_pannings': [HARD_RIGHT],
-                },
-                {
-                    'musical_duration': QUARTER_NOTE_REST,
-                    'possible_pannings': [HARD_CENTER],
-                },
-            ],
+            get_single_rhythm_pattern([[HARD_RIGHT]]),
+            get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
+            get_single_and_rest_rhythm_pattern([[HARD_RIGHT]]),
         ],
     },
 ]
+
+ACAPPELLA_MUSICAL_PATTERNS = [
+            {
+                'volumes': [LOUD],
+                'bpms': [FAST],
+                'rhythm_patterns': [
+                    get_single_rhythm_pattern([[HARD_CENTER]]),
+                ],
+            },
+            {
+                'volumes': [QUIET],
+                'bpms': [SLOW],
+                'rhythm_patterns': [
+                    get_single_rhythm_pattern([[HARD_LEFT]]),
+                    get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
+                ],
+            },
+            {
+                'volumes': [QUIET],
+                'bpms': [SLOW],
+                'rhythm_patterns': [
+                    get_single_rhythm_pattern([[HARD_RIGHT]]),
+                    get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
+                ],
+            },
+            {
+                'volumes': [QUIET],
+                'bpms': [SLOW],
+                'rhythm_patterns': [
+                    get_single_rhythm_pattern([[DIAGONAL_LEFT]]),
+                    get_double_rhythm_pattern([[DIAGONAL_LEFT], [DIAGONAL_RIGHT]]),
+                ],
+            },
+            {
+                'volumes': [QUIET],
+                'bpms': [SLOW],
+                'rhythm_patterns': [
+                    get_single_rhythm_pattern([[DIAGONAL_RIGHT]]),
+                    get_double_rhythm_pattern([[DIAGONAL_RIGHT], [DIAGONAL_LEFT]]),
+                ],
+            },
+        ]
 
 
 _SOUND_TYPE_RULES: list[dict] = [
     {
         'musical_grouping': KICK,
         'dualpan_partners': [KICK],
-        'musical_patterns': _KICK_SNARE_PANNINGS,
+        'musical_patterns': KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
         'musical_grouping': SNARE,
         'dualpan_partners': [SNARE],
-        'musical_patterns': _KICK_SNARE_PANNINGS,
+        'musical_patterns': KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
         'musical_grouping': KICKSTAB,
         'dualpan_partners': [],
-        'musical_patterns': _KICKSTAB_SNARESTAB_PANNINGS,
+        'musical_patterns': KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         'musical_grouping': SNARESTAB,
         'dualpan_partners': [],
-        'musical_patterns': _KICKSTAB_SNARESTAB_PANNINGS,
+        'musical_patterns': KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         'musical_grouping': ACAPPELLA,
         'dualpan_partners': [],
-        'musical_patterns': [
-            {
-                'volumes': [LOUD],
-                'bpms': [FAST],
-                'rhythm_patterns': [
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_CENTER],
-                        },
-                    ],
-                ],
-            },
-            {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_LEFT],
-                        },
-                    ],
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_LEFT],
-                        },
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_RIGHT],
-                        },
-                    ],
-                ],
-            },
-            {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_RIGHT],
-                        },
-                    ],
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_RIGHT],
-                        },
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [HARD_LEFT],
-                        },
-                    ],
-                ],
-            },
-            {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_LEFT],
-                        },
-                    ],
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_LEFT],
-                        },
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_RIGHT],
-                        },
-                    ],
-                ],
-            },
-            {
-                'volumes': [QUIET],
-                'bpms': [SLOW],
-                'rhythm_patterns': [
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_RIGHT],
-                        },
-                    ],
-                    [
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_RIGHT],
-                        },
-                        {
-                            'musical_duration': QUARTER_NOTE,
-                            'possible_pannings': [DIAGONAL_LEFT],
-                        },
-                    ],
-                ],
-            },
-        ],
+        'musical_patterns': ACAPPELLA_MUSICAL_PATTERNS
     },
     {
         'musical_grouping': STRINGS,
