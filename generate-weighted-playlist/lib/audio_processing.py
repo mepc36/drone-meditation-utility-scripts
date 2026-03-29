@@ -120,6 +120,7 @@ def apply_rhythm_pattern(
     Each value in `pattern` is the total slot duration in beats. Audio fills
     min(value, 1.0) beats from the start of the clip; any remaining duration
     is silence. Examples:
+        0    → 1 beat of pure silence (no audio)
         0.5  → 0.5 beats of audio (eighth note), no silence
         1.0  → 1 beat of audio (quarter note), no silence
         2.0  → 1 beat of audio + 1 beat of silence
@@ -131,6 +132,10 @@ def apply_rhythm_pattern(
 
     chunks = []
     for duration_beats in pattern:
+        if duration_beats == 0:
+            chunks.append(_silence(int(beat_length_seconds * sample_rate)))
+            continue
+
         sound_beats = min(duration_beats, 1.0)
         silence_beats = duration_beats - sound_beats
 

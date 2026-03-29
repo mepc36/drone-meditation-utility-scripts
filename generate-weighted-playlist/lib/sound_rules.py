@@ -8,13 +8,20 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
     'acappella': {'acappella'},
 }
 
-QUARTER_NOTE_RHYTHMIC_PATTERNS = [
-        [1],
-        [1],
-        [1],
-        [1],
-        [1, 1],
-    ]
+def expand_rhythmic_patterns(num_patterns: list[dict]) -> list[list]:
+    return [entry['rhythmic_pattern'] for entry in num_patterns for _ in range(entry['number'])]
+
+
+_QUARTER_NOTE_NUM_PATTERNS = [
+    {'rhythmic_pattern': [1],    'number': 21},
+    {'rhythmic_pattern': [1, 1], 'number': 1},
+    {'rhythmic_pattern': [1, 1, 0], 'number': 1},
+    {'rhythmic_pattern': [0, 1], 'number': 1},
+    {'rhythmic_pattern': [1, 0], 'number': 1},
+]
+
+QUARTER_NOTE_RHYTHMIC_PATTERNS = expand_rhythmic_patterns(_QUARTER_NOTE_NUM_PATTERNS)
+print('$$$ QUARTER_NOTE_RHYTHMIC_PATTERNS:', QUARTER_NOTE_RHYTHMIC_PATTERNS)
 
 SIMPLE_RHYTHMIC_PATTERNS = [
     [1],
@@ -50,7 +57,7 @@ _KICK_SNARE_PANNINGS: dict = {
         'volumes': {
             'loud': {
                 'bpms': ['slow', 'fast'],
-                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
@@ -77,7 +84,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
         'volumes': {
             'loud': {
                 'bpms': ['slow', 'fast'],
-                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
@@ -85,7 +92,7 @@ _KICKSTAB_SNARESTAB_PANNINGS: dict = {
         'volumes': {
             'quiet': {
                 'bpms': ['slow'],
-                'rhythm_patterns': SIMPLE_RHYTHMIC_PATTERNS
+                'rhythm_patterns': QUARTER_NOTE_RHYTHMIC_PATTERNS
             }
         }
     },
