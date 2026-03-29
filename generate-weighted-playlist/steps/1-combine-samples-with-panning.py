@@ -346,7 +346,7 @@ def main() -> None:
         conf['slowest_bpm_index'], conf['fastest_bpm_index'],
         conf['loudest_volume_index'], conf['quietest_volume_index'],
     )
-    strings_slots = [SlotSpec(STRINGS, UNTOUCHED, UNTOUCHED, UNTOUCHED)] * num_strings_samples
+    strings_slots = [SlotSpec(STRINGS, UNTOUCHED, UNTOUCHED, UNTOUCHED, rhythm=(UNTOUCHED,))] * num_strings_samples
     full_deck = non_strings_deck + strings_slots
     random.shuffle(full_deck)
 

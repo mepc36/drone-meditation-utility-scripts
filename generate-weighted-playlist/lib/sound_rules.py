@@ -47,10 +47,10 @@ def _pannings_to_dict(pannings_list: list) -> dict:
     return result
 
 
-def get_single_rhythm_pattern(pannings: list) -> list:
+def single_rhythm(pannings: list) -> list:
     if len(pannings) > 1:
         raise ValueError(
-            f"get_single_rhythm_pattern expects exactly 1 panning entry, got {len(pannings)}"
+            f"single_rhythm expects exactly 1 panning entry, got {len(pannings)}"
         )
     return [
         {
@@ -60,10 +60,10 @@ def get_single_rhythm_pattern(pannings: list) -> list:
     ]
 
 
-def get_double_rhythm_pattern(pannings: list) -> list:
+def double_rhythm(pannings: list) -> list:
     if len(pannings) == 1 or len(pannings) > 2:
         raise ValueError(
-            f"get_double_rhythm_pattern expects exactly 2 panning entries, got {len(pannings)}"
+            f"double_rhythm expects exactly 2 panning entries, got {len(pannings)}"
         )
     return [
         {
@@ -77,10 +77,10 @@ def get_double_rhythm_pattern(pannings: list) -> list:
     ]
 
 
-def get_single_and_rest_rhythm_pattern(pannings: list) -> list:
+def single_and_rest_rhythm(pannings: list) -> list:
     if len(pannings) > 1:
         raise ValueError(
-            f"get_single_and_rest_rhythm_pattern expects exactly 1 panning entry, got {len(pannings)}"
+            f"single_and_rest_rhythm expects exactly 1 panning entry, got {len(pannings)}"
         )
     return [
         {
@@ -115,34 +115,34 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[HARD_CENTER]]),
+            single_rhythm([[HARD_CENTER]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[HARD_LEFT]]),
-            get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
-            get_single_and_rest_rhythm_pattern([[HARD_LEFT]]),
+            single_rhythm([[HARD_LEFT]]),
+            double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
+            single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[HARD_RIGHT]]),
-            get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
-            get_single_and_rest_rhythm_pattern([[HARD_RIGHT]]),
+            single_rhythm([[HARD_RIGHT]]),
+            double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
+            single_and_rest_rhythm([[HARD_RIGHT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[DUALPAN]]),
-            get_double_rhythm_pattern([[DUALPAN], [DUALPAN]]),
-            get_single_and_rest_rhythm_pattern([[DUALPAN]]),
+            single_rhythm([[DUALPAN]]),
+            double_rhythm([[DUALPAN], [DUALPAN]]),
+            single_and_rest_rhythm([[DUALPAN]]),
         ],
     },
 ]
@@ -153,32 +153,32 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[DIAGONAL_LEFT]]),
+            single_rhythm([[DIAGONAL_LEFT]]),
         ],
     },
     {
         'volumes': [QUIET],
         'bpms': [SLOW],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[DIAGONAL_RIGHT]]),
+            single_rhythm([[DIAGONAL_RIGHT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[HARD_LEFT]]),
-            get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
-            get_single_and_rest_rhythm_pattern([[HARD_LEFT]]),
+            single_rhythm([[HARD_LEFT]]),
+            double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
+            single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
     {
         'volumes': [LOUD],
         'bpms': [FAST],
         'rhythm_patterns': [
-            get_single_rhythm_pattern([[HARD_RIGHT]]),
-            get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
-            get_single_and_rest_rhythm_pattern([[HARD_RIGHT]]),
+            single_rhythm([[HARD_RIGHT]]),
+            double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
+            single_and_rest_rhythm([[HARD_RIGHT]]),
         ],
     },
 ]
@@ -188,39 +188,39 @@ ACAPPELLA_MUSICAL_PATTERNS = [
                 'volumes': [LOUD],
                 'bpms': [FAST],
                 'rhythm_patterns': [
-                    get_single_rhythm_pattern([[HARD_CENTER]]),
+                    single_rhythm([[HARD_CENTER]]),
                 ],
             },
             {
                 'volumes': [QUIET],
                 'bpms': [SLOW],
                 'rhythm_patterns': [
-                    get_single_rhythm_pattern([[HARD_LEFT]]),
-                    get_double_rhythm_pattern([[HARD_LEFT], [HARD_RIGHT]]),
+                    single_rhythm([[HARD_LEFT]]),
+                    double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
                 ],
             },
             {
                 'volumes': [QUIET],
                 'bpms': [SLOW],
                 'rhythm_patterns': [
-                    get_single_rhythm_pattern([[HARD_RIGHT]]),
-                    get_double_rhythm_pattern([[HARD_RIGHT], [HARD_LEFT]]),
+                    single_rhythm([[HARD_RIGHT]]),
+                    double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
                 ],
             },
             {
                 'volumes': [QUIET],
                 'bpms': [SLOW],
                 'rhythm_patterns': [
-                    get_single_rhythm_pattern([[DIAGONAL_LEFT]]),
-                    get_double_rhythm_pattern([[DIAGONAL_LEFT], [DIAGONAL_RIGHT]]),
+                    single_rhythm([[DIAGONAL_LEFT]]),
+                    double_rhythm([[DIAGONAL_LEFT], [DIAGONAL_RIGHT]]),
                 ],
             },
             {
                 'volumes': [QUIET],
                 'bpms': [SLOW],
                 'rhythm_patterns': [
-                    get_single_rhythm_pattern([[DIAGONAL_RIGHT]]),
-                    get_double_rhythm_pattern([[DIAGONAL_RIGHT], [DIAGONAL_LEFT]]),
+                    single_rhythm([[DIAGONAL_RIGHT]]),
+                    double_rhythm([[DIAGONAL_RIGHT], [DIAGONAL_LEFT]]),
                 ],
             },
         ]
