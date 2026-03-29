@@ -104,6 +104,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_CENTER]]),
+            single_and_rest_rhythm([[HARD_CENTER]]),
         ],
     },
     {
@@ -112,7 +113,6 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
             double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
-            single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
     {
@@ -121,7 +121,6 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
             double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
-            single_and_rest_rhythm([[HARD_RIGHT]]),
         ],
     },
     {
@@ -130,7 +129,6 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             single_rhythm([[DUALPAN]]),
             double_rhythm([[DUALPAN], [DUALPAN]]),
-            single_and_rest_rhythm([[DUALPAN]]),
         ],
     },
 ]
@@ -142,6 +140,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_LEFT]]),
+            single_and_rest_rhythm([[DIAGONAL_LEFT]]),
         ],
     },
     {
@@ -149,6 +148,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_RIGHT]]),
+            single_and_rest_rhythm([[DIAGONAL_RIGHT]]),
         ],
     },
     {
@@ -156,7 +156,6 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
-            double_rhythm([[HARD_LEFT], [HARD_RIGHT]]),
             single_and_rest_rhythm([[HARD_LEFT]]),
         ],
     },
@@ -165,7 +164,6 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
-            double_rhythm([[HARD_RIGHT], [HARD_LEFT]]),
             single_and_rest_rhythm([[HARD_RIGHT]]),
         ],
     },
