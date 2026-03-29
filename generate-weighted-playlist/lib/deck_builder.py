@@ -38,7 +38,7 @@ def _directional_pannings_for_group(group: str) -> set:
     return panning_compat.get(group, set())
 
 
-def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict[str, int]) -> dict[str, dict[str, int]]:
+def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict[str, int]) -> tuple[dict[str, dict[str, int]], int]:
     allocation: dict[str, dict[str, int]] = {g: {} for g in group_targets}
     actual_targets = dict(group_targets)
     overflow = 0

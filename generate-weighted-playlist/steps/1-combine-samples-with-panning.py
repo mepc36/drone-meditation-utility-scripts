@@ -29,7 +29,7 @@ from lib.sound_rules import (
 from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN, UNTOUCHED,
-    LOUD, QUIET, SLOW, FAST,
+    LOUD, SLOW,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     STRINGS,
 )

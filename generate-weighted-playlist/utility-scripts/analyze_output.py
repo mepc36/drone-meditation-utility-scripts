@@ -124,9 +124,8 @@ for row in rows:
 # ── Rhythmic patterns ─────────────────────────────────────────────────
 # Load QUARTER_NOTE_RHYTHMIC_PATTERNS from sound_rules without side effects
 sys.path.insert(0, BASE)
-import importlib, unittest.mock
-with unittest.mock.patch("builtins.print"):  # suppress the $$$ debug print
-    sr = importlib.import_module("lib.sound_rules")
+import importlib
+sr = importlib.import_module("lib.sound_rules")
 
 pool = sr.SIMPLE_RHYTHMIC_PATTERNS
 pool_total = len(pool)

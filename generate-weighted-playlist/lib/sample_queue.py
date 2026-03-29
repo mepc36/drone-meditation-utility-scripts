@@ -51,13 +51,6 @@ def draw_next_strings_sample(queue: deque, all_samples: list[str]) -> str | None
     )
 
 
-def draw_next_non_strings_sample(queue: deque, all_samples: list[str]) -> str | None:
-    return _draw_from_queue_with_filter(
-        queue, all_samples,
-        lambda s: not passes_through_unmodified(sound_type_of(s)),
-    )
-
-
 def draw_next_sample_of_types(
     queue: deque,
     all_samples: list[str],
