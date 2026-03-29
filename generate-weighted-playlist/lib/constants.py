@@ -4,15 +4,12 @@ from . import config as _cfg
 QUARTER_NOTE = 1
 QUARTER_NOTE_REST = 0
 
-# Diagonal stereo offset (0 = center, 1.0 = full hard pan)
-DIAGONAL_PAN_OFFSET = 0.65
-
 # Panning positions (numeric: -1.0 = full left, 0.0 = center, 1.0 = full right)
 HARD_CENTER  =  0.0
 HARD_LEFT    = -1.0
 HARD_RIGHT   =  1.0
-DIAGONAL_LEFT  = DIAGONAL_PAN_OFFSET * -1
-DIAGONAL_RIGHT =  DIAGONAL_PAN_OFFSET
+DIAGONAL_LEFT  = -0.65
+DIAGONAL_RIGHT =  0.65
 
 # Sound types (individual sample categories)
 KICK      = 'kick'
@@ -44,17 +41,9 @@ UNTOUCHED = None  # sentinel: pass audio through without any panning or processi
 # Loaded at import time so that sound_rules (which imports this module) builds
 # its panning/volume/bpm rule dictionaries with real numeric values.
 
-def _get_loud_db(volume_levels_db: list[float]) -> float:
-    """Loudest volume = max dB value (least negative, e.g. 0 dB)."""
-    return max(volume_levels_db)
-
-def _get_quiet_db(volume_levels_db: list[float]) -> float:
-    """Quietest volume = min dB value (most negative, e.g. -26 dB)."""
-    return min(volume_levels_db)
-
 _conf = _cfg.load()
-LOUD:  float = _get_loud_db(_conf['volume_levels_db'])
-QUIET: float = _get_quiet_db(_conf['volume_levels_db'])
+LOUD:  float = max(_conf['volume_levels_db'])
+QUIET: float = min(_conf['volume_levels_db'])
 SLOW:  int   = min(_conf['bpm_values'])
 FAST:  int   = max(_conf['bpm_values'])
 
@@ -84,17 +73,9 @@ PANNING_RIGHT         = 'right'
 PANNING_DUALPAN       = 'dualpan'
 PANNING_LEFT_OR_RIGHT = 'leftorright'
 
-# ── Fractional note durations in beats ────────────────────────────────────────
-SIXTEENTH_NOTE = 0.25
-EIGHTH_NOTE    = 0.5
-HALF_NOTE      = 2.0
-
 # ── Beat name strings for output filenames ────────────────────────────────────
 BEAT_NAME_QUARTER_NOTE_REST = 'quarternoterest'
-BEAT_NAME_SIXTEENTH         = 'sixteenth'
-BEAT_NAME_EIGHTH            = 'eighth'
 BEAT_NAME_QUARTER_NOTE      = 'quarter'
-BEAT_NAME_HALF_NOTE         = 'half'
 
 # ── Operational limits ────────────────────────────────────────────────────────
 MAX_DRAW_RETRIES = 20

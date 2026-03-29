@@ -23,7 +23,7 @@ def run_script(script_name: str, description: str) -> bool:
     script_path = Path(__file__).parent / script_name
     
     try:
-        result = subprocess.run(
+        subprocess.run(
             [sys.executable, str(script_path)],
             check=True,
             text=True

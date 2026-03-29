@@ -34,9 +34,8 @@ from lib.constants import (
     STRINGS,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
     PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
-    QUARTER_NOTE, QUARTER_NOTE_REST, SIXTEENTH_NOTE, EIGHTH_NOTE, HALF_NOTE,
-    BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_SIXTEENTH, BEAT_NAME_EIGHTH,
-    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_HALF_NOTE,
+    QUARTER_NOTE, QUARTER_NOTE_REST,
+    BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE,
     MAX_DRAW_RETRIES,
 )
 
@@ -58,16 +57,9 @@ def panning_group_from_assignments(sample_names: list[str], pan_assignments: dic
     return PANNING_DIAGONAL
 
 
-def pan_numeric_value(pan: float) -> float:
-    return float(pan)
-
-
 BEAT_NAMES: dict[float, str] = {
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
-    SIXTEENTH_NOTE:    BEAT_NAME_SIXTEENTH,
-    EIGHTH_NOTE:       BEAT_NAME_EIGHTH,
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
-    HALF_NOTE:         BEAT_NAME_HALF_NOTE,
 }
 
 
@@ -85,7 +77,7 @@ def build_output_filename(
     bpm: int,
     rhythm: tuple[float, ...] = (),
 ) -> str:
-    ordered_by_pan = sorted(sample_names, key=lambda n: pan_numeric_value(pan_assignments[n]))
+    ordered_by_pan = sorted(sample_names, key=lambda n: pan_assignments[n])
     name_part = "_".join(n.lower() for n in ordered_by_pan)
     vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
     pan_group = panning_group_from_assignments(sample_names, pan_assignments)

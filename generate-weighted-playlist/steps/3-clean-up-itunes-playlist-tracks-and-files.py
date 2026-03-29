@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 # -------------------------------------------------------------------
-# CONFIG: Load from input/config/config.json
+# Output paths
 # -------------------------------------------------------------------
 OUTPUT_AUDIO_DIR = Path("./output/audio")
 OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")

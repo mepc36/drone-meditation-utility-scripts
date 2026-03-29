@@ -14,7 +14,7 @@ print('FAST:', constants.FAST, type(constants.FAST).__name__)
 
 import lib.sound_rules as sr
 from lib.constants import (
-    HARD_CENTER, HARD_LEFT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    HARD_CENTER, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     MUSICAL_PATTERNS, KICKSNARE, STAB,
 )
 rule = sr.rules_by_sound_type['kick']

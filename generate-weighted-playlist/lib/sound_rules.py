@@ -98,22 +98,6 @@ def single_and_rest_rhythm(pannings: list) -> list:
     ]
 
 
-# ── Per-panning rhythm pattern pools ─────────────────────────────────────────
-# Named <sound_group>_<panning>_<volume>_RHYTHM_PATTERNS.
-# 2nd-beat possible_pannings by parent panning position (PPP):
-#   HARD_LEFT      → [HARD_CENTER, HARD_RIGHT]
-#   HARD_RIGHT     → [HARD_CENTER, HARD_LEFT]
-#   DIAGONAL_LEFT  → [DIAGONAL_RIGHT]
-#   DIAGONAL_RIGHT → [DIAGONAL_LEFT]
-#   DUALPAN        → [HARD_CENTER]
-
-
-# ── kick / snare ──────────────────────────────────────────────────────────────
-
-# ── kickstab / snarestab ──────────────────────────────────────────────────────
-
-# ── acappella ─────────────────────────────────────────────────────────────────
-
 KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [QUIET],
