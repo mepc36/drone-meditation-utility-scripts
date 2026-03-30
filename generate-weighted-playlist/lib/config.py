@@ -55,6 +55,10 @@ def load() -> dict:
     bpm_percents = parse_colon_ints(raw.get(CFG_BPM_PERCENTS, "100"))
     require_sums_to_100(bpm_percents, CFG_BPM_PERCENTS)
     require_same_length(bpm_percents, bpm_values, CFG_BPM_PERCENTS, CFG_BPMS)
+    # Re-pair then sort slow→fast so percents[0]=slowest regardless of config order
+    _bpm_pairs = sorted(zip(bpm_values, bpm_percents), key=lambda p: p[0])
+    bpm_values = [p[0] for p in _bpm_pairs]
+    bpm_percents = [p[1] for p in _bpm_pairs]
 
     panning_percents = parse_colon_ints(raw.get(CFG_PANNING_PERCENTS, "25:25:25:13:12"))
     if len(panning_percents) != NUM_PANNING_PERCENTS:
@@ -86,6 +90,10 @@ def load() -> dict:
         raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
     require_sums_to_100(volume_percents, CFG_LOUD_QUIET_PERCENTS)
     require_same_length(volume_levels_db, volume_percents, CFG_LOUD_QUIET_VALUES, CFG_LOUD_QUIET_PERCENTS)
+    # Re-pair then sort loud→quiet (high dB first) so percents[0]=loudest regardless of config order
+    _vol_pairs = sorted(zip(volume_levels_db, volume_percents), key=lambda p: p[0], reverse=True)
+    volume_levels_db = [p[0] for p in _vol_pairs]
+    volume_percents = [p[1] for p in _vol_pairs]
 
     if CFG_SOUND_GROUP_PERCENTS not in raw:
         raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
