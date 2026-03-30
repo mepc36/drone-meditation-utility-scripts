@@ -3,16 +3,15 @@
   "slow_to_fast_bpm_percents": "30:70",
   "num_unique_samples": 200,
   "center_diagonal_dualpan_left_right_percents": "40:0:10:25:25",
-  "samples_to_silence_percents": "98:2",
+  "samples_to_silence_percents": "83:17 ",
   "loud_quiet_values": "0:-26",
   "loud_quiet_percents": "50:50",
-  "silence_lengths_millisec": "5900",
+  "silence_lengths_millisec": "1330",
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "65:35:0",
   "rhythm_pattern_weights": {
     "single": 10,
-    "double": 10,
-    "single_rest_single": 2
+    "double": 10
   },
   "strings_volume_reduction": 3
 }

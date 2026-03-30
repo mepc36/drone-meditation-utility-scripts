@@ -120,7 +120,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm(HARD_CENTER),
-            single_rest_single_rhythm(HARD_CENTER, HARD_CENTER, HARD_CENTER),
+            # single_rest_single_rhythm(HARD_CENTER, HARD_CENTER, HARD_CENTER),
         ],
     },
     #     {
