@@ -65,6 +65,18 @@ VALID_RHYTHM_PATTERN_NAMES: frozenset[str] = frozenset({
     SINGLE_SINGLE_REST_RHYTHM,
 })
 
+# Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
+# Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
+# Update this whenever a new rhythm pattern is added.
+RHYTHM_PATTERN_SEQUENCES: dict[str, tuple[int, ...]] = {
+    SINGLE_RHYTHM:            (QUARTER_NOTE,),
+    DOUBLE_RHYTHM:            (QUARTER_NOTE, QUARTER_NOTE),
+    SINGLE_REST_RHYTHM:       (QUARTER_NOTE, QUARTER_NOTE_REST),
+    SINGLE_REST_SINGLE_RHYTHM:(QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
+    TRIPLE_RHYTHM:            (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
+    SINGLE_SINGLE_REST_RHYTHM:(QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
+}
+
 # ── Sound type detection ───────────────────────────────────────────────────────
 ACAPPELLA_PREFIX = 'acap'
 

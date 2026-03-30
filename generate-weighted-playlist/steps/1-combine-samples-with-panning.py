@@ -227,6 +227,7 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
 
 def generate_silence_files(
     output_dir: Path,
+    rhythmicized_output_dir: Path,
     sample_rate: int,
     conf: dict,
     starting_index: int,
@@ -253,6 +254,7 @@ def generate_silence_files(
     for length_sec, count in zip(lengths, counts_per_length):
         for _ in range(count):
             write_silence_file(output_dir, sample_rate, length_sec, file_index)
+            write_silence_file(rhythmicized_output_dir, sample_rate, length_sec, file_index)
             file_index += 1
             if (file_index - starting_index) % 10 == 1:
                 print(f"    Created {file_index - starting_index}/{num_silence} silence files...", end="\r")
@@ -420,7 +422,7 @@ def main() -> None:
     print_volume_report(volume_counts, created_count, conf)
 
     if conf['silence_percent'] > 0 and conf['num_silence_files'] > 0:
-        generate_silence_files(output_dir, sample_rate, conf, starting_index=1)
+        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
         total = created_count + conf['num_silence_files']
         print(f"\nTotal files created: {total} ({created_count} samples + {conf['num_silence_files']} silence)")
 

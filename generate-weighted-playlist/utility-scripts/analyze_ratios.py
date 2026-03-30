@@ -10,10 +10,11 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib.constants import (
-    KICKSNARE, STAB, ACAPPELLA, STRINGS,
+    STRINGS,
+    SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
-    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_REST_RHYTHM, SINGLE_REST_SINGLE_RHYTHM,
-    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    RHYTHM_PATTERN_SEQUENCES,
 )
 import lib.config as _cfg_mod
 
@@ -36,11 +37,13 @@ bpm_target = parse_pct(cfg.get(_cfg_mod.CFG_BPM_PERCENTS, "100"))
 rp_weights = cfg.get(_cfg_mod.CFG_RHYTHM_WEIGHTS, {})
 rp_total   = sum(rp_weights.values()) or 1
 
+_BEAT_NAMES = {
+    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
+    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+}
 SUFFIX_MAP = {
-    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE_REST}-{BEAT_NAME_QUARTER_NOTE}": SINGLE_REST_SINGLE_RHYTHM,
-    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE_REST}": SINGLE_REST_RHYTHM,
-    f"{BEAT_NAME_QUARTER_NOTE}-{BEAT_NAME_QUARTER_NOTE}": DOUBLE_RHYTHM,
-    BEAT_NAME_QUARTER_NOTE: SINGLE_RHYTHM,
+    '-'.join(_BEAT_NAMES[b] for b in beats): name
+    for name, beats in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
 # ── Parse filenames ───────────────────────────────────────────────────────────
@@ -60,9 +63,10 @@ def _is_strings_file(fname: str) -> bool:
     return parts[2].split(".")[0].lower() == STRINGS
 
 
-all_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
-N_all = len(all_wav)          # total including strings (for Files / samples_to_silence check)
-wav   = [f for f in all_wav if not _is_strings_file(f)]  # non-strings only
+all_wav    = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
+silence_wav = [f for f in all_wav if f.startswith("silence_")]
+N_all = len(all_wav)          # total including strings and silence
+wav   = [f for f in all_wav if not _is_strings_file(f) and not f.startswith("silence_")]  # non-strings, non-silence
 N     = len(wav)              # denominator for panning / volume / sound-group / BPM
 if N_all == 0:
     print("No .wav files found in", rhythmicized_dir)
@@ -82,13 +86,13 @@ for fname in wav:
             pan_counts[p] += 1
             break
 
-    # sound group
-    if re.search(r'_(kickstab|snarestab)\.', fname):
-        grp_counts[STAB] += 1
-    elif re.search(r'_acappella_', fname):
-        grp_counts[ACAPPELLA] += 1
-    elif re.search(r'_(kick|snare)[._]', fname):
-        grp_counts[KICKSNARE] += 1
+    # sound group — auto-detected from SOUND_GROUP_TYPES; longest types checked first
+    for _grp in SOUND_GROUP_NAMES:
+        _types = sorted(SOUND_GROUP_TYPES[_grp], key=len, reverse=True)
+        _pat = r'_(' + '|'.join(re.escape(t) for t in _types) + r')[._]'
+        if re.search(_pat, fname):
+            grp_counts[_grp] += 1
+            break
     else:
         grp_counts['uncategorized'] += 1
         uncategorized_files.append(fname)
@@ -122,9 +126,9 @@ DIMS = [
     },
     {
         "title": "Sound Group",
-        "labels": [KICKSNARE, STAB, ACAPPELLA],
+        "labels": SOUND_GROUP_NAMES,
         "targets": ks_target,
-        "actuals": [grp_counts[k] for k in (KICKSNARE, STAB, ACAPPELLA)],
+        "actuals": [grp_counts[k] for k in SOUND_GROUP_NAMES],
     },
 
     {
@@ -160,13 +164,20 @@ _n_target = int(cfg.get("num_unique_samples", 0))
 _file_delta = N_all - _n_target
 _uncategorized = grp_counts["uncategorized"]
 
+_silence_pcts   = parse_pct(cfg.get(_cfg_mod.CFG_SILENCE_RATIO, "100"))
+_silence_pct    = _silence_pcts[1] if len(_silence_pcts) > 1 else 0
+_silence_target = round(_silence_pct / 100 * _n_target)
+_silence_actual = len(silence_wav)
+_silence_delta  = _silence_actual - _silence_target
+
 # Each entry is either a section header (str) or a data row (tuple of 4: lbl, exp, act, diff, status)
 _sections = []
 
 # Files block
 _sections.append(("FILES", [
     ("total",       str(_n_target),  str(N_all),     f"{_file_delta:+d}", "✅" if _file_delta == 0 else "❌"),
-    ("  strings",   "—",             str(N_all - N), "—",                 "ℹ️"),
+    ("  strings",   "—",             str(N_all - N - _silence_actual), "—", "ℹ️"),
+    ("  silence",   str(_silence_target), str(_silence_actual), "~0" if _silence_delta == 0 else f"{_silence_delta:+d}", status(_silence_delta, _n_target)),
 ]))
 
 for dim in DIMS:
