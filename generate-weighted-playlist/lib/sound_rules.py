@@ -63,38 +63,29 @@ def single_rhythm(pannings: list) -> list:
     ]
 
 
+def rest_rhythm(pannings: list) -> list:
+    return [
+        {
+            MUSICAL_DURATION: QUARTER_NOTE_REST,
+            POSSIBLE_PANNINGS: pannings[0],
+        },
+    ]
+
+
 def double_rhythm(pannings: list) -> list:
     if len(pannings) == 1 or len(pannings) > 2:
         raise ValueError(
             f"double_rhythm expects exactly 2 panning entries, got {len(pannings)}"
         )
-    return [
-        {
-            MUSICAL_DURATION: QUARTER_NOTE,
-            POSSIBLE_PANNINGS: pannings[0],
-        },
-        {
-            MUSICAL_DURATION: QUARTER_NOTE,
-            POSSIBLE_PANNINGS: pannings[1],
-        },
-    ]
+    return [*single_rhythm([pannings[0]]), *single_rhythm([pannings[1]])]
 
 
-def single_and_rest_rhythm(pannings: list) -> list:
+def single_and_rest_rhythm(pannings: list, rest_pannings: list) -> list:
     if len(pannings) > 1:
         raise ValueError(
             f"single_and_rest_rhythm expects exactly 1 panning entry, got {len(pannings)}"
         )
-    return [
-        {
-            MUSICAL_DURATION: QUARTER_NOTE,
-            POSSIBLE_PANNINGS: pannings[0],
-        },
-        {
-            MUSICAL_DURATION: QUARTER_NOTE_REST,
-            POSSIBLE_PANNINGS: [HARD_CENTER],
-        },
-    ]
+    return [*single_rhythm(pannings), *rest_rhythm(rest_pannings)]
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
@@ -103,7 +94,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_CENTER]]),
-            single_and_rest_rhythm([[HARD_CENTER]]),
+            single_and_rest_rhythm([[HARD_CENTER]], [[HARD_CENTER]]),
         ],
     },
     {
@@ -139,7 +130,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_LEFT]]),
-            single_and_rest_rhythm([[DIAGONAL_LEFT]]),
+            single_and_rest_rhythm([[DIAGONAL_LEFT]], [[HARD_CENTER]]),
         ],
     },
     {
@@ -147,7 +138,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[DIAGONAL_RIGHT]]),
-            single_and_rest_rhythm([[DIAGONAL_RIGHT]]),
+            single_and_rest_rhythm([[DIAGONAL_RIGHT]], [[HARD_CENTER]]),
         ],
     },
     {
@@ -155,7 +146,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_LEFT]]),
-            single_and_rest_rhythm([[HARD_LEFT]]),
+            single_and_rest_rhythm([[HARD_LEFT]], [[HARD_CENTER]]),
         ],
     },
     {
@@ -163,7 +154,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_RIGHT]]),
-            single_and_rest_rhythm([[HARD_RIGHT]]),
+            single_and_rest_rhythm([[HARD_RIGHT]], [[HARD_CENTER]]),
         ],
     },
 ]
