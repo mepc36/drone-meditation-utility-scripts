@@ -6,7 +6,7 @@ from .constants import (
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
-    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM, SINGLE_AND_REST_AND_SINGLE_RHYTHM, TRIPLE_RHYTHM, SINGLE_SINGLE_REST_RHYTHM,
+    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_REST_RHYTHM, SINGLE_REST_SINGLE_RHYTHM, TRIPLE_RHYTHM, SINGLE_SINGLE_REST_RHYTHM,
     VALID_RHYTHM_PATTERN_NAMES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
@@ -33,12 +33,12 @@ def derive_type(pattern: list) -> str:
     if (len(pattern) == 2
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST):
-        return SINGLE_AND_REST_RHYTHM
+        return SINGLE_REST_RHYTHM
     if (len(pattern) == 3
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST
             and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return SINGLE_AND_REST_AND_SINGLE_RHYTHM
+        return SINGLE_REST_SINGLE_RHYTHM
     if (len(pattern) == 3
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
@@ -52,8 +52,8 @@ def derive_type(pattern: list) -> str:
     raise ValueError(
         f"Cannot derive pattern type from: {pattern!r}. "
         f"Must be {SINGLE_RHYTHM} (len=1, QN), {DOUBLE_RHYTHM} (len=2, QN+QN), "
-        f"{SINGLE_AND_REST_RHYTHM} (len=2, QN+QNR), "
-        f"{SINGLE_AND_REST_AND_SINGLE_RHYTHM} (len=3, QN+QNR+QN), "
+        f"{SINGLE_REST_RHYTHM} (len=2, QN+QNR), "
+        f"{SINGLE_REST_SINGLE_RHYTHM} (len=3, QN+QNR+QN), "
         f"{TRIPLE_RHYTHM} (len=3, QN+QN+QN), "
         f"or {SINGLE_SINGLE_REST_RHYTHM} (len=3, QN+QN+QNR)."
     )
@@ -120,7 +120,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm(HARD_CENTER),
-            single_single_rest(HARD_CENTER, HARD_CENTER, HARD_CENTER)
+            single_rest_single_rhythm(HARD_CENTER, HARD_CENTER, HARD_CENTER),
         ],
     },
     #     {

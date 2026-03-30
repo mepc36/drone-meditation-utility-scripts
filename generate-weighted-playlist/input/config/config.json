@@ -11,8 +11,8 @@
   "kicksnare_stab_acappella_percents": "65:35:0",
   "rhythm_pattern_weights": {
     "single": 10,
-    "double": 1,
-    "single_single_rest": 1
+    "double": 10,
+    "single_rest_single": 2
   },
   "strings_volume_reduction": 4
 }
