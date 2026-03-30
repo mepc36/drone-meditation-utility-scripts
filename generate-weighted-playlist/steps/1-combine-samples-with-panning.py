@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import soundfile as sf
 
 import lib.config as cfg
-from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, write_silence_file
+from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
 from lib.deck_builder import SlotSpec, plan_output_files
 from lib.sample_queue import (
     create_shuffled_sample_queue,
@@ -392,6 +392,8 @@ def main() -> None:
 
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
         audio = mix_samples_into_stereo_clip(sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length)
+        if slot.sound_group == STRINGS and conf['strings_volume_reduction']:
+            audio = reduce_volume_by_db(audio, -conf['strings_volume_reduction'])
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         sf.write(output_dir / filename, audio, sample_rate)
 

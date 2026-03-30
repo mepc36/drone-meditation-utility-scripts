@@ -102,17 +102,8 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_CENTER]]),
-            single_and_rest_rhythm([[HARD_CENTER]], [[HARD_CENTER]]),
         ],
     },
-        {
-        VOLUMES: [QUIET],
-        BPMS: [SLOW],
-        RHYTHM_PATTERNS: [
-            single_rhythm([[DUALPAN]]),
-            double_rhythm([[DUALPAN], [DUALPAN]]),
-        ],
-    }
 ]
 
 
@@ -133,14 +124,35 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
             double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
         ],
     },
-    {
+        {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
             single_rhythm([[HARD_CENTER]]),
-            single_and_rest_rhythm([[HARD_CENTER]], [[HARD_CENTER]]),
+            double_rhythm([[HARD_CENTER], [HARD_CENTER]]),
         ],
-    }
+    },
+    #     {
+    #     VOLUMES: [QUIET],
+    #     BPMS: [FAST],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[DIAGONAL_LEFT]]),
+    #     ],
+    # },
+    #         {
+    #     VOLUMES: [QUIET],
+    #     BPMS: [FAST],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[DIAGONAL_RIGHT]]),
+    #     ],
+    # },
+                {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        RHYTHM_PATTERNS: [
+            single_rhythm([[DUALPAN]]),
+        ],
+    },
 ]
 
 ACAPPELLA_MUSICAL_PATTERNS = [
@@ -148,16 +160,14 @@ ACAPPELLA_MUSICAL_PATTERNS = [
         VOLUMES: [QUIET],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
-            single_rhythm([[DIAGONAL_LEFT]]),
-            double_rhythm([[DIAGONAL_LEFT], [DIAGONAL_LEFT, DIAGONAL_RIGHT]]),
+            single_rhythm([[HARD_LEFT]]),
         ],
     },
-    {
+        {
         VOLUMES: [QUIET],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
-            single_rhythm([[DIAGONAL_RIGHT]]),
-            double_rhythm([[DIAGONAL_RIGHT], [DIAGONAL_RIGHT, DIAGONAL_LEFT]]),
+            single_rhythm([[HARD_RIGHT]]),
         ],
     },
         ]
@@ -166,22 +176,22 @@ ACAPPELLA_MUSICAL_PATTERNS = [
 _SOUND_TYPE_RULES: list[dict] = [
     {
         MUSICAL_GROUPING: KICK,
-        DUALPAN_PARTNERS: [KICK],
+        DUALPAN_PARTNERS: [],
         MUSICAL_PATTERNS: KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: SNARE,
-        DUALPAN_PARTNERS: [SNARE],
+        DUALPAN_PARTNERS: [],
         MUSICAL_PATTERNS: KICK_SNARE_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: KICKSTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [KICKSTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: SNARESTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [SNARESTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     # {

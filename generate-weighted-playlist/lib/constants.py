@@ -5,11 +5,12 @@ QUARTER_NOTE = 1
 QUARTER_NOTE_REST = 0
 
 # Panning positions (numeric: -1.0 = full left, 0.0 = center, 1.0 = full right)
+DIAGONAL_PAN = 0.60
 HARD_CENTER  =  0.0
 HARD_LEFT    = -1.0
 HARD_RIGHT   =  1.0
-DIAGONAL_LEFT  = -0.65
-DIAGONAL_RIGHT =  0.65
+DIAGONAL_LEFT  = DIAGONAL_PAN * -1
+DIAGONAL_RIGHT = DIAGONAL_PAN * 1
 
 # Sound types (individual sample categories)
 KICK      = 'kick'
