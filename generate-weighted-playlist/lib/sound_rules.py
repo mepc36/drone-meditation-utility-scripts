@@ -104,48 +104,56 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
             single_rhythm([[HARD_CENTER]]),
         ],
     },
+    #     {
+    #     VOLUMES: [QUIET],
+    #     BPMS: [SLOW],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[HARD_LEFT]]),
+    #         double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
+    #     ],
+    # },
+    # {
+    #     VOLUMES: [QUIET],
+    #     BPMS: [SLOW],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[HARD_RIGHT]]),
+    #         double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
+    #     ],
+    # },
 ]
 
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
-    {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        RHYTHM_PATTERNS: [
-            single_rhythm([[HARD_LEFT]]),
-            double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
-        ],
-    },
-    {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        RHYTHM_PATTERNS: [
-            single_rhythm([[HARD_RIGHT]]),
-            double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
-        ],
-    },
+    # {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [FAST],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[HARD_LEFT]]),
+    #         double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
+    #     ],
+    # },
+    # {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [FAST],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[HARD_RIGHT]]),
+    #         double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
+    #     ],
+    # },
         {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
+        VOLUMES: [FAST],
+        BPMS: [LOUD],
         RHYTHM_PATTERNS: [
-            single_rhythm([[HARD_CENTER]]),
-            double_rhythm([[HARD_CENTER], [HARD_CENTER]]),
+            single_rhythm([[DIAGONAL_LEFT]]),
         ],
     },
-    #     {
-    #     VOLUMES: [QUIET],
-    #     BPMS: [FAST],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm([[DIAGONAL_LEFT]]),
-    #     ],
-    # },
-    #         {
-    #     VOLUMES: [QUIET],
-    #     BPMS: [FAST],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm([[DIAGONAL_RIGHT]]),
-    #     ],
-    # },
+            {
+        VOLUMES: [FAST],
+        BPMS: [LOUD],
+        RHYTHM_PATTERNS: [
+            single_rhythm([[DIAGONAL_RIGHT]]),
+        ],
+    },
                 {
         VOLUMES: [LOUD],
         BPMS: [FAST],
