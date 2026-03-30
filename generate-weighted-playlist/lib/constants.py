@@ -52,6 +52,12 @@ SINGLE_RHYTHM          = 'single'
 DOUBLE_RHYTHM          = 'double'
 SINGLE_AND_REST_RHYTHM = 'single_and_rest'
 
+VALID_RHYTHM_PATTERN_NAMES: frozenset[str] = frozenset({
+    SINGLE_RHYTHM,
+    DOUBLE_RHYTHM,
+    SINGLE_AND_REST_RHYTHM,
+})
+
 # ── Sound type detection ───────────────────────────────────────────────────────
 ACAPPELLA_PREFIX = 'acap'
 

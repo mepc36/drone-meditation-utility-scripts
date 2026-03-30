@@ -7,12 +7,20 @@ from .constants import (
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
     SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_AND_REST_RHYTHM,
+    VALID_RHYTHM_PATTERN_NAMES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
 )
 
 _conf = _cfg.load()
 pattern_weights = _conf.get(_cfg.CFG_RHYTHM_WEIGHTS, {})
+
+_invalid_rhythm_keys = set(pattern_weights.keys()) - VALID_RHYTHM_PATTERN_NAMES
+if _invalid_rhythm_keys:
+    raise ValueError(
+        f"Invalid rhythm_pattern_weights keys: {sorted(_invalid_rhythm_keys)}. "
+        f"Valid names are: {sorted(VALID_RHYTHM_PATTERN_NAMES)}"
+    )
 
 
 def derive_type(pattern: list) -> str:
