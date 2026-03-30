@@ -124,36 +124,36 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
 
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
-    # {
-    #     VOLUMES: [LOUD],
-    #     BPMS: [FAST],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm([[HARD_LEFT]]),
-    #         double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
-    #     ],
-    # },
-    # {
-    #     VOLUMES: [LOUD],
-    #     BPMS: [FAST],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm([[HARD_RIGHT]]),
-    #         double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
-    #     ],
-    # },
-        {
-        VOLUMES: [FAST],
-        BPMS: [LOUD],
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
         RHYTHM_PATTERNS: [
-            single_rhythm([[DIAGONAL_LEFT]]),
+            single_rhythm([[HARD_LEFT]]),
+            double_rhythm([[HARD_LEFT], [HARD_LEFT]]),
         ],
     },
-            {
-        VOLUMES: [FAST],
-        BPMS: [LOUD],
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
         RHYTHM_PATTERNS: [
-            single_rhythm([[DIAGONAL_RIGHT]]),
+            single_rhythm([[HARD_RIGHT]]),
+            double_rhythm([[HARD_RIGHT], [HARD_RIGHT]]),
         ],
     },
+    #     {
+    #     VOLUMES: [FAST],
+    #     BPMS: [LOUD],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[DIAGONAL_LEFT]]),
+    #     ],
+    # },
+    #         {
+    #     VOLUMES: [FAST],
+    #     BPMS: [LOUD],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm([[DIAGONAL_RIGHT]]),
+    #     ],
+    # },
                 {
         VOLUMES: [LOUD],
         BPMS: [FAST],
@@ -278,6 +278,27 @@ panning_compat: dict[str, set] = {
     }
     for group, types in SOUND_GROUP_TYPES.items()
 }
+
+# Validate that every panning used in sound_rules has a non-zero allocation in config.
+_PANNING_WEIGHT_BY_VALUE: dict = {
+    HARD_CENTER:    ("center",   _conf["center_weight"]),
+    DIAGONAL_LEFT:  ("diagonal", _conf["diagonal_weight"]),
+    DIAGONAL_RIGHT: ("diagonal", _conf["diagonal_weight"]),
+    DUALPAN:        ("dualpan",  _conf["dualpan_weight"]),
+    HARD_LEFT:      ("left",     _conf["left_weight"]),
+    HARD_RIGHT:     ("right",    _conf["right_weight"]),
+}
+
+for _rule in _SOUND_TYPE_RULES:
+    for _pan in _rule[MUSICAL_PATTERNS]:
+        if _pan is UNTOUCHED:
+            continue
+        _label, _weight = _PANNING_WEIGHT_BY_VALUE[_pan]
+        if _weight == 0:
+            raise ValueError(
+                f"sound_rules uses '{_label}' panning for '{_rule[MUSICAL_GROUPING]}' "
+                f"but '{_cfg.CFG_PANNING_PERCENTS}' allocates 0% to it."
+            )
 
 
 def sound_type_of(sample_name: str) -> str:
