@@ -49,14 +49,20 @@ SLOW:  int   = min(_conf['bpm_values'])
 FAST:  int   = max(_conf['bpm_values'])
 
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
-SINGLE_RHYTHM          = 'single'
-DOUBLE_RHYTHM          = 'double'
-SINGLE_AND_REST_RHYTHM = 'single_and_rest'
+SINGLE_RHYTHM                    = 'single'
+DOUBLE_RHYTHM                    = 'double'
+SINGLE_AND_REST_RHYTHM           = 'single_and_rest'
+SINGLE_AND_REST_AND_SINGLE_RHYTHM = 'single_and_rest_and_single'
+TRIPLE_RHYTHM                     = 'triple'
+SINGLE_SINGLE_REST_RHYTHM         = 'single_single_rest'
 
 VALID_RHYTHM_PATTERN_NAMES: frozenset[str] = frozenset({
     SINGLE_RHYTHM,
     DOUBLE_RHYTHM,
     SINGLE_AND_REST_RHYTHM,
+    SINGLE_AND_REST_AND_SINGLE_RHYTHM,
+    TRIPLE_RHYTHM,
+    SINGLE_SINGLE_REST_RHYTHM,
 })
 
 # ── Sound type detection ───────────────────────────────────────────────────────

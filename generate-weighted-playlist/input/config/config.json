@@ -1,7 +1,7 @@
 {
-  "bpms": "77:117",
+  "bpms": "75:117",
   "slow_to_fast_bpm_percents": "30:70",
-  "num_unique_samples": 100,
+  "num_unique_samples": 200,
   "center_diagonal_dualpan_left_right_percents": "40:0:10:25:25",
   "samples_to_silence_percents": "100",
   "loud_quiet_values": "0:-35",
@@ -9,11 +9,10 @@
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "65:35:0",
-  "kicksnare_stab_center_percents": "100:0",
   "rhythm_pattern_weights": {
     "single": 10,
     "double": 1,
-    "single_and_rest": 1
+    "single_single_rest": 1
   },
   "strings_volume_reduction": 4
 }
