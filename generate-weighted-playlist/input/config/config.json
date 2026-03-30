@@ -1,8 +1,8 @@
 {
-  "bpms": "67:117",
+  "bpms": "77:117",
   "slow_to_fast_bpm_percents": "30:70",
   "num_unique_samples": 100,
-  "center_diagonal_dualpan_left_right_percents": "10:0:16:37:37",
+  "center_diagonal_dualpan_left_right_percents": "40:0:10:25:25",
   "samples_to_silence_percents": "100",
   "loud_quiet_values": "0:-35",
   "loud_quiet_percents": "50:50",
