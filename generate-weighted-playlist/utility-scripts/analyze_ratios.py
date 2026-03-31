@@ -155,14 +155,14 @@ print()
 # ── Chart ─────────────────────────────────────────────────────────────────────
 DIMS = [
     {
-        "title": "Panning",
-        "labels": [PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT],
-        "counts": [pan_counts[p] for p in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT)],
-    },
-    {
         "title": "Sound Group",
         "labels": SOUND_GROUP_NAMES,
         "counts": [grp_counts[g] for g in SOUND_GROUP_NAMES],
+    },
+    {
+        "title": "Panning",
+        "labels": [PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT],
+        "counts": [pan_counts[p] for p in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT)],
     },
     {
         "title": "Volume",
@@ -198,8 +198,9 @@ for ax, dim in zip(axes, DIMS):
     ax.set_ylabel("Files")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     for bar, v in zip(bars, counts):
+        pct = f"({v/N*100:.1f}%)" if N else ""
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.4,
-                str(v), ha="center", va="bottom", fontsize=8)
+                f"{v} {pct}", ha="center", va="bottom", fontsize=8)
 
 plt.tight_layout()
 out_dir = os.path.join(BASE, "output/analyze-ratios")

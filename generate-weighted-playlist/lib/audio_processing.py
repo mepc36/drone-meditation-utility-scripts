@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from .constants import HARD_CENTER, HARD_LEFT, HARD_RIGHT, DUALPAN
+from .constants import ACAPPELLA, HARD_CENTER, HARD_LEFT, HARD_RIGHT, DUALPAN
 from .sound_rules import passes_through_unmodified, sound_type_of
 
 
@@ -97,8 +97,9 @@ def mix_samples_into_stereo_clip(
         if passes_through_unmodified(sound_type_of(name)):
             stereo = mono_to_stereo_center(audio)
         else:
+            normalized = audio if sound_type_of(name) == ACAPPELLA else normalize_loudness(audio)
             stereo = pad_or_trim_to_duration(
-                pan_to_stereo(normalize_loudness(audio), pan_assignments[name]),
+                pan_to_stereo(normalized, pan_assignments[name]),
                 sample_rate,
                 beat_length_seconds,
             )
