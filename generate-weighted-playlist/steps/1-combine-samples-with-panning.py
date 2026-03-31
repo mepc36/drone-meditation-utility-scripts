@@ -31,7 +31,7 @@ from lib.constants import (
     DUALPAN, UNTOUCHED,
     LOUD, SLOW,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
-    STRINGS,
+    STRINGS, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
     PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
     QUARTER_NOTE, QUARTER_NOTE_REST,
@@ -396,6 +396,8 @@ def main() -> None:
         audio = mix_samples_into_stereo_clip(sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length)
         if slot.sound_group == STRINGS and conf['strings_volume_reduction']:
             audio = reduce_volume_by_db(audio, -conf['strings_volume_reduction'])
+        if slot.sound_group == ACAPPELLA and conf['acappella_volume_reduction']:
+            audio = reduce_volume_by_db(audio, -conf['acappella_volume_reduction'])
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         sf.write(output_dir / filename, audio, sample_rate)
 

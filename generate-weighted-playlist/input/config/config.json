@@ -13,5 +13,6 @@
     "single": 10,
     "double": 10
   },
-  "strings_volume_reduction": 3
+  "strings_volume_reduction": 3,
+  "acappella_volume_reduction": 7
 }

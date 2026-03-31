@@ -20,6 +20,7 @@ CFG_LOUD_QUIET_PERCENTS  = 'loud_quiet_percents'
 CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
 CFG_RHYTHM_WEIGHTS       = 'rhythm_pattern_weights'
 CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
+CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
 
 # ── Config validation counts ───────────────────────────────────────────────────
 NUM_PANNING_PERCENTS     = 5
@@ -107,6 +108,10 @@ def load() -> dict:
     if not isinstance(strings_volume_reduction, int) or strings_volume_reduction < 0:
         raise ValueError(f"{CFG_STRINGS_VOL_REDUCTION} must be a non-negative integer, got {strings_volume_reduction!r}")
 
+    acappella_volume_reduction = raw.get(CFG_ACAPPELLA_VOL_REDUCTION, 0)
+    if not isinstance(acappella_volume_reduction, int) or acappella_volume_reduction < 0:
+        raise ValueError(f"{CFG_ACAPPELLA_VOL_REDUCTION} must be a non-negative integer, got {acappella_volume_reduction!r}")
+
     return {
         "bpm_values": bpm_values,
         "beat_lengths_seconds": [60.0 / bpm for bpm in bpm_values],
@@ -139,6 +144,7 @@ def load() -> dict:
         "rhythm_pattern_weights": raw.get(CFG_RHYTHM_WEIGHTS, {}),
 
         "strings_volume_reduction": strings_volume_reduction,
+        "acappella_volume_reduction": acappella_volume_reduction,
 
         "raw": raw,
     }

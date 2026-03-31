@@ -14,5 +14,6 @@
     "double": 1,
     "single_and_rest": 1
   },
-  "strings_volume_reduction": 4
+  "strings_volume_reduction": 4,
+  "acappella_volume_reduction": 4
 }
