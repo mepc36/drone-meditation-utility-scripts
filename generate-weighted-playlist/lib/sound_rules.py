@@ -161,7 +161,7 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(DUALPAN_DIAGONAL),
+                RHYTHM_PATTERN: single_rhythm(DUALPAN_LEFTRIGHT),
                 RHYTHM_PERCENT: 100,
             },
         ],

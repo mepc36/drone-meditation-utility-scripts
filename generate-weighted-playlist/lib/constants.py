@@ -5,7 +5,7 @@ QUARTER_NOTE = 1
 QUARTER_NOTE_REST = 0
 
 # Panning positions (numeric: -1.0 = full left, 0.0 = center, 1.0 = full right)
-DIAGONAL_PAN = 0.35
+DIAGONAL_PAN = 0.38
 HARD_CENTER  =  0.0
 HARD_LEFT    = -1.0
 HARD_RIGHT   =  1.0
