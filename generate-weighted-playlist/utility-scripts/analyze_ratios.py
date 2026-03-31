@@ -15,7 +15,6 @@ from lib.constants import (
     QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
     RHYTHM_PATTERN_SEQUENCES,
 )
-import lib.config as _cfg_mod
 
 BASE             = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cfg_path         = os.path.join(BASE, "input/config/config.json")
@@ -71,8 +70,6 @@ grp_counts = Counter()
 vol_counts = Counter()
 bpm_counts = Counter()
 rhy_counts = Counter()
-
-rp_weights = cfg.get(_cfg_mod.CFG_RHYTHM_WEIGHTS, {})
 
 for fname in wav:
     for p in (PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT):
@@ -148,7 +145,7 @@ for b in bpms:
 
 print()
 print("  RHYTHM PATTERN:")
-for pat in rp_weights:
+for pat in RHYTHM_PATTERN_SEQUENCES:
     print(_row(pat, rhy_counts.get(pat, 0), N))
 print()
 
@@ -176,8 +173,8 @@ DIMS = [
     },
     {
         "title": "Rhythm Pattern",
-        "labels": list(rp_weights.keys()),
-        "counts": [rhy_counts.get(k, 0) for k in rp_weights],
+        "labels": list(RHYTHM_PATTERN_SEQUENCES.keys()),
+        "counts": [rhy_counts.get(k, 0) for k in RHYTHM_PATTERN_SEQUENCES],
     },
 ]
 

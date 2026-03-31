@@ -15,7 +15,6 @@ CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
 CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
 CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
 CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
-CFG_RHYTHM_WEIGHTS       = 'rhythm_pattern_weights'
 CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
 CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
 
@@ -110,8 +109,6 @@ def load() -> dict:
         "quietest_volume_index": volume_levels_db.index(min(volume_levels_db)),
 
         "sound_group_percents": sound_group_percents,
-
-        "rhythm_pattern_weights": raw.get(CFG_RHYTHM_WEIGHTS, {}),
 
         "strings_volume_reduction": strings_volume_reduction,
         "acappella_volume_reduction": acappella_volume_reduction,

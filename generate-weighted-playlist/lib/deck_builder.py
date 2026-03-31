@@ -9,8 +9,9 @@ from .constants import (
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
+    RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
-from .sound_rules import derive_panning_key, derive_type, panning_compat, pattern_weights, rules_by_sound_type
+from .sound_rules import derive_panning_key, derive_type, panning_compat, rules_by_sound_type
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
         return (UNTOUCHED,), ()
     durations: list = []
     pannings: list = []
-    for b in raw_pattern[1:]:  # skip the type string at index 0
+    for b in raw_pattern[2:]:  # skip type string at index 0 and percent at index 1
         if not (isinstance(b, tuple) and len(b) == 2 and isinstance(b[1], tuple)):
             raise TypeError(f"Hashed beat must be a (duration, (pannings,...)) tuple, got {b!r}")
         duration, pan_options = b
@@ -205,8 +206,9 @@ def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
             for entry in pan_rule.get(RHYTHM_PATTERNS, []):
                 if entry is UNTOUCHED:
                     pat = (UNTOUCHED,)
-                elif isinstance(entry, list):
-                    pat = (derive_type(entry),) + tuple(_hashable_beat(b) for b in entry)
+                elif isinstance(entry, dict):
+                    beats = entry[RHYTHM_PATTERN]
+                    pat = (derive_type(beats), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in beats)
                 else:
                     raise TypeError(f"Unexpected rhythm_pattern entry: {entry!r}")
                 if pat not in seen:
@@ -257,7 +259,7 @@ def plan_output_files(
             continue
         patterns = list(avail_tuple)
         n = len(indices)
-        weights = [pattern_weights.get(pat[0], 1) if pat != (UNTOUCHED,) else 1 for pat in patterns]
+        weights = [pat[1] if pat != (UNTOUCHED,) else 1 for pat in patterns]
         total_w = sum(weights)
         counts = [round(n * w / total_w) for w in weights]
         diff = n - sum(counts)

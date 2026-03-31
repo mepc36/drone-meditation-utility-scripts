@@ -6,11 +6,6 @@
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "60:30:10",
-  "rhythm_pattern_weights": {
-    "single": 10,
-    "double": 1,
-    "single_and_rest": 1
-  },
   "strings_volume_reduction": 4,
   "acappella_volume_reduction": 4
 }

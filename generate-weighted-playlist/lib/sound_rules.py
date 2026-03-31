@@ -1,4 +1,3 @@
-from . import config as _cfg
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN, UNTOUCHED,
@@ -7,20 +6,10 @@ from .constants import (
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
     SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_REST_RHYTHM, SINGLE_REST_SINGLE_RHYTHM, TRIPLE_RHYTHM, SINGLE_SINGLE_REST_RHYTHM,
-    VALID_RHYTHM_PATTERN_NAMES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
+    RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
-
-_conf = _cfg.load()
-pattern_weights = _conf.get(_cfg.CFG_RHYTHM_WEIGHTS, {})
-
-_invalid_rhythm_keys = set(pattern_weights.keys()) - VALID_RHYTHM_PATTERN_NAMES
-if _invalid_rhythm_keys:
-    raise ValueError(
-        f"Invalid rhythm_pattern_weights keys: {sorted(_invalid_rhythm_keys)}. "
-        f"Valid names are: {sorted(VALID_RHYTHM_PATTERN_NAMES)}"
-    )
 
 
 def derive_type(pattern: list) -> str:
@@ -63,7 +52,7 @@ def derive_panning_key(entry: dict):
     rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
-    return rp[0][0][POSSIBLE_PANNINGS][0]
+    return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
 
 
 def single_rhythm(panning) -> list:
@@ -109,7 +98,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         VOLUMES: [QUIET],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
-            single_rhythm(HARD_CENTER),
+            {RHYTHM_PATTERN: single_rhythm(HARD_CENTER), RHYTHM_PERCENT: 100},
         ],
     }
 ]
@@ -120,33 +109,33 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         VOLUMES: [LOUD],
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
-            single_rhythm(HARD_LEFT),
-            double_rhythm(HARD_LEFT, HARD_LEFT),
+            {RHYTHM_PATTERN: single_rhythm(HARD_LEFT),            RHYTHM_PERCENT: 50},
+            {RHYTHM_PATTERN: double_rhythm(HARD_LEFT, HARD_LEFT), RHYTHM_PERCENT: 50},
         ],
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
-            single_rhythm(HARD_RIGHT),
-            double_rhythm(HARD_RIGHT, HARD_RIGHT),
+            {RHYTHM_PATTERN: single_rhythm(HARD_RIGHT),             RHYTHM_PERCENT: 0},
+            {RHYTHM_PATTERN: double_rhythm(HARD_RIGHT, HARD_RIGHT), RHYTHM_PERCENT: 100},
         ],
     },
-        {
+    {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         RHYTHM_PATTERNS: [
-            single_rhythm(DUALPAN),
+            {RHYTHM_PATTERN: single_rhythm(DUALPAN), RHYTHM_PERCENT: 100},
         ],
     },
 ]
 
 ACAPPELLA_MUSICAL_PATTERNS = [
-            {
+    {
         VOLUMES: [LOUD],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
-            single_rhythm(DUALPAN),
+            {RHYTHM_PATTERN: single_rhythm(DUALPAN), RHYTHM_PERCENT: 100},
         ],
     },
 ]
@@ -200,20 +189,24 @@ for _rule in _SOUND_TYPE_RULES:
             f"Must be one of {sorted(_VALID_MUSICAL_GROUPINGS)!r}."
         )
 
-# Validate pattern shapes and first-beat panning consistency within each panning group.
+# Validate pattern shapes, percent sums, and first-beat panning consistency within each panning group.
 for _rule in _SOUND_TYPE_RULES:
     _name = _rule[MUSICAL_GROUPING]
     for _group_entry in _rule[MUSICAL_PATTERNS]:
         _rp = _group_entry[RHYTHM_PATTERNS]
         if _rp and _rp[0] is UNTOUCHED:
             continue
-        for _pat in _rp:
-            if isinstance(_pat, list):
-                derive_type(_pat)  # raises ValueError on invalid shape
+        _total_pct = sum(_entry[RHYTHM_PERCENT] for _entry in _rp)
+        if _total_pct != 100:
+            raise ValueError(
+                f"SOUND_TYPE_RULES entry '{_name}': RHYTHM_PATTERNS percents sum to "
+                f"{_total_pct}, must be 100."
+            )
+        for _entry in _rp:
+            derive_type(_entry[RHYTHM_PATTERN])  # raises ValueError on invalid shape
         _first_pannings = {
-            _pat[0][POSSIBLE_PANNINGS][0]
-            for _pat in _rp
-            if isinstance(_pat, list)
+            _entry[RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+            for _entry in _rp
         }
         if len(_first_pannings) > 1:
             raise ValueError(
@@ -246,30 +239,6 @@ panning_compat: dict[str, set] = {
     for group, types in SOUND_GROUP_TYPES.items()
 }
 
-# Validate that every rhythm_pattern_weights key is actually used in sound_rules.
-_used_rhythm_types: set[str] = set()
-for _rule in _SOUND_TYPE_RULES:
-    for _pan_entry in _rule[MUSICAL_PATTERNS]:
-        _rp = _pan_entry[RHYTHM_PATTERNS]
-        if _rp and _rp[0] is UNTOUCHED:
-            continue
-        for _pat in _rp:
-            if isinstance(_pat, list):
-                _used_rhythm_types.add(derive_type(_pat))
-
-_unused_rhythm_weights = set(pattern_weights.keys()) - _used_rhythm_types
-if _unused_rhythm_weights:
-    raise ValueError(
-        f"rhythm_pattern_weights defines unused keys: {sorted(_unused_rhythm_weights)}. "
-        f"Either use them in sound_rules or remove them from the config."
-    )
-
-_unweighted_rhythm_types = _used_rhythm_types - set(pattern_weights.keys())
-if _unweighted_rhythm_types:
-    raise ValueError(
-        f"sound_rules uses rhythm types with no weight in rhythm_pattern_weights: "
-        f"{sorted(_unweighted_rhythm_types)}. Add them to the config."
-    )
 
 
 def sound_type_of(sample_name: str) -> str:

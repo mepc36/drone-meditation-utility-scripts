@@ -83,6 +83,8 @@ ACAPPELLA_PREFIX = 'acap'
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
 MUSICAL_DURATION  = 'musical_duration'
 POSSIBLE_PANNINGS = 'possible_pannings'
+RHYTHM_PATTERN    = 'rhythm_pattern'
+RHYTHM_PERCENT    = 'rhythm_percent'
 RHYTHM_PATTERNS   = 'rhythm_patterns'
 VOLUMES           = 'volumes'
 BPMS              = 'bpms'
