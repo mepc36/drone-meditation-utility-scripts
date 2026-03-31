@@ -142,25 +142,25 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
 ]
 
 ACAPPELLA_MUSICAL_PATTERNS = [
-    #     {
-    #     VOLUMES: [QUIET],
+    # {
+    #     VOLUMES: [LOUD],
     #     BPMS: [SLOW],
     #     RHYTHM_PATTERNS: [
-    #         single_rhythm(HARD_CENTER),
+    #         single_rhythm(DIAGONAL_LEFT),
     #     ],
     # },
-    {
+    #     {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [SLOW],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm(DIAGONAL_RIGHT),
+    #     ],
+    # },
+            {
         VOLUMES: [LOUD],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
-            single_rhythm(DIAGONAL_LEFT),
-        ],
-    },
-        {
-        VOLUMES: [LOUD],
-        BPMS: [SLOW],
-        RHYTHM_PATTERNS: [
-            single_rhythm(DIAGONAL_RIGHT),
+            single_rhythm(DUALPAN),
         ],
     },
 ]
@@ -189,7 +189,7 @@ _SOUND_TYPE_RULES: list[dict] = [
     },
     {
         MUSICAL_GROUPING: ACAPPELLA,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [ACAPPELLA],
         MUSICAL_PATTERNS: ACAPPELLA_MUSICAL_PATTERNS,
     },
     {

@@ -85,10 +85,6 @@ def mix_samples_into_stereo_clip(
         audio, sr = load_audio(input_audio_dir, name)
         loaded[name] = resample_to_rate(audio, sr, sample_rate)
 
-    if len(sample_names) == 2:
-        min_len = min(len(loaded[n]) for n in sample_names)
-        loaded = {n: a[:min_len] for n, a in loaded.items()}
-
     has_pass_through = any(passes_through_unmodified(sound_type_of(n)) for n in sample_names)
 
     mixed = None
