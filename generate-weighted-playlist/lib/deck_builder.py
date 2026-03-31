@@ -11,7 +11,7 @@ from .constants import (
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
-from .sound_rules import derive_panning_key, derive_type, panning_compat, rules_by_sound_type
+from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type
 
 
 @dataclass(frozen=True)
@@ -53,18 +53,32 @@ def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict
     )
 
     def fill_group(group: str, slots_needed: int) -> None:
-        compatible = {p: available_slots[p] for p in _directional_pannings_for_group(group) if available_slots.get(p, 0) > 0}
-        total_available = sum(compatible.values())
+        group_pct = panning_percents.get(group, {})
+        all_pans = _directional_pannings_for_group(group)
+        # Exclude pannings with explicit 0% weight so they never receive slots.
+        eligible_pans = {p for p in all_pans if group_pct.get(p, 1) > 0}
+        compatible_pans = [p for p in eligible_pans if available_slots.get(p, 0) > 0]
         remaining = slots_needed
-        for pan in sorted(compatible, key=lambda x: -compatible[x]):
-            if remaining == 0 or total_available == 0:
-                break
-            share = min(round(compatible[pan] / total_available * slots_needed), available_slots[pan], remaining)
-            allocation[group][pan] = allocation[group].get(pan, 0) + share
-            available_slots[pan] -= share
-            remaining -= share
+        if group_pct and compatible_pans:
+            total_pct = sum(group_pct.get(p, 0) for p in compatible_pans)
+            for pan in sorted(compatible_pans, key=lambda p: -group_pct.get(p, 0)):
+                if remaining == 0 or total_pct == 0:
+                    break
+                share = min(round(group_pct.get(pan, 0) / total_pct * slots_needed), available_slots[pan], remaining)
+                allocation[group][pan] = allocation[group].get(pan, 0) + share
+                available_slots[pan] -= share
+                remaining -= share
+        else:
+            total_available = sum(available_slots.get(p, 0) for p in compatible_pans)
+            for pan in sorted(compatible_pans, key=lambda p: -available_slots.get(p, 0)):
+                if remaining == 0 or total_available == 0:
+                    break
+                share = min(round(available_slots[pan] / total_available * slots_needed), available_slots[pan], remaining)
+                allocation[group][pan] = allocation[group].get(pan, 0) + share
+                available_slots[pan] -= share
+                remaining -= share
         while remaining > 0:
-            candidates = [(p, available_slots[p]) for p in _directional_pannings_for_group(group) if available_slots.get(p, 0) > 0]
+            candidates = [(p, available_slots[p]) for p in eligible_pans if available_slots.get(p, 0) > 0]
             if not candidates:
                 break
             best_pan = max(candidates, key=lambda x: x[1])[0]
@@ -74,7 +88,9 @@ def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict
 
     for group in ordered_by_most_constrained:
         needed = actual_targets[group]
-        can_fill = sum(available_slots.get(p, 0) for p in _directional_pannings_for_group(group))
+        group_pct = panning_percents.get(group, {})
+        eligible = {p for p in _directional_pannings_for_group(group) if group_pct.get(p, 1) > 0}
+        can_fill = sum(available_slots.get(p, 0) for p in eligible)
         take = min(needed, can_fill)
         if take < needed:
             overflow += needed - take

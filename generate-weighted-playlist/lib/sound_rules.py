@@ -9,6 +9,7 @@ from .constants import (
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
+    MUSIC_PATTERN_PERCENT,
 )
 
 
@@ -97,10 +98,14 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [QUIET],
         BPMS: [SLOW],
+        MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
-            {RHYTHM_PATTERN: single_rhythm(HARD_CENTER), RHYTHM_PERCENT: 100},
+            {
+                RHYTHM_PATTERN: single_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 100,
+            },
         ],
-    }
+    },
 ]
 
 
@@ -108,34 +113,57 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 33,
         RHYTHM_PATTERNS: [
-            {RHYTHM_PATTERN: single_rhythm(HARD_LEFT),            RHYTHM_PERCENT: 50},
-            {RHYTHM_PATTERN: double_rhythm(HARD_LEFT, HARD_LEFT), RHYTHM_PERCENT: 50},
+            {
+                RHYTHM_PATTERN: single_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 50,
+            },
+            {
+                RHYTHM_PATTERN: double_rhythm(HARD_LEFT, HARD_LEFT),
+                RHYTHM_PERCENT: 50,
+            },
         ],
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 33,
         RHYTHM_PATTERNS: [
-            {RHYTHM_PATTERN: single_rhythm(HARD_RIGHT),             RHYTHM_PERCENT: 0},
-            {RHYTHM_PATTERN: double_rhythm(HARD_RIGHT, HARD_RIGHT), RHYTHM_PERCENT: 100},
+            {
+                RHYTHM_PATTERN: single_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 0,
+            },
+            {
+                RHYTHM_PATTERN: double_rhythm(HARD_RIGHT, HARD_RIGHT),
+                RHYTHM_PERCENT: 100,
+            },
         ],
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 34,
         RHYTHM_PATTERNS: [
-            {RHYTHM_PATTERN: single_rhythm(DUALPAN), RHYTHM_PERCENT: 100},
+            {
+                RHYTHM_PATTERN: single_rhythm(DUALPAN),
+                RHYTHM_PERCENT: 100,
+            },
         ],
     },
 ]
 
-ACAPPELLA_MUSICAL_PATTERNS = [
+
+ACAPPELLA_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [SLOW],
+        MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
-            {RHYTHM_PATTERN: single_rhythm(DUALPAN), RHYTHM_PERCENT: 100},
+            {
+                RHYTHM_PATTERN: single_rhythm(DUALPAN),
+                RHYTHM_PERCENT: 100,
+            },
         ],
     },
 ]
@@ -174,6 +202,7 @@ _SOUND_TYPE_RULES: list[dict] = [
             {
                 VOLUMES: [UNTOUCHED],
                 BPMS: [UNTOUCHED],
+                MUSIC_PATTERN_PERCENT: 100,
                 RHYTHM_PATTERNS: [UNTOUCHED],
             },
         ],
@@ -189,9 +218,15 @@ for _rule in _SOUND_TYPE_RULES:
             f"Must be one of {sorted(_VALID_MUSICAL_GROUPINGS)!r}."
         )
 
-# Validate pattern shapes, percent sums, and first-beat panning consistency within each panning group.
+# Validate music_pattern_percent sums, pattern shapes, rhythm percent sums, and first-beat panning consistency.
 for _rule in _SOUND_TYPE_RULES:
     _name = _rule[MUSICAL_GROUPING]
+    _total_mp_pct = sum(e[MUSIC_PATTERN_PERCENT] for e in _rule[MUSICAL_PATTERNS])
+    if _total_mp_pct != 100:
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_name}': MUSICAL_PATTERNS percents sum to "
+            f"{_total_mp_pct}, must be 100."
+        )
     for _group_entry in _rule[MUSICAL_PATTERNS]:
         _rp = _group_entry[RHYTHM_PATTERNS]
         if _rp and _rp[0] is UNTOUCHED:
@@ -232,6 +267,16 @@ for _rule in _SOUND_TYPE_RULES:
 panning_compat: dict[str, set] = {
     group: {
         derive_panning_key(entry)
+        for sound_type in types
+        for entry in rules_by_sound_type.get(sound_type, {}).get(MUSICAL_PATTERNS, [])
+        if derive_panning_key(entry) is not UNTOUCHED
+    }
+    for group, types in SOUND_GROUP_TYPES.items()
+}
+
+panning_percents: dict[str, dict] = {
+    group: {
+        derive_panning_key(entry): entry[MUSIC_PATTERN_PERCENT]
         for sound_type in types
         for entry in rules_by_sound_type.get(sound_type, {}).get(MUSICAL_PATTERNS, [])
         if derive_panning_key(entry) is not UNTOUCHED

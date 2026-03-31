@@ -36,6 +36,7 @@ from lib.constants import (
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
     PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
     MUSICAL_PATTERNS, VOLUMES, BPMS,
+    MUSIC_PATTERN_PERCENT,
     QUARTER_NOTE, QUARTER_NOTE_REST,
     BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE,
     MAX_DRAW_RETRIES,
@@ -299,7 +300,7 @@ def main() -> None:
                 vol_labels.update(v for v in entry[VOLUMES] if v is not UNTOUCHED)
                 pkey = derive_panning_key(entry)
                 if pkey is not UNTOUCHED:
-                    pan_weights[pkey] = pan_weights.get(pkey, 0) + 1
+                    pan_weights[pkey] = pan_weights.get(pkey, 0) + entry[MUSIC_PATTERN_PERCENT]
         if single_bpm:
             if bpm_labels:
                 bpm_targets[conf['slowest_bpm_index']] += count
