@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from .constants import ACAPPELLA, HARD_CENTER, HARD_LEFT, HARD_RIGHT, DUALPAN
+from .constants import ACAPPELLA, HARD_CENTER, HARD_LEFT, HARD_RIGHT, DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL
 from .sound_rules import passes_through_unmodified, sound_type_of
 
 
@@ -153,7 +153,7 @@ def apply_rhythm_pattern(
         silence_beats = duration_beats - sound_beats
         sound_samples = int(sound_beats * beat_length_seconds * sample_rate)
 
-        if beat_pan and beat_pan != DUALPAN:
+        if beat_pan and beat_pan not in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL):
             # Re-pan this beat from mono → stereo using the specified position.
             src = mono_audio
             chunk = src[:sound_samples]

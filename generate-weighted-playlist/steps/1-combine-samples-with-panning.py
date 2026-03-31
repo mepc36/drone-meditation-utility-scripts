@@ -29,7 +29,7 @@ from lib.sound_rules import (
 )
 from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
-    DUALPAN, UNTOUCHED,
+    DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     LOUD, SLOW, FAST, QUIET,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     STRINGS, ACAPPELLA,
@@ -124,12 +124,21 @@ def resolve_slot(
 
         rule = rules_by_sound_type.get(sound_type_of(primary))
 
-        if slot.panning == DUALPAN:
+        if slot.panning == DUALPAN_LEFTRIGHT:
             partner_types = set(rule['dualpan_partners']) if rule else {sound_type_of(primary)}
             partner = draw_next_sample_of_types(sample_queue, all_samples, partner_types, exclude_name=primary)
             if partner:
                 sample_names = [primary, partner]
                 pan_assignments = {primary: HARD_LEFT, partner: HARD_RIGHT}
+            else:
+                sample_names = [primary]
+                pan_assignments = {primary: DIAGONAL_LEFT}
+        elif slot.panning == DUALPAN_DIAGONAL:
+            partner_types = set(rule['dualpan_partners']) if rule else {sound_type_of(primary)}
+            partner = draw_next_sample_of_types(sample_queue, all_samples, partner_types, exclude_name=primary)
+            if partner:
+                sample_names = [primary, partner]
+                pan_assignments = {primary: DIAGONAL_LEFT, partner: DIAGONAL_RIGHT}
             else:
                 sample_names = [primary]
                 pan_assignments = {primary: DIAGONAL_LEFT}
@@ -144,7 +153,7 @@ def resolve_slot(
         elif slot.panning == HARD_RIGHT:
             sample_names, pan_assignments = [primary], {primary: HARD_RIGHT}
         else:
-            sample_names, pan_assignments = [primary], {primary: HARD_CENTER}
+            raise ValueError(f"Unhandled panning value: {slot.panning!r}")
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
         if combo_key not in seen_combinations:
@@ -319,7 +328,7 @@ def main() -> None:
             share = min(share, remaining)
             if pkey == HARD_CENTER:                             panning_quotas[PANNING_CENTER]   += share
             elif pkey in (DIAGONAL_LEFT, DIAGONAL_RIGHT):       panning_quotas[PANNING_DIAGONAL] += share
-            elif pkey == DUALPAN:                               panning_quotas[PANNING_DUALPAN]  += share
+            elif pkey in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL): panning_quotas[PANNING_DUALPAN]  += share
             elif pkey == HARD_LEFT:                             panning_quotas[PANNING_LEFT]     += share
             elif pkey == HARD_RIGHT:                            panning_quotas[PANNING_RIGHT]    += share
             remaining -= share
@@ -372,7 +381,9 @@ def main() -> None:
             elif pan == HARD_LEFT:      hard_left_count += 1
             elif pan == HARD_RIGHT:     hard_right_count += 1
             elif float(pan) < 0:        left_count      += 1
-            else:                       right_count     += 1
+            elif float(pan) > 0:        right_count     += 1
+            else:
+                raise ValueError(f"Unrecognised single-sample pan value in reporting: {pan!r}")
 
         if slot.sound_group != STRINGS:
             volume_counts[volume_idx] += 1

@@ -1,6 +1,6 @@
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
-    DUALPAN, UNTOUCHED,
+    DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     LOUD, QUIET, SLOW, FAST,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     SOUND_GROUP_TYPES,
@@ -146,7 +146,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 40,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(DUALPAN),
+                RHYTHM_PATTERN: single_rhythm(DUALPAN_LEFTRIGHT),
                 RHYTHM_PERCENT: 100,
             },
         ],
@@ -156,12 +156,12 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
 
 ACAPPELLA_MUSICAL_PATTERNS: list = [
     {
-        VOLUMES: [LOUD],
+        VOLUMES: [QUIET],
         BPMS: [SLOW],
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(DUALPAN),
+                RHYTHM_PATTERN: single_rhythm(DUALPAN_DIAGONAL),
                 RHYTHM_PERCENT: 100,
             },
         ],
@@ -259,7 +259,7 @@ for _rule in _SOUND_TYPE_RULES:
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' is missing '{DUALPAN_PARTNERS}'. Use [] if no dualpan."
         )
-    if _rule[DUALPAN_PARTNERS] and not any(derive_panning_key(e) == DUALPAN for e in _rule[MUSICAL_PATTERNS]):
+    if _rule[DUALPAN_PARTNERS] and not any(derive_panning_key(e) in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) for e in _rule[MUSICAL_PATTERNS]):
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' declares dualpan_partners but has no 'dualpan' panning."
         )

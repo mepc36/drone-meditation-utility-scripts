@@ -5,7 +5,7 @@ QUARTER_NOTE = 1
 QUARTER_NOTE_REST = 0
 
 # Panning positions (numeric: -1.0 = full left, 0.0 = center, 1.0 = full right)
-DIAGONAL_PAN = 0.6
+DIAGONAL_PAN = 0.4
 HARD_CENTER  =  0.0
 HARD_LEFT    = -1.0
 HARD_RIGHT   =  1.0
@@ -35,8 +35,9 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
 }
 
 # Special panning modes (not positions on the -1..1 stereo field)
-DUALPAN   = 2.0   # sentinel: two samples panned hard left + hard right simultaneously
-UNTOUCHED = None  # sentinel: pass audio through without any panning or processing
+DUALPAN_LEFTRIGHT = 2.0   # sentinel: two samples panned hard left + hard right simultaneously
+DUALPAN_DIAGONAL  = 3.0   # sentinel: two samples panned diagonal left + diagonal right simultaneously
+UNTOUCHED         = None  # sentinel: pass audio through without any panning or processing
 
 # ── Config-sourced constants ───────────────────────────────────────────────────
 # Loaded at import time so that sound_rules (which imports this module) builds

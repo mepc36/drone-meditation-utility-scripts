@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
-    DUALPAN, UNTOUCHED,
+    DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     LOUD, QUIET, SLOW, FAST,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
@@ -30,7 +30,8 @@ def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:
         HARD_CENTER:    panning_quotas.get(PANNING_CENTER, 0),
         DIAGONAL_LEFT:  diagonal // 2,
         DIAGONAL_RIGHT: diagonal - diagonal // 2,
-        DUALPAN:        panning_quotas.get(PANNING_DUALPAN, 0),
+        DUALPAN_LEFTRIGHT: panning_quotas.get(PANNING_DUALPAN, 0),
+        DUALPAN_DIAGONAL:  panning_quotas.get(PANNING_DUALPAN, 0),
         HARD_LEFT:      panning_quotas.get(PANNING_LEFT, 0),
         HARD_RIGHT:     panning_quotas.get(PANNING_RIGHT, 0),
     }
@@ -168,7 +169,10 @@ def _assign_volume_and_bpm(
         for panning, count in pannings.items():
             opts = _allowed_volume_bpm_combos(group, panning)
             if not opts:
-                forced += [SlotSpec(group, panning, LOUD, SLOW)] * count
+                raise ValueError(
+                    f"No allowed volume/bpm combinations found for group '{group}', panning {panning!r}. "
+                    f"Check that sound_rules has a MUSICAL_PATTERNS entry matching this panning."
+                )
             elif len(opts) == 1:
                 vol, bpm = next(iter(opts))
                 forced += [SlotSpec(group, panning, vol, bpm)] * count
