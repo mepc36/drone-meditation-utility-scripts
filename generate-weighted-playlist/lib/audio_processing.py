@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from .constants import ACAPPELLA, HARD_CENTER, HARD_LEFT, HARD_RIGHT, DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL
 from .sound_rules import passes_through_unmodified, sound_type_of
 
 
@@ -33,11 +34,11 @@ def resample_to_rate(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndar
 def pan_to_stereo(audio: np.ndarray, pan_position) -> np.ndarray:
     if audio.ndim == 2:
         audio = np.mean(audio, axis=1)
-    if pan_position == 'center':
+    if pan_position == HARD_CENTER:
         return np.column_stack([audio, audio])
-    if pan_position == 'hard_left':
+    if pan_position == HARD_LEFT:
         return np.column_stack([audio * _HARD_PAN_GAIN, np.zeros_like(audio)])
-    if pan_position == 'hard_right':
+    if pan_position == HARD_RIGHT:
         return np.column_stack([np.zeros_like(audio), audio * _HARD_PAN_GAIN])
     angle = (float(pan_position) + 1.0) * np.pi / 4.0
     return np.column_stack([audio * np.cos(angle) * _HARD_PAN_GAIN,
@@ -84,10 +85,6 @@ def mix_samples_into_stereo_clip(
         audio, sr = load_audio(input_audio_dir, name)
         loaded[name] = resample_to_rate(audio, sr, sample_rate)
 
-    if len(sample_names) == 2:
-        min_len = min(len(loaded[n]) for n in sample_names)
-        loaded = {n: a[:min_len] for n, a in loaded.items()}
-
     has_pass_through = any(passes_through_unmodified(sound_type_of(n)) for n in sample_names)
 
     mixed = None
@@ -96,8 +93,9 @@ def mix_samples_into_stereo_clip(
         if passes_through_unmodified(sound_type_of(name)):
             stereo = mono_to_stereo_center(audio)
         else:
+            normalized = audio if sound_type_of(name) == ACAPPELLA else normalize_loudness(audio)
             stereo = pad_or_trim_to_duration(
-                pan_to_stereo(normalize_loudness(audio), pan_assignments[name]),
+                pan_to_stereo(normalized, pan_assignments[name]),
                 sample_rate,
                 beat_length_seconds,
             )
@@ -114,6 +112,7 @@ def apply_rhythm_pattern(
     sample_rate: int,
     beat_length_seconds: float,
     pattern: tuple[float, ...],
+    beat_pannings: tuple[str, ...] = (),
 ) -> np.ndarray:
     """Chop audio into rhythmic segments and concatenate into a new clip.
 
@@ -124,25 +123,52 @@ def apply_rhythm_pattern(
         0.5  → 0.5 beats of audio (eighth note), no silence
         1.0  → 1 beat of audio (quarter note), no silence
         2.0  → 1 beat of audio + 1 beat of silence
+
+    When `beat_pannings` is provided (parallel to `pattern`), beats with a
+    non-empty panning string are re-panned from mono for that beat chunk so
+    that successive beats can occupy different stereo positions.  Beats with
+    an empty-string panning inherit the slot-level panning already baked into
+    `audio`.  All output chunks are stereo when any beat has an explicit panning.
     """
     n_channels = audio.shape[1] if audio.ndim == 2 else 1
+    output_stereo = bool(beat_pannings) and any(p for p in beat_pannings)
+
+    # Pre-compute a mono version once for beats that need re-panning.
+    mono_audio = np.mean(audio, axis=1) if (output_stereo and audio.ndim == 2) else audio
 
     def _silence(n_samples: int) -> np.ndarray:
+        if output_stereo:
+            return np.zeros((n_samples, 2))
         return np.zeros((n_samples, n_channels) if n_channels > 1 else (n_samples,))
 
     chunks = []
-    for duration_beats in pattern:
+    for i, duration_beats in enumerate(pattern):
+        beat_pan = beat_pannings[i] if i < len(beat_pannings) else ''
+
         if duration_beats == 0:
             chunks.append(_silence(int(beat_length_seconds * sample_rate)))
             continue
 
         sound_beats = min(duration_beats, 1.0)
         silence_beats = duration_beats - sound_beats
-
         sound_samples = int(sound_beats * beat_length_seconds * sample_rate)
-        chunk = audio[:sound_samples]
-        if len(chunk) < sound_samples:
-            chunk = np.concatenate([chunk, _silence(sound_samples - len(chunk))])
+
+        if beat_pan and beat_pan not in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL):
+            # Re-pan this beat from mono → stereo using the specified position.
+            src = mono_audio
+            chunk = src[:sound_samples]
+            if len(chunk) < sound_samples:
+                chunk = np.concatenate([chunk, np.zeros(sound_samples - len(chunk))])
+            chunk = pan_to_stereo(chunk, beat_pan)
+        else:
+            # Use the audio as-is (slot-level panning already applied, or dualpan
+            # which is already mixed as hard-left + hard-right stereo).
+            chunk = audio[:sound_samples]
+            if len(chunk) < sound_samples:
+                chunk = np.concatenate([chunk, _silence(sound_samples - len(chunk))])
+            if output_stereo and chunk.ndim == 1:
+                chunk = np.column_stack([chunk, chunk])
+
         chunks.append(chunk)
 
         if silence_beats > 0:

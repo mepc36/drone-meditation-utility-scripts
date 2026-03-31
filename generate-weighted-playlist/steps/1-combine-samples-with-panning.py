@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import soundfile as sf
 
 import lib.config as cfg
-from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, write_silence_file
+from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
 from lib.deck_builder import SlotSpec, plan_output_files
 from lib.sample_queue import (
     create_shuffled_sample_queue,
@@ -22,12 +22,24 @@ from lib.sample_queue import (
     load_samples_grouped_by_type,
 )
 from lib.sound_rules import (
-    SOUND_GROUP_NAMES,
-    SOUND_GROUP_TYPES,
-    diagonal_pan_value_for_side,
     passes_through_unmodified,
     rules_by_sound_type,
     sound_type_of,
+    derive_panning_key,
+)
+from lib.constants import (
+    HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
+    LOUD, SLOW, FAST, QUIET,
+    SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
+    STRINGS, ACAPPELLA,
+    PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
+    PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
+    MUSICAL_PATTERNS, VOLUMES, BPMS,
+    MUSIC_PATTERN_PERCENT,
+    QUARTER_NOTE, QUARTER_NOTE_REST,
+    BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE,
+    MAX_DRAW_RETRIES,
 )
 
 
@@ -37,34 +49,27 @@ def clear_output_directory(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
-def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict[str, str]) -> str:
+def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict) -> str:
     if len(sample_names) == 2:
-        return 'dualpan'
+        return PANNING_DUALPAN
     pan = pan_assignments[sample_names[0]]
-    if pan == 'center':
-        return 'center'
-    if pan in ('hard_left', 'hard_right'):
-        return 'leftorright'
-    return 'diagonal'
+    if pan == HARD_CENTER:
+        return PANNING_CENTER
+    if pan in (HARD_LEFT, HARD_RIGHT):
+        return PANNING_LEFT_OR_RIGHT
+    return PANNING_DIAGONAL
 
 
-def pan_numeric_value(pan: str) -> float:
-    named = {'center': 0.0, 'hard_left': -1.0, 'hard_right': 1.0}
-    return named[pan] if pan in named else float(pan)
-
-
-_BEAT_NAMES: dict[float, str] = {
-    0.25: 'sixteenth',
-    0.5:  'eighth',
-    1.0:  'quarter',
-    2.0:  'half',
+BEAT_NAMES: dict[float, str] = {
+    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
 }
 
 
 def rhythm_to_name(rhythm: tuple[float | str, ...]) -> str:
-    if rhythm == ('untouched',):
+    if rhythm == (UNTOUCHED,):
         return ''
-    return '-'.join(_BEAT_NAMES.get(v, str(v)) for v in rhythm)
+    return '-'.join(BEAT_NAMES.get(v, str(v)) for v in rhythm)
 
 
 def build_output_filename(
@@ -75,7 +80,7 @@ def build_output_filename(
     bpm: int,
     rhythm: tuple[float, ...] = (),
 ) -> str:
-    ordered_by_pan = sorted(sample_names, key=lambda n: pan_numeric_value(pan_assignments[n]))
+    ordered_by_pan = sorted(sample_names, key=lambda n: pan_assignments[n])
     name_part = "_".join(n.lower() for n in ordered_by_pan)
     vol_str = f"{abs(volume_db):.0f}" if volume_db == int(volume_db) else f"{abs(volume_db):.1f}"
     pan_group = panning_group_from_assignments(sample_names, pan_assignments)
@@ -101,51 +106,60 @@ def resolve_slot(
     fastest_idx = conf['fastest_bpm_index']
     volume_levels_db = conf['volume_levels_db']
 
-    if slot.sound_group == 'strings':
+    if slot.sound_group == STRINGS:
         primary = draw_next_strings_sample(sample_queue, all_samples)
         if primary is None:
             return None
         sample_names = [primary]
-        pan_assignments = {primary: 'center'}
+        pan_assignments = {primary: HARD_CENTER}
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
         if combo_key in seen_combinations:
             return None
         return sample_names, pan_assignments, 0.0, 0, slowest_idx
 
-    for _ in range(20):
+    for _ in range(MAX_DRAW_RETRIES):
         primary = draw_next_sample_of_types(sample_queue, all_samples, SOUND_GROUP_TYPES[slot.sound_group])
         if primary is None:
             return None
 
         rule = rules_by_sound_type.get(sound_type_of(primary))
 
-        if slot.panning == 'dualpan':
+        if slot.panning == DUALPAN_LEFTRIGHT:
             partner_types = set(rule['dualpan_partners']) if rule else {sound_type_of(primary)}
             partner = draw_next_sample_of_types(sample_queue, all_samples, partner_types, exclude_name=primary)
             if partner:
                 sample_names = [primary, partner]
-                pan_assignments = {primary: 'hard_left', partner: 'hard_right'}
+                pan_assignments = {primary: HARD_LEFT, partner: HARD_RIGHT}
             else:
                 sample_names = [primary]
-                pan_assignments = {primary: diagonal_pan_value_for_side('left')}
-        elif slot.panning == 'center':
-            sample_names, pan_assignments = [primary], {primary: 'center'}
-        elif slot.panning == 'diagonal_left':
-            sample_names, pan_assignments = [primary], {primary: diagonal_pan_value_for_side('left')}
-        elif slot.panning == 'diagonal_right':
-            sample_names, pan_assignments = [primary], {primary: diagonal_pan_value_for_side('right')}
-        elif slot.panning == 'hard_left':
-            sample_names, pan_assignments = [primary], {primary: 'hard_left'}
-        elif slot.panning == 'hard_right':
-            sample_names, pan_assignments = [primary], {primary: 'hard_right'}
+                pan_assignments = {primary: DIAGONAL_LEFT}
+        elif slot.panning == DUALPAN_DIAGONAL:
+            partner_types = set(rule['dualpan_partners']) if rule else {sound_type_of(primary)}
+            partner = draw_next_sample_of_types(sample_queue, all_samples, partner_types, exclude_name=primary)
+            if partner:
+                sample_names = [primary, partner]
+                pan_assignments = {primary: DIAGONAL_LEFT, partner: DIAGONAL_RIGHT}
+            else:
+                sample_names = [primary]
+                pan_assignments = {primary: DIAGONAL_LEFT}
+        elif slot.panning == HARD_CENTER:
+            sample_names, pan_assignments = [primary], {primary: HARD_CENTER}
+        elif slot.panning == DIAGONAL_LEFT:
+            sample_names, pan_assignments = [primary], {primary: DIAGONAL_LEFT}
+        elif slot.panning == DIAGONAL_RIGHT:
+            sample_names, pan_assignments = [primary], {primary: DIAGONAL_RIGHT}
+        elif slot.panning == HARD_LEFT:
+            sample_names, pan_assignments = [primary], {primary: HARD_LEFT}
+        elif slot.panning == HARD_RIGHT:
+            sample_names, pan_assignments = [primary], {primary: HARD_RIGHT}
         else:
-            sample_names, pan_assignments = [primary], {primary: 'center'}
+            raise ValueError(f"Unhandled panning value: {slot.panning!r}")
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
         if combo_key not in seen_combinations:
-            volume_db = volume_levels_db[loudest_idx if slot.volume_label == 'loud' else quietest_idx]
-            volume_idx = loudest_idx if slot.volume_label == 'loud' else quietest_idx
-            bpm_idx = slowest_idx if slot.bpm_label == 'slow' else fastest_idx
+            volume_db = volume_levels_db[loudest_idx if slot.volume_label == LOUD else quietest_idx]
+            volume_idx = loudest_idx if slot.volume_label == LOUD else quietest_idx
+            bpm_idx = slowest_idx if slot.bpm_label == SLOW else fastest_idx
             return sample_names, pan_assignments, volume_db, volume_idx, bpm_idx
 
     return None
@@ -167,30 +181,19 @@ def print_sample_usage_report(sample_usage_count: dict[str, int], all_samples: l
 def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_left: int, hard_right: int, conf: dict) -> None:
     diagonal = left + right
     leftorright = hard_left + hard_right
-    counts = [c for c in [center, diagonal, dualpan, leftorright] if c > 0]
-    ratio_gcd = gcd_of(*counts) if len(counts) > 1 else 1
-    realized_parts = [center // ratio_gcd, diagonal // ratio_gcd, dualpan // ratio_gcd, leftorright // ratio_gcd]
-    realized_ratio = ':'.join(map(str, realized_parts))
-    config_ratio_str = conf['raw'].get('center_diagonal_dualpan_leftorright_percents', '25:25:25:25')
-    config_parts = [int(x) for x in config_ratio_str.split(':')]
-    scale = realized_parts[0] / config_parts[0] if config_parts[0] != 0 else 1
-    perfect_parts = [int(x * scale) for x in config_parts]
-    differential = ':'.join(f"{'+' if d > 0 else ''}{d}" for d in [perfect_parts[i] - realized_parts[i] for i in range(4)])
+    total = center + diagonal + dualpan + leftorright
     print(f"\nPanning Distribution:")
-    print(f"  Config ratio: {config_ratio_str}")
-    print(f"  Realized ratio: {realized_ratio}")
-    print(f"  Perfect ratio: {':'.join(map(str, perfect_parts))}")
-    print(f"  Differential: {differential}")
+    if total > 0:
+        print(f"  center:    {center}  ({center/total*100:.1f}%)")
+        print(f"  diagonal:  {diagonal}  ({diagonal/total*100:.1f}%)")
+        print(f"  dualpan:   {dualpan}  ({dualpan/total*100:.1f}%)")
+        print(f"  leftright: {leftorright}  ({leftorright/total*100:.1f}%)")
     if diagonal > 0:
         print(f"\nDiagonal Left/Right Distribution:")
-        print(f"  Target: 50.0% left : 50.0% right")
         print(f"  Realized: {left}:{right} = {left/diagonal*100:.1f}% : {right/diagonal*100:.1f}%")
-        print(f"  Differential: {left - right:+d} (left - right)")
     if leftorright > 0:
         print(f"\nHard Left/Right Distribution:")
-        print(f"  Target: 50.0% hard left : 50.0% hard right")
         print(f"  Realized: {hard_left}:{hard_right} = {hard_left/leftorright*100:.1f}% : {hard_right/leftorright*100:.1f}%")
-        print(f"  Differential: {hard_left - hard_right:+d} (hard left - hard right)")
 
 
 def print_volume_report(volume_counts: list[int], total_created: int, conf: dict) -> None:
@@ -199,8 +202,6 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     vol_gcd = gcd_of(*non_zero) if len(non_zero) > 1 else (non_zero[0] if non_zero else 1)
     realized_ratio = ':'.join(str(c // vol_gcd) for c in volume_counts)
     print(f"\nVolume Distribution:")
-    print(f"  Config ratio: {conf['raw'].get('loud_medium_soft_percents', '100')}")
-    print(f"  Config values: {conf['raw'].get('loud_medium_soft_values', '0')} dB")
     print(f"  Realized ratio: {realized_ratio}")
     for db_val, count in zip(volume_levels_db, volume_counts):
         pct = (count / total_created * 100) if total_created > 0 else 0
@@ -209,7 +210,7 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
 
 def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict) -> None:
     print(f"\nSound Group Distribution:")
-    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw']['kicksnare_stab_acappella_percents']}")
+    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}")
     for group, target_pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
         count = group_appearances[group]
         realized_pct = (count / non_strings_created * 100) if non_strings_created > 0 else 0
@@ -218,6 +219,7 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
 
 def generate_silence_files(
     output_dir: Path,
+    rhythmicized_output_dir: Path,
     sample_rate: int,
     conf: dict,
     starting_index: int,
@@ -244,6 +246,7 @@ def generate_silence_files(
     for length_sec, count in zip(lengths, counts_per_length):
         for _ in range(count):
             write_silence_file(output_dir, sample_rate, length_sec, file_index)
+            write_silence_file(rhythmicized_output_dir, sample_rate, length_sec, file_index)
             file_index += 1
             if (file_index - starting_index) % 10 == 1:
                 print(f"    Created {file_index - starting_index}/{num_silence} silence files...", end="\r")
@@ -254,13 +257,11 @@ def main() -> None:
     conf = cfg.load()
     output_dir = cfg.OUTPUT_AUDIO_DIR
     input_audio_dir = cfg.INPUT_AUDIO_DIR
-    rhythmicize = conf['rhythmicize_output_samples']
     rhythmicized_output_dir = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
-    percents_str = ':'.join(str(p) for p in conf['bpm_percents'])
     print(f"\nCombine Samples with Random Panning\n")
-    print(f"BPMs: {bpms_str}  (slow_to_fast_bpm_percents: {percents_str})")
+    print(f"BPMs: {bpms_str}")
 
     samples_by_type = load_samples_grouped_by_type(input_audio_dir)
     total_sample_count = sum(len(s) for s in samples_by_type.values())
@@ -272,8 +273,7 @@ def main() -> None:
     print()
 
     clear_output_directory(output_dir)
-    if rhythmicize:
-        clear_output_directory(rhythmicized_output_dir)
+    clear_output_directory(rhythmicized_output_dir)
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
     if num_pass_through > conf['num_unique_samples']:
@@ -284,36 +284,6 @@ def main() -> None:
     num_strings_samples = num_pass_through
     num_non_strings_samples = conf['num_audio_samples'] - num_strings_samples
 
-    total_non_strings_input = sum(len(v) for k, v in samples_by_type.items() if not passes_through_unmodified(k))
-    center_quota  = int(num_non_strings_samples * conf['center_weight']     / 100)
-    diagonal_quota = int(num_non_strings_samples * conf['diagonal_weight']   / 100)
-    dualpan_quota  = int(num_non_strings_samples * conf['dualpan_weight']    / 100)
-    leftorright_quota = int(num_non_strings_samples * conf['leftorright_weight'] / 100)
-
-    if center_quota > total_non_strings_input:
-        center_overflow = center_quota - total_non_strings_input
-        center_quota = total_non_strings_input
-        non_center_weight = conf['diagonal_weight'] + conf['dualpan_weight'] + conf['leftorright_weight']
-        if non_center_weight > 0:
-            diagonal_quota  += int(center_overflow * conf['diagonal_weight']    / non_center_weight)
-            leftorright_quota += int(center_overflow * conf['leftorright_weight'] / non_center_weight)
-            dualpan_quota   += center_overflow - int(center_overflow * conf['diagonal_weight'] / non_center_weight) - int(center_overflow * conf['leftorright_weight'] / non_center_weight)
-        else:
-            dualpan_quota += center_overflow
-        print(f"⚠️  Center quota capped at {total_non_strings_input}. Overflow redistributed to diagonal/dualpan/leftorright.\n")
-
-    rounding_remainder = num_non_strings_samples - (center_quota + diagonal_quota + dualpan_quota + leftorright_quota)
-    if rounding_remainder > 0:
-        heaviest_panning = max(
-            [('center', conf['center_weight']), ('diagonal', conf['diagonal_weight']),
-             ('dualpan', conf['dualpan_weight']), ('leftorright', conf['leftorright_weight'])],
-            key=lambda x: x[1],
-        )[0]
-        if heaviest_panning == 'center':       center_quota      += rounding_remainder
-        elif heaviest_panning == 'diagonal':   diagonal_quota    += rounding_remainder
-        elif heaviest_panning == 'dualpan':    dualpan_quota     += rounding_remainder
-        else:                                  leftorright_quota  += rounding_remainder
-
     group_targets = {
         group: int(num_non_strings_samples * pct / 100)
         for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents'])
@@ -323,16 +293,57 @@ def main() -> None:
         largest_group = max(group_targets, key=group_targets.get)
         group_targets[largest_group] += num_non_strings_samples - group_total
 
-    bpm_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['bpm_percents'])}
-    vol_targets = {idx: int(num_non_strings_samples * pct / 100) for idx, pct in enumerate(conf['volume_percents'])}
-    panning_quotas = {'center': center_quota, 'diagonal': diagonal_quota, 'dualpan': dualpan_quota, 'leftorright': leftorright_quota}
+    # Derive panning quotas, bpm targets, and volume targets from sound_rules
+    panning_quotas = {PANNING_CENTER: 0, PANNING_DIAGONAL: 0, PANNING_DUALPAN: 0, PANNING_LEFT: 0, PANNING_RIGHT: 0}
+    bpm_targets    = {conf['slowest_bpm_index']: 0, conf['fastest_bpm_index']: 0}
+    vol_targets    = {conf['loudest_volume_index']: 0, conf['quietest_volume_index']: 0}
+    single_bpm     = conf['slowest_bpm_index'] == conf['fastest_bpm_index']
+    for group, count in group_targets.items():
+        bpm_labels, vol_labels, pan_weights = set(), set(), {}
+        for sound_type in SOUND_GROUP_TYPES[group]:
+            rule = rules_by_sound_type.get(sound_type)
+            if rule is None:
+                continue
+            for entry in rule[MUSICAL_PATTERNS]:
+                bpm_labels.update(b for b in entry[BPMS] if b is not UNTOUCHED)
+                vol_labels.update(v for v in entry[VOLUMES] if v is not UNTOUCHED)
+                pkey = derive_panning_key(entry)
+                if pkey is not UNTOUCHED:
+                    pan_weights[pkey] = pan_weights.get(pkey, 0) + entry[MUSIC_PATTERN_PERCENT]
+        if single_bpm:
+            if bpm_labels:
+                bpm_targets[conf['slowest_bpm_index']] += count
+        elif SLOW in bpm_labels and FAST not in bpm_labels:
+            bpm_targets[conf['slowest_bpm_index']] += count
+        elif FAST in bpm_labels and SLOW not in bpm_labels:
+            bpm_targets[conf['fastest_bpm_index']] += count
+        if LOUD in vol_labels and QUIET not in vol_labels:
+            vol_targets[conf['loudest_volume_index']] += count
+        elif QUIET in vol_labels and LOUD not in vol_labels:
+            vol_targets[conf['quietest_volume_index']] += count
+        total_w = sum(pan_weights.values()) or 1
+        remaining = count
+        for i, (pkey, w) in enumerate(sorted(pan_weights.items(), key=lambda x: -x[1])):
+            share = remaining if i == len(pan_weights) - 1 else round(count * w / total_w)
+            share = min(share, remaining)
+            if pkey == HARD_CENTER:
+                panning_quotas[PANNING_CENTER] += share
+            elif pkey in (DIAGONAL_LEFT, DIAGONAL_RIGHT):
+                panning_quotas[PANNING_DIAGONAL] += share
+            elif pkey in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL):
+                panning_quotas[PANNING_DUALPAN] += share
+            elif pkey == HARD_LEFT:
+                panning_quotas[PANNING_LEFT] += share
+            elif pkey == HARD_RIGHT:
+                panning_quotas[PANNING_RIGHT] += share
+            remaining -= share
 
     non_strings_deck = plan_output_files(
         group_targets, panning_quotas, bpm_targets, vol_targets,
         conf['slowest_bpm_index'], conf['fastest_bpm_index'],
         conf['loudest_volume_index'], conf['quietest_volume_index'],
     )
-    strings_slots = [SlotSpec('strings', 'untouched', 'untouched', 'untouched')] * num_strings_samples
+    strings_slots = [SlotSpec(STRINGS, UNTOUCHED, UNTOUCHED, UNTOUCHED, rhythm=(UNTOUCHED,))] * num_strings_samples
     full_deck = non_strings_deck + strings_slots
     random.shuffle(full_deck)
 
@@ -360,7 +371,7 @@ def main() -> None:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
 
         created_count += 1
-        if slot.sound_group == 'strings':
+        if slot.sound_group == STRINGS:
             strings_created += 1
         else:
             non_strings_created += 1
@@ -371,25 +382,36 @@ def main() -> None:
             dualpan_count += 1
         else:
             pan = pan_values[0]
-            if pan == 'center':         center_count    += 1
-            elif pan == 'hard_left':    hard_left_count += 1
-            elif pan == 'hard_right':   hard_right_count += 1
-            elif float(pan) < 0:        left_count      += 1
-            else:                       right_count     += 1
+            if pan == HARD_CENTER:
+                center_count += 1
+            elif pan == HARD_LEFT:
+                hard_left_count += 1
+            elif pan == HARD_RIGHT:
+                hard_right_count += 1
+            elif float(pan) < 0:
+                left_count += 1
+            elif float(pan) > 0:
+                right_count += 1
+            else:
+                raise ValueError(f"Unrecognised single-sample pan value in reporting: {pan!r}")
 
-        if slot.sound_group != 'strings':
+        if slot.sound_group != STRINGS:
             volume_counts[volume_idx] += 1
 
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
         audio = mix_samples_into_stereo_clip(sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length)
+        if slot.sound_group == STRINGS and conf['strings_volume_reduction']:
+            audio = reduce_volume_by_db(audio, -conf['strings_volume_reduction'])
+        if slot.sound_group == ACAPPELLA and conf['acappella_volume_reduction']:
+            audio = reduce_volume_by_db(audio, -conf['acappella_volume_reduction'])
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         sf.write(output_dir / filename, audio, sample_rate)
 
-        if rhythmicize and slot.rhythm:
-            if slot.rhythm == ('untouched',):
+        if slot.rhythm:
+            if slot.rhythm == (UNTOUCHED,):
                 sf.write(rhythmicized_output_dir / filename, audio, sample_rate)
             else:
-                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm)
+                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm, slot.beat_pannings)
                 sf.write(rhythmicized_output_dir / filename, rhythmicized_audio, sample_rate)
 
         if created_count % 10 == 0 or created_count == conf['num_audio_samples']:
@@ -408,7 +430,7 @@ def main() -> None:
     print_volume_report(volume_counts, created_count, conf)
 
     if conf['silence_percent'] > 0 and conf['num_silence_files'] > 0:
-        generate_silence_files(output_dir, sample_rate, conf, starting_index=1)
+        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
         total = created_count + conf['num_silence_files']
         print(f"\nTotal files created: {total} ({created_count} samples + {conf['num_silence_files']} silence)")
 
@@ -420,7 +442,7 @@ def main() -> None:
         print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
 
     print_sound_group_report(group_appearances, non_strings_created, conf)
-    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py\n")
+    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
 
 
 if __name__ == "__main__":

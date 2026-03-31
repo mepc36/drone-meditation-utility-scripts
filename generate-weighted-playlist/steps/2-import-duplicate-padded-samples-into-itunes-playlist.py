@@ -2,11 +2,11 @@
 """
 2-import-duplicate-padded-samples-into-itunes-playlist.py
 
-Generates an M3U playlist from ./output/audio/ (or ./output/rhythmicized-audio/
-when rhythmicize_output_samples is true in config) and plays it via mpv.
+Generates an M3U playlist from ./output/rhythmicized-audio/ and plays it via mpv.
 """
 
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -15,22 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import lib.config as cfg
 
 
-# -------------------------------------------------------------------
-# CONFIG: Load from input/config/config.json
-# -------------------------------------------------------------------
-_conf = cfg.load()
-
-# Source directory: rhythmicized-audio when flag is on, otherwise plain audio
-SOURCE_AUDIO_DIR = (
-    cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
-    if _conf['rhythmicize_output_samples']
-    else cfg.OUTPUT_AUDIO_DIR
-)
+SOURCE_AUDIO_DIR = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
 # Output locations
 OUTPUT_DIR = Path("./output")
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "playlist.m3u"
-
 
 
 # -------------------------------------------------------------------
@@ -61,7 +50,6 @@ def write_m3u(tracks: list[Path]) -> None:
 
 def reset_playlist_folder() -> None:
     """Remove and recreate the playlist folder."""
-    import shutil
     playlist_folder = PLAYLIST_PATH.parent
     if playlist_folder.exists():
         shutil.rmtree(playlist_folder)

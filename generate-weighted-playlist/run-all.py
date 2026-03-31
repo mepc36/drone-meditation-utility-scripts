@@ -6,7 +6,7 @@ run-all.py
 Runs the complete pipeline:
 1. 3-clean-up-itunes-playlist-tracks-and-files.py - Clean up old files
 2. 1-combine-samples-with-panning.py - Generate combined samples
-3. 2-import-duplicate-padded-samples-into-itunes-playlist.py - Build playlist and open in VLC
+3. 2-import-duplicate-padded-samples-into-itunes-playlist.py - Build playlist and play via mpv
 """
 
 import subprocess
@@ -23,7 +23,7 @@ def run_script(script_name: str, description: str) -> bool:
     script_path = Path(__file__).parent / script_name
     
     try:
-        result = subprocess.run(
+        subprocess.run(
             [sys.executable, str(script_path)],
             check=True,
             text=True
@@ -46,7 +46,7 @@ def main() -> None:
     scripts = [
         ("steps/3-clean-up-itunes-playlist-tracks-and-files.py", "Step 1: Clean up old files"),
         ("steps/1-combine-samples-with-panning.py", "Step 2: Combine samples with panning"),
-        ("steps/2-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Build playlist and open in VLC")
+        ("steps/2-import-duplicate-padded-samples-into-itunes-playlist.py", "Step 3: Build playlist and play via mpv")
     ]
     
     for script_name, description in scripts:

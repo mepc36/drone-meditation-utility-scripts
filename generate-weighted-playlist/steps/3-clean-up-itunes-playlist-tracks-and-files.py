@@ -3,7 +3,7 @@
 3-clean-up-itunes-playlist-tracks-and-files.py
 
 Cleanup script for audio files:
-1. Deletes physical .wav files from local output directory
+1. Deletes physical .wav files from output/audio and output/rhythmicized-audio
 2. Deletes generated playlist file
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 # -------------------------------------------------------------------
-# CONFIG: Load from input/config/config.json
+# Output paths
 # -------------------------------------------------------------------
 OUTPUT_AUDIO_DIR = Path("./output/audio")
 OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
@@ -33,14 +33,14 @@ def get_output_files() -> list[Path]:
 
 def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:
     """
-    Delete physical .wav files from output directory.
+    Delete physical .wav files from output/audio and output/rhythmicized-audio.
     Returns (deleted_count, errors_list).
     """
     files_to_delete = get_output_files()
 
     if not files_to_delete:
         print("No physical files found to delete.")
-        return (0, [])
+        return 0, []
 
     print(f"\nFound {len(files_to_delete)} physical file(s) to delete from disk.")
 
@@ -54,7 +54,7 @@ def delete_physical_files() -> tuple[int, list[tuple[Path, str]]]:
         except Exception as e:
             errors.append((filepath, str(e)))
 
-    return (deleted_count, errors)
+    return deleted_count, errors
 
 
 # -------------------------------------------------------------------
@@ -65,12 +65,12 @@ def main() -> None:
     print("Cleanup: Delete Files & Playlist")
     print("="*60 + "\n")
 
-    # Quit VLC before deleting files so it doesn't log 'cannot open file' errors
-    print("Quitting VLC (if running)...")
-    subprocess.run(["osascript", "-e", 'tell application "VLC" to quit'], capture_output=True)
+    # Quit mpv before deleting files so it doesn't log 'cannot open file' errors
+    print("Quitting mpv (if running)...")
+    subprocess.run(["pkill", "-x", "mpv"], capture_output=True)
 
     print("This script will:")
-    print("  1. Delete physical .wav files from output directory")
+    print("  1. Delete physical .wav files from output/audio and output/rhythmicized-audio")
     print("  2. Delete generated playlist file\n")
 
     output_files = get_output_files()

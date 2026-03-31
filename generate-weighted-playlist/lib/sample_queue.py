@@ -2,7 +2,10 @@ import random
 from collections import defaultdict, deque
 from pathlib import Path
 
-from .sound_rules import sound_type_of, passes_through_unmodified
+from .constants import KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS
+from .sound_rules import sound_type_of
+
+_VALID_SOUND_TYPES = {KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS}
 
 
 def load_samples_grouped_by_type(input_audio_dir: Path) -> dict[str, list[str]]:
@@ -13,7 +16,13 @@ def load_samples_grouped_by_type(input_audio_dir: Path) -> dict[str, list[str]]:
         raise FileNotFoundError(f"No .wav files found in {input_audio_dir}")
     grouped: dict[str, list[str]] = defaultdict(list)
     for f in wav_files:
-        grouped[sound_type_of(f.stem)].append(f.stem)
+        sound_type = sound_type_of(f.stem)
+        if sound_type not in _VALID_SOUND_TYPES:
+            raise ValueError(
+                f"Unrecognized sound type {sound_type!r} derived from file {f.name!r}. "
+                f"Must be one of: {sorted(_VALID_SOUND_TYPES)}"
+            )
+        grouped[sound_type].append(f.stem)
     return dict(grouped)
 
 
@@ -46,14 +55,7 @@ def _draw_from_queue_with_filter(queue: deque, all_samples: list[str], predicate
 def draw_next_strings_sample(queue: deque, all_samples: list[str]) -> str | None:
     return _draw_from_queue_with_filter(
         queue, all_samples,
-        lambda s: sound_type_of(s) == 'strings',
-    )
-
-
-def draw_next_non_strings_sample(queue: deque, all_samples: list[str]) -> str | None:
-    return _draw_from_queue_with_filter(
-        queue, all_samples,
-        lambda s: not passes_through_unmodified(sound_type_of(s)),
+        lambda s: sound_type_of(s) == STRINGS,
     )
 
 

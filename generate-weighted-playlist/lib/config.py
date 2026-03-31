@@ -7,6 +7,21 @@ INPUT_AUDIO_DIR = Path("./input/audio")
 OUTPUT_AUDIO_DIR = Path("./output/audio")
 OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
 
+# ── Config JSON key names ──────────────────────────────────────────────────────
+CFG_BPMS                 = 'bpms'
+CFG_SILENCE_RATIO        = 'samples_to_silence_percents'
+CFG_NUM_UNIQUE_SAMPLES   = 'num_unique_samples'
+CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
+CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
+CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
+CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
+CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
+CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
+
+# ── Config validation counts ───────────────────────────────────────────────────
+NUM_SOUND_GROUP_PERCENTS = 3
+NUM_VOLUME_VALUES        = 2
+
 
 def parse_colon_ints(raw: str) -> list[int]:
     return [int(x) for x in str(raw).split(":")]
@@ -30,25 +45,17 @@ def load() -> dict:
     with open(CONFIG_PATH) as f:
         raw = json.load(f)
 
-    if "bpms" not in raw:
-        raise ValueError("'bpms' is required in config.json")
+    if CFG_BPMS not in raw:
+        raise ValueError(f"'{CFG_BPMS}' is required in config.json")
 
-    bpm_values = parse_colon_ints(raw["bpms"])
-    bpm_percents = parse_colon_ints(raw.get("slow_to_fast_bpm_percents", "100"))
-    require_sums_to_100(bpm_percents, "slow_to_fast_bpm_percents")
-    require_same_length(bpm_percents, bpm_values, "slow_to_fast_bpm_percents", "bpms")
+    bpm_values = sorted(parse_colon_floats(raw[CFG_BPMS]))  # slow→fast
 
-    panning_percents = parse_colon_ints(raw.get("center_diagonal_dualpan_leftorright_percents", "25:25:25:25"))
-    if len(panning_percents) != 4:
-        raise ValueError("center_diagonal_dualpan_leftorright_percents must have exactly 4 values (center:diagonal:dualpan:leftorright)")
-    require_sums_to_100(panning_percents, "center_diagonal_dualpan_leftorright_percents")
-
-    silence_ratio = parse_colon_ints(raw.get("samples_to_silence_percents", "100:0"))
-    require_sums_to_100(silence_ratio, "samples_to_silence_percents")
+    silence_ratio = parse_colon_ints(raw.get(CFG_SILENCE_RATIO, "100:0"))
+    require_sums_to_100(silence_ratio, CFG_SILENCE_RATIO)
     samples_percent = silence_ratio[0]
     silence_percent = silence_ratio[1] if len(silence_ratio) > 1 else 0
 
-    num_unique_samples = raw["num_unique_samples"]
+    num_unique_samples = raw[CFG_NUM_UNIQUE_SAMPLES]
     if silence_percent == 0:
         num_silence_files = 0
         num_audio_samples = num_unique_samples
@@ -57,27 +64,34 @@ def load() -> dict:
         num_silence_files = round(num_unique_samples * silence_fraction / (1.0 + silence_fraction))
         num_audio_samples = num_unique_samples - num_silence_files
 
-    silence_lengths_ms = parse_colon_ints(raw.get("silence_lengths_millisec", "2000"))
-    silence_length_percents = parse_colon_ints(raw.get("silence_lengths_percents", "100"))
-    require_sums_to_100(silence_length_percents, "silence_lengths_percents")
-    require_same_length(silence_lengths_ms, silence_length_percents, "silence_lengths_millisec", "silence_lengths_percents")
+    silence_lengths_ms = parse_colon_ints(raw.get(CFG_SILENCE_LENGTHS_MS, "2000"))
+    silence_length_percents = parse_colon_ints(raw.get(CFG_SILENCE_LEN_PCTS, "100"))
+    require_sums_to_100(silence_length_percents, CFG_SILENCE_LEN_PCTS)
+    require_same_length(silence_lengths_ms, silence_length_percents, CFG_SILENCE_LENGTHS_MS, CFG_SILENCE_LEN_PCTS)
 
-    volume_levels_db = parse_colon_floats(raw.get("loud_medium_soft_values", "0"))
-    volume_percents = parse_colon_ints(raw.get("loud_medium_soft_percents", "100"))
-    require_sums_to_100(volume_percents, "loud_medium_soft_percents")
-    require_same_length(volume_levels_db, volume_percents, "loud_medium_soft_values", "loud_medium_soft_percents")
+    volume_levels_db = parse_colon_floats(raw.get(CFG_LOUD_QUIET_VALUES, "0:-26"))
+    if len(volume_levels_db) != NUM_VOLUME_VALUES:
+        raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
+    volume_levels_db = sorted(volume_levels_db, reverse=True)  # loud→quiet (high dB first)
 
-    if "kicksnare_stab_acappella_percents" not in raw:
-        raise ValueError("kicksnare_stab_acappella_percents must be set in config.json")
-    sound_group_percents = parse_colon_ints(raw["kicksnare_stab_acappella_percents"])
-    if len(sound_group_percents) != 3:
-        raise ValueError("kicksnare_stab_acappella_percents must have exactly 3 values (kicksnare:stab:acappella)")
-    require_sums_to_100(sound_group_percents, "kicksnare_stab_acappella_percents")
+    if CFG_SOUND_GROUP_PERCENTS not in raw:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
+    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
+    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
+    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
+
+    strings_volume_reduction = raw.get(CFG_STRINGS_VOL_REDUCTION, 0)
+    if not isinstance(strings_volume_reduction, int) or strings_volume_reduction < 0:
+        raise ValueError(f"{CFG_STRINGS_VOL_REDUCTION} must be a non-negative integer, got {strings_volume_reduction!r}")
+
+    acappella_volume_reduction = raw.get(CFG_ACAPPELLA_VOL_REDUCTION, 0)
+    if not isinstance(acappella_volume_reduction, int) or acappella_volume_reduction < 0:
+        raise ValueError(f"{CFG_ACAPPELLA_VOL_REDUCTION} must be a non-negative integer, got {acappella_volume_reduction!r}")
 
     return {
         "bpm_values": bpm_values,
         "beat_lengths_seconds": [60.0 / bpm for bpm in bpm_values],
-        "bpm_percents": bpm_percents,
         "slowest_bpm_index": bpm_values.index(min(bpm_values)),
         "fastest_bpm_index": bpm_values.index(max(bpm_values)),
 
@@ -87,22 +101,17 @@ def load() -> dict:
         "samples_percent": samples_percent,
         "silence_percent": silence_percent,
 
-        "center_weight": panning_percents[0],
-        "diagonal_weight": panning_percents[1],
-        "dualpan_weight": panning_percents[2],
-        "leftorright_weight": panning_percents[3],
-
         "silence_lengths_seconds": [ms / 1000.0 for ms in silence_lengths_ms],
         "silence_length_percents": silence_length_percents,
 
         "volume_levels_db": volume_levels_db,
-        "volume_percents": volume_percents,
         "loudest_volume_index": volume_levels_db.index(max(volume_levels_db)),
         "quietest_volume_index": volume_levels_db.index(min(volume_levels_db)),
 
         "sound_group_percents": sound_group_percents,
 
-        "rhythmicize_output_samples": bool(raw.get("rhythmicize_output_samples", False)),
+        "strings_volume_reduction": strings_volume_reduction,
+        "acappella_volume_reduction": acappella_volume_reduction,
 
         "raw": raw,
     }
