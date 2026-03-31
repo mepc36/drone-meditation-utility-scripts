@@ -294,6 +294,11 @@ def sound_type_of(sample_name: str) -> str:
 
 def passes_through_unmodified(sound_type: str) -> bool:
     rule = rules_by_sound_type.get(sound_type)
-    return rule is not None and UNTOUCHED in rule[MUSICAL_PATTERNS]
+    if rule is None:
+        return False
+    return any(
+        entry[RHYTHM_PATTERNS] and entry[RHYTHM_PATTERNS][0] is UNTOUCHED
+        for entry in rule[MUSICAL_PATTERNS]
+    )
 
 
