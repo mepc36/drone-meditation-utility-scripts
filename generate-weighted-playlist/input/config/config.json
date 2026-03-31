@@ -5,11 +5,11 @@
   "loud_quiet_values": "0:-28",
   "silence_lengths_millisec": "1330",
   "silence_lengths_percents": "100",
-  "kicksnare_stab_acappella_percents": "60:30:10",
+  "kicksnare_stab_acappella_percents": "55:35:10",
   "rhythm_pattern_weights": {
     "single": 10,
     "double": 10
   },
   "strings_volume_reduction": 3,
-  "acappella_volume_reduction": 15
+  "acappella_volume_reduction": 17
 }
