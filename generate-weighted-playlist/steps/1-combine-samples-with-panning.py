@@ -326,11 +326,16 @@ def main() -> None:
         for i, (pkey, w) in enumerate(sorted(pan_weights.items(), key=lambda x: -x[1])):
             share = remaining if i == len(pan_weights) - 1 else round(count * w / total_w)
             share = min(share, remaining)
-            if pkey == HARD_CENTER:                             panning_quotas[PANNING_CENTER]   += share
-            elif pkey in (DIAGONAL_LEFT, DIAGONAL_RIGHT):       panning_quotas[PANNING_DIAGONAL] += share
-            elif pkey in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL): panning_quotas[PANNING_DUALPAN]  += share
-            elif pkey == HARD_LEFT:                             panning_quotas[PANNING_LEFT]     += share
-            elif pkey == HARD_RIGHT:                            panning_quotas[PANNING_RIGHT]    += share
+            if pkey == HARD_CENTER:
+                panning_quotas[PANNING_CENTER] += share
+            elif pkey in (DIAGONAL_LEFT, DIAGONAL_RIGHT):
+                panning_quotas[PANNING_DIAGONAL] += share
+            elif pkey in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL):
+                panning_quotas[PANNING_DUALPAN] += share
+            elif pkey == HARD_LEFT:
+                panning_quotas[PANNING_LEFT] += share
+            elif pkey == HARD_RIGHT:
+                panning_quotas[PANNING_RIGHT] += share
             remaining -= share
 
     non_strings_deck = plan_output_files(
@@ -377,11 +382,16 @@ def main() -> None:
             dualpan_count += 1
         else:
             pan = pan_values[0]
-            if pan == HARD_CENTER:           center_count    += 1
-            elif pan == HARD_LEFT:      hard_left_count += 1
-            elif pan == HARD_RIGHT:     hard_right_count += 1
-            elif float(pan) < 0:        left_count      += 1
-            elif float(pan) > 0:        right_count     += 1
+            if pan == HARD_CENTER:
+                center_count += 1
+            elif pan == HARD_LEFT:
+                hard_left_count += 1
+            elif pan == HARD_RIGHT:
+                hard_right_count += 1
+            elif float(pan) < 0:
+                left_count += 1
+            elif float(pan) > 0:
+                right_count += 1
             else:
                 raise ValueError(f"Unrecognised single-sample pan value in reporting: {pan!r}")
 

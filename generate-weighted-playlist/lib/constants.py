@@ -46,40 +46,28 @@ UNTOUCHED         = None  # sentinel: pass audio through without any panning or 
 _conf = _cfg.load()
 LOUD:  float = max(_conf['volume_levels_db'])
 QUIET: float = min(_conf['volume_levels_db'])
-SLOW:  int   = min(_conf['bpm_values'])
-FAST:  int   = max(_conf['bpm_values'])
+SLOW:  float = min(_conf['bpm_values'])
+FAST:  float = max(_conf['bpm_values'])
 
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
-SINGLE_RHYTHM                    = 'single'
-DOUBLE_RHYTHM                    = 'double'
+SINGLE_RHYTHM             = 'single'
+DOUBLE_RHYTHM             = 'double'
 SINGLE_REST_RHYTHM        = 'single_rest'
 SINGLE_REST_SINGLE_RHYTHM = 'single_rest_single'
-TRIPLE_RHYTHM                     = 'triple'
-SINGLE_SINGLE_REST_RHYTHM         = 'single_single_rest'
-
-VALID_RHYTHM_PATTERN_NAMES: frozenset[str] = frozenset({
-    SINGLE_RHYTHM,
-    DOUBLE_RHYTHM,
-    SINGLE_REST_RHYTHM,
-    SINGLE_REST_SINGLE_RHYTHM,
-    TRIPLE_RHYTHM,
-    SINGLE_SINGLE_REST_RHYTHM,
-})
+TRIPLE_RHYTHM             = 'triple'
+SINGLE_SINGLE_REST_RHYTHM = 'single_single_rest'
 
 # Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
 # Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
 # Update this whenever a new rhythm pattern is added.
 RHYTHM_PATTERN_SEQUENCES: dict[str, tuple[int, ...]] = {
-    SINGLE_RHYTHM:            (QUARTER_NOTE,),
-    DOUBLE_RHYTHM:            (QUARTER_NOTE, QUARTER_NOTE),
-    SINGLE_REST_RHYTHM:       (QUARTER_NOTE, QUARTER_NOTE_REST),
-    SINGLE_REST_SINGLE_RHYTHM:(QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
-    TRIPLE_RHYTHM:            (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
-    SINGLE_SINGLE_REST_RHYTHM:(QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
+    SINGLE_RHYTHM:             (QUARTER_NOTE,),
+    DOUBLE_RHYTHM:             (QUARTER_NOTE, QUARTER_NOTE),
+    SINGLE_REST_RHYTHM:        (QUARTER_NOTE, QUARTER_NOTE_REST),
+    SINGLE_REST_SINGLE_RHYTHM: (QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
+    TRIPLE_RHYTHM:             (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
+    SINGLE_SINGLE_REST_RHYTHM: (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
 }
-
-# ── Sound type detection ───────────────────────────────────────────────────────
-ACAPPELLA_PREFIX = 'acap'
 
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
 MUSICAL_DURATION  = 'musical_duration'

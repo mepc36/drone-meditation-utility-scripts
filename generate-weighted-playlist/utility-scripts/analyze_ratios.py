@@ -1,5 +1,8 @@
 """Count input files by sound type, then count output file attributes."""
-import os, re, json, sys
+import json
+import os
+import re
+import sys
 from pathlib import Path
 from collections import Counter
 import matplotlib
@@ -14,7 +17,7 @@ from lib.constants import (
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
-    LOUD, QUIET, SLOW, FAST,
+    LOUD, QUIET, SLOW,
     QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
     RHYTHM_PATTERN_SEQUENCES,
     SINGLE_RHYTHM, DOUBLE_RHYTHM,
@@ -23,9 +26,9 @@ from lib.constants import (
 )
 from lib.sound_rules import rules_by_sound_type, derive_type, derive_panning_key
 
-BASE             = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-cfg_path         = os.path.join(BASE, "input/config/config.json")
-input_audio_dir  = os.path.join(BASE, "input/audio")
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+cfg_path = os.path.join(BASE, "input/config/config.json")
+input_audio_dir = os.path.join(BASE, "input/audio")
 rhythmicized_dir = os.path.join(BASE, "output/rhythmicized-audio")
 
 with open(cfg_path) as f:
@@ -73,13 +76,13 @@ SUFFIX_MAP = {
     for name, beats in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
-all_wav     = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
+all_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
 silence_wav = [f for f in all_wav if f.startswith("silence_")]
 strings_wav = [f for f in all_wav if _is_strings_file(f) and not f.startswith("silence_")]
-wav         = [f for f in all_wav if not _is_strings_file(f) and not f.startswith("silence_")]
-N           = len(wav)  # non-strings musical files
-N_strings   = len(strings_wav)
-N_total     = len(all_wav)
+wav = [f for f in all_wav if not _is_strings_file(f) and not f.startswith("silence_")]
+N = len(wav)  # non-strings musical files
+N_strings = len(strings_wav)
+N_total = len(all_wav)
 
 if len(all_wav) == 0:
     print("No .wav files found in", rhythmicized_dir)

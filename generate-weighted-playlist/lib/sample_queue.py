@@ -3,7 +3,7 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from .constants import KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS
-from .sound_rules import sound_type_of, passes_through_unmodified
+from .sound_rules import sound_type_of
 
 _VALID_SOUND_TYPES = {KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS}
 

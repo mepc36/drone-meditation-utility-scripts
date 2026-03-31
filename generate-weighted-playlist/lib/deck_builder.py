@@ -42,7 +42,10 @@ def _directional_pannings_for_group(group: str) -> set:
     return panning_compat.get(group, set())
 
 
-def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict[str, int]) -> tuple[dict[str, dict[str, int]], int]:
+def _allocate_panning_slots(
+    group_targets: dict[str, int],
+    available_slots: dict[str, int],
+) -> tuple[dict[str, dict[str, int]], int]:
     allocation: dict[str, dict[str, int]] = {g: {} for g in group_targets}
     actual_targets = dict(group_targets)
     overflow = 0
@@ -121,7 +124,7 @@ def _hashable_beat(b) -> tuple:
 def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
     """Split a raw (hashable) beat pattern into separate duration and panning tuples.
 
-    Format: (type_str, (duration, (pannings,...)), ...).
+    Format: (type_str, rhythm_percent, (duration, (pannings,...)), ...).
     A panning is randomly chosen from the candidate list for each beat.
     """
     if raw_pattern == (UNTOUCHED,):
@@ -135,7 +138,6 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
         durations.append(float(duration))
         pannings.append(random.choice(pan_options) if pan_options else '')
     return tuple(durations), tuple(pannings)
-
 
 
 def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
@@ -179,10 +181,10 @@ def _assign_volume_and_bpm(
             else:
                 free += [(group, panning, list(opts))] * count
 
-    remaining_slow  = max(0, bpm_targets.get(slowest_bpm_index, 0)   - sum(1 for s in forced if s.bpm_label == SLOW))
-    remaining_fast  = max(0, bpm_targets.get(fastest_bpm_index, 0)    - sum(1 for s in forced if s.bpm_label == FAST))
+    remaining_slow  = max(0, bpm_targets.get(slowest_bpm_index, 0) - sum(1 for s in forced if s.bpm_label == SLOW))
+    remaining_fast  = max(0, bpm_targets.get(fastest_bpm_index, 0) - sum(1 for s in forced if s.bpm_label == FAST))
     remaining_loud  = max(0, vol_targets.get(loudest_volume_index, 0) - sum(1 for s in forced if s.volume_label == LOUD))
-    remaining_quiet = max(0, vol_targets.get(quietest_volume_index, 0)- sum(1 for s in forced if s.volume_label == QUIET))
+    remaining_quiet = max(0, vol_targets.get(quietest_volume_index, 0) - sum(1 for s in forced if s.volume_label == QUIET))
 
     random.shuffle(free)
     assigned: list[SlotSpec] = []
@@ -198,18 +200,22 @@ def _assign_volume_and_bpm(
         )
         vol, bpm = best_combo
         assigned.append(SlotSpec(group, panning, vol, bpm))
-        if bpm == SLOW:    remaining_slow  -= 1
-        elif bpm == FAST:  remaining_fast  -= 1
-        if vol == LOUD:    remaining_loud  -= 1
-        elif vol == QUIET: remaining_quiet -= 1
+        if bpm == SLOW:
+            remaining_slow -= 1
+        elif bpm == FAST:
+            remaining_fast -= 1
+        if vol == LOUD:
+            remaining_loud -= 1
+        elif vol == QUIET:
+            remaining_quiet -= 1
 
     return forced + assigned
 
 
 def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
     """Return unique hashable rhythm patterns for this slot from sound_rules.
-    Each tuple starts with a type string (for weight lookup), followed by
-    (duration, (pannings,...)) beat tuples."""
+    Each tuple is (type_str, rhythm_percent, (duration, (pannings,...)), ...).
+    """
     seen: set[tuple] = set()
     found: list[tuple] = []
     for sound_type in SOUND_GROUP_TYPES.get(slot.sound_group, set()):
@@ -292,7 +298,10 @@ def plan_output_files(
             assigned_rhythms[idx] = rhythm
             assigned_pannings[idx] = beat_pannings
 
-    deck = [dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i]) for i, slot in enumerate(deck)]
+    deck = [
+        dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i])
+        for i, slot in enumerate(deck)
+    ]
 
     # Decrement quota for secondary beats (beat 2+). The primary beat is already
     # counted by _allocate_panning_slots; secondary beats consume additional quota.

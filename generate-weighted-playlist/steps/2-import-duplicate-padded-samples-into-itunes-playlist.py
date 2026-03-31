@@ -6,6 +6,7 @@ Generates an M3U playlist from ./output/rhythmicized-audio/ and plays it via mpv
 """
 
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -14,17 +15,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import lib.config as cfg
 
 
-# -------------------------------------------------------------------
-# CONFIG: Load from input/config/config.json
-# -------------------------------------------------------------------
-_conf = cfg.load()
-
 SOURCE_AUDIO_DIR = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
 # Output locations
 OUTPUT_DIR = Path("./output")
 PLAYLIST_PATH = OUTPUT_DIR / "playlists" / "playlist.m3u"
-
 
 
 # -------------------------------------------------------------------
@@ -55,7 +50,6 @@ def write_m3u(tracks: list[Path]) -> None:
 
 def reset_playlist_folder() -> None:
     """Remove and recreate the playlist folder."""
-    import shutil
     playlist_folder = PLAYLIST_PATH.parent
     if playlist_folder.exists():
         shutil.rmtree(playlist_folder)

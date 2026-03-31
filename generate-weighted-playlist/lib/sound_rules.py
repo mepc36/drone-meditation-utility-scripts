@@ -1,5 +1,5 @@
 from .constants import (
-    HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     LOUD, QUIET, SLOW, FAST,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
@@ -65,33 +65,8 @@ def single_rhythm(panning) -> list:
     ]
 
 
-def rest_rhythm(panning) -> list:
-    return [
-        {
-            MUSICAL_DURATION: QUARTER_NOTE_REST,
-            POSSIBLE_PANNINGS: [panning],
-        },
-    ]
-
-
 def double_rhythm(panning1, panning2) -> list:
     return [*single_rhythm(panning1), *single_rhythm(panning2)]
-
-
-def single_rest_rhythm(panning, rest_panning) -> list:
-    return [*single_rhythm(panning), *rest_rhythm(rest_panning)]
-
-
-def single_rest_single_rhythm(panning, rest_panning, final_panning) -> list:
-    return [*single_rhythm(panning), *rest_rhythm(rest_panning), *single_rhythm(final_panning)]
-
-
-def triple_rhythm(panning1, panning2, panning3) -> list:
-    return [*single_rhythm(panning1), *single_rhythm(panning2), *single_rhythm(panning3)]
-
-
-def single_single_rest(panning1, panning2, rest_panning) -> list:
-    return [*single_rhythm(panning1), *single_rhythm(panning2), *rest_rhythm(rest_panning)]
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
