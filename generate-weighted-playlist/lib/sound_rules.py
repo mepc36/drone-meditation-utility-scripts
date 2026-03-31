@@ -113,7 +113,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 33,
+        MUSIC_PATTERN_PERCENT: 30,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: single_rhythm(HARD_LEFT),
@@ -128,22 +128,22 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 33,
+        MUSIC_PATTERN_PERCENT: 30,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: single_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 0,
+                RHYTHM_PERCENT: 50,
             },
             {
                 RHYTHM_PATTERN: double_rhythm(HARD_RIGHT, HARD_RIGHT),
-                RHYTHM_PERCENT: 100,
+                RHYTHM_PERCENT: 50,
             },
         ],
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 34,
+        MUSIC_PATTERN_PERCENT: 40,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: single_rhythm(DUALPAN),
