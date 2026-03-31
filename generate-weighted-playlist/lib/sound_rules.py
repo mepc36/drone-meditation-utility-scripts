@@ -59,21 +59,11 @@ def derive_type(pattern: list) -> str:
     )
 
 
-def _derive_panning_key(entry: dict):
+def derive_panning_key(entry: dict):
     rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
     return rp[0][0][POSSIBLE_PANNINGS][0]
-
-
-def _pannings_to_dict(pannings_list: list) -> dict:
-    result = {}
-    for entry in pannings_list:
-        key = _derive_panning_key(entry)
-        if key in result:
-            raise ValueError(f"Duplicate derived panning key: {key!r}")
-        result[key] = entry
-    return result
 
 
 def single_rhythm(panning) -> list:
@@ -120,25 +110,8 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm(HARD_CENTER),
-            # single_rest_single_rhythm(HARD_CENTER, HARD_CENTER, HARD_CENTER),
         ],
-    },
-    #     {
-    #     VOLUMES: [QUIET],
-    #     BPMS: [SLOW],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm(HARD_LEFT),
-    #         double_rhythm(HARD_LEFT, HARD_LEFT),
-    #     ],
-    # },
-    # {
-    #     VOLUMES: [QUIET],
-    #     BPMS: [SLOW],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm(HARD_RIGHT),
-    #         double_rhythm(HARD_RIGHT, HARD_RIGHT),
-    #     ],
-    # },
+    }
 ]
 
 
@@ -159,20 +132,6 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
             double_rhythm(HARD_RIGHT, HARD_RIGHT),
         ],
     },
-    #     {
-    #     VOLUMES: [FAST],
-    #     BPMS: [LOUD],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm(DIAGONAL_LEFT),
-    #     ],
-    # },
-    #         {
-    #     VOLUMES: [FAST],
-    #     BPMS: [LOUD],
-    #     RHYTHM_PATTERNS: [
-    #         single_rhythm(DIAGONAL_RIGHT),
-    #     ],
-    # },
                 {
         VOLUMES: [LOUD],
         BPMS: [FAST],
@@ -183,21 +142,28 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
 ]
 
 ACAPPELLA_MUSICAL_PATTERNS = [
+    #     {
+    #     VOLUMES: [QUIET],
+    #     BPMS: [SLOW],
+    #     RHYTHM_PATTERNS: [
+    #         single_rhythm(HARD_CENTER),
+    #     ],
+    # },
     {
-        VOLUMES: [QUIET],
+        VOLUMES: [LOUD],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm(DIAGONAL_LEFT),
         ],
     },
         {
-        VOLUMES: [QUIET],
+        VOLUMES: [LOUD],
         BPMS: [SLOW],
         RHYTHM_PATTERNS: [
             single_rhythm(DIAGONAL_RIGHT),
         ],
     },
-        ]
+]
 
 
 _SOUND_TYPE_RULES: list[dict] = [
@@ -221,11 +187,11 @@ _SOUND_TYPE_RULES: list[dict] = [
         DUALPAN_PARTNERS: [SNARESTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
-    # {
-    #     MUSICAL_GROUPING: ACAPPELLA,
-    #     DUALPAN_PARTNERS: [],
-    #     MUSICAL_PATTERNS: ACAPPELLA_MUSICAL_PATTERNS,
-    # },
+    {
+        MUSICAL_GROUPING: ACAPPELLA,
+        DUALPAN_PARTNERS: [],
+        MUSICAL_PATTERNS: ACAPPELLA_MUSICAL_PATTERNS,
+    },
     {
         MUSICAL_GROUPING: STRINGS,
         DUALPAN_PARTNERS: [],
@@ -248,8 +214,7 @@ for _rule in _SOUND_TYPE_RULES:
             f"Must be one of {sorted(_VALID_MUSICAL_GROUPINGS)!r}."
         )
 
-# Validate pattern shapes and first-beat panning consistency within each panning group,
-# then derive the panning key and convert lists to lookup dicts.
+# Validate pattern shapes and first-beat panning consistency within each panning group.
 for _rule in _SOUND_TYPE_RULES:
     _name = _rule[MUSICAL_GROUPING]
     for _group_entry in _rule[MUSICAL_PATTERNS]:
@@ -270,9 +235,6 @@ for _rule in _SOUND_TYPE_RULES:
                 f"first-beat pannings across rhythm_patterns: {_first_pannings!r}"
             )
 
-for _rule in _SOUND_TYPE_RULES:
-    _rule[MUSICAL_PATTERNS] = _pannings_to_dict(_rule[MUSICAL_PATTERNS])
-
 rules_by_sound_type: dict[str, dict] = {
     rule[MUSICAL_GROUPING]: rule for rule in _SOUND_TYPE_RULES
 }
@@ -283,17 +245,17 @@ for _rule in _SOUND_TYPE_RULES:
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' is missing '{DUALPAN_PARTNERS}'. Use [] if no dualpan."
         )
-    if _rule[DUALPAN_PARTNERS] and DUALPAN not in _rule[MUSICAL_PATTERNS]:
+    if _rule[DUALPAN_PARTNERS] and not any(derive_panning_key(e) == DUALPAN for e in _rule[MUSICAL_PATTERNS]):
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' declares dualpan_partners but has no 'dualpan' panning."
         )
 
 panning_compat: dict[str, set] = {
     group: {
-        pan
+        derive_panning_key(entry)
         for sound_type in types
-        for pan in rules_by_sound_type.get(sound_type, {}).get(MUSICAL_PATTERNS, {})
-        if pan is not UNTOUCHED
+        for entry in rules_by_sound_type.get(sound_type, {}).get(MUSICAL_PATTERNS, [])
+        if derive_panning_key(entry) is not UNTOUCHED
     }
     for group, types in SOUND_GROUP_TYPES.items()
 }
@@ -309,9 +271,12 @@ _PANNING_WEIGHT_BY_VALUE: dict = {
 }
 
 for _rule in _SOUND_TYPE_RULES:
-    for _pan in _rule[MUSICAL_PATTERNS]:
-        if _pan is UNTOUCHED:
+    _seen_pans: set = set()
+    for _entry in _rule[MUSICAL_PATTERNS]:
+        _pan = derive_panning_key(_entry)
+        if _pan is UNTOUCHED or _pan in _seen_pans:
             continue
+        _seen_pans.add(_pan)
         _label, _weight = _PANNING_WEIGHT_BY_VALUE[_pan]
         if _weight == 0:
             raise ValueError(
@@ -322,7 +287,7 @@ for _rule in _SOUND_TYPE_RULES:
 # Validate that every rhythm_pattern_weights key is actually used in sound_rules.
 _used_rhythm_types: set[str] = set()
 for _rule in _SOUND_TYPE_RULES:
-    for _pan_entry in _rule[MUSICAL_PATTERNS].values():
+    for _pan_entry in _rule[MUSICAL_PATTERNS]:
         _rp = _pan_entry[RHYTHM_PATTERNS]
         if _rp and _rp[0] is UNTOUCHED:
             continue

@@ -2,13 +2,13 @@
   "bpms": "75:118",
   "slow_to_fast_bpm_percents": "30:70",
   "num_unique_samples": 200,
-  "center_diagonal_dualpan_left_right_percents": "50:0:10:20:20",
+  "center_diagonal_dualpan_left_right_percents": "40:10:10:20:20",
   "samples_to_silence_percents": "85:15",
   "loud_quiet_values": "0:-28",
   "loud_quiet_percents": "50:50",
   "silence_lengths_millisec": "1330",
   "silence_lengths_percents": "100",
-  "kicksnare_stab_acappella_percents": "65:35:0",
+  "kicksnare_stab_acappella_percents": "60:30:10",
   "rhythm_pattern_weights": {
     "single": 10,
     "double": 10

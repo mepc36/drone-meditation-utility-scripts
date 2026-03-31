@@ -10,7 +10,7 @@ from .constants import (
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
 )
-from .sound_rules import derive_type, panning_compat, pattern_weights, rules_by_sound_type
+from .sound_rules import derive_panning_key, derive_type, panning_compat, pattern_weights, rules_by_sound_type
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ def _allocate_panning_slots(group_targets: dict[str, int], available_slots: dict
 
     ordered_by_most_constrained = sorted(
         group_targets,
-        key=lambda g: sum(available_slots.get(p, 0) for p in _directional_pannings_for_group(g)),
+        key=lambda g: (sum(available_slots.get(p, 0) for p in _directional_pannings_for_group(g)), group_targets[g]),
     )
 
     def fill_group(group: str, slots_needed: int) -> None:
@@ -126,12 +126,12 @@ def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule[MUSICAL_PATTERNS].get(panning)
-        if pan_rule is None:
-            continue
-        for vol_label in pan_rule[VOLUMES]:
-            for bpm_label in pan_rule[BPMS]:
-                result.add((vol_label, bpm_label))
+        for pan_rule in rule[MUSICAL_PATTERNS]:
+            if derive_panning_key(pan_rule) != panning:
+                continue
+            for vol_label in pan_rule[VOLUMES]:
+                for bpm_label in pan_rule[BPMS]:
+                    result.add((vol_label, bpm_label))
     return result
 
 
@@ -195,23 +195,23 @@ def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
         rule = rules_by_sound_type.get(sound_type)
         if rule is None:
             continue
-        pan_rule = rule[MUSICAL_PATTERNS].get(slot.panning)
-        if pan_rule is None:
-            continue
-        if slot.volume_label not in pan_rule[VOLUMES]:
-            continue
-        if slot.bpm_label not in pan_rule[BPMS]:
-            continue
-        for entry in pan_rule.get(RHYTHM_PATTERNS, []):
-            if entry is UNTOUCHED:
-                pat = (UNTOUCHED,)
-            elif isinstance(entry, list):
-                pat = (derive_type(entry),) + tuple(_hashable_beat(b) for b in entry)
-            else:
-                raise TypeError(f"Unexpected rhythm_pattern entry: {entry!r}")
-            if pat not in seen:
-                seen.add(pat)
-                found.append(pat)
+        for pan_rule in rule[MUSICAL_PATTERNS]:
+            if derive_panning_key(pan_rule) != slot.panning:
+                continue
+            if slot.volume_label not in pan_rule[VOLUMES]:
+                continue
+            if slot.bpm_label not in pan_rule[BPMS]:
+                continue
+            for entry in pan_rule.get(RHYTHM_PATTERNS, []):
+                if entry is UNTOUCHED:
+                    pat = (UNTOUCHED,)
+                elif isinstance(entry, list):
+                    pat = (derive_type(entry),) + tuple(_hashable_beat(b) for b in entry)
+                else:
+                    raise TypeError(f"Unexpected rhythm_pattern entry: {entry!r}")
+                if pat not in seen:
+                    seen.add(pat)
+                    found.append(pat)
     return found
 
 
