@@ -260,30 +260,6 @@ panning_compat: dict[str, set] = {
     for group, types in SOUND_GROUP_TYPES.items()
 }
 
-# Validate that every panning used in sound_rules has a non-zero allocation in config.
-_PANNING_WEIGHT_BY_VALUE: dict = {
-    HARD_CENTER:    ("center",   _conf["center_weight"]),
-    DIAGONAL_LEFT:  ("diagonal", _conf["diagonal_weight"]),
-    DIAGONAL_RIGHT: ("diagonal", _conf["diagonal_weight"]),
-    DUALPAN:        ("dualpan",  _conf["dualpan_weight"]),
-    HARD_LEFT:      ("left",     _conf["left_weight"]),
-    HARD_RIGHT:     ("right",    _conf["right_weight"]),
-}
-
-for _rule in _SOUND_TYPE_RULES:
-    _seen_pans: set = set()
-    for _entry in _rule[MUSICAL_PATTERNS]:
-        _pan = derive_panning_key(_entry)
-        if _pan is UNTOUCHED or _pan in _seen_pans:
-            continue
-        _seen_pans.add(_pan)
-        _label, _weight = _PANNING_WEIGHT_BY_VALUE[_pan]
-        if _weight == 0:
-            raise ValueError(
-                f"sound_rules uses '{_label}' panning for '{_rule[MUSICAL_GROUPING]}' "
-                f"but '{_cfg.CFG_PANNING_PERCENTS}' allocates 0% to it."
-            )
-
 # Validate that every rhythm_pattern_weights key is actually used in sound_rules.
 _used_rhythm_types: set[str] = set()
 for _rule in _SOUND_TYPE_RULES:

@@ -1,11 +1,8 @@
 {
   "bpms": "100",
-  "slow_to_fast_bpm_percents": "100",
   "num_unique_samples": 200,
-  "center_diagonal_dualpan_left_right_percents": "28:17:38:9:8",
   "samples_to_silence_percents": "100",
   "loud_quiet_values": "0:-22",
-  "loud_quiet_percents": "50:50",
   "silence_lengths_millisec": "5900",
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "60:30:10"
