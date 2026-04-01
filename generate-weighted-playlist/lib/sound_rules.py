@@ -1,7 +1,6 @@
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
-    LOUD, QUIET, SLOW, FAST,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     SOUND_GROUP_TYPES,
     QUARTER_NOTE, QUARTER_NOTE_REST,
@@ -11,6 +10,7 @@ from .constants import (
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
 )
+from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
 
 def derive_type(pattern: list) -> str:

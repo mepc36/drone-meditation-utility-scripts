@@ -5,12 +5,12 @@ from dataclasses import dataclass
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
-    LOUD, QUIET, SLOW, FAST,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
+from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type
 
 

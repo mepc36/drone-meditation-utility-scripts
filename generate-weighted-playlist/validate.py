@@ -1,4 +1,4 @@
-from lib import constants, sound_rules, deck_builder, audio_processing
+from lib import constants, runtime_constants, sound_rules, deck_builder, audio_processing
 print('All imports OK')
 print('HARD_CENTER:', constants.HARD_CENTER, type(constants.HARD_CENTER).__name__)
 print('HARD_LEFT:', constants.HARD_LEFT)
@@ -8,10 +8,10 @@ print('DIAGONAL_RIGHT:', constants.DIAGONAL_RIGHT)
 print('DUALPAN_LEFTRIGHT:', constants.DUALPAN_LEFTRIGHT, type(constants.DUALPAN_LEFTRIGHT).__name__)
 print('DUALPAN_DIAGONAL:', constants.DUALPAN_DIAGONAL, type(constants.DUALPAN_DIAGONAL).__name__)
 print('UNTOUCHED:', constants.UNTOUCHED)
-print('LOUD:', constants.LOUD, type(constants.LOUD).__name__)
-print('QUIET:', constants.QUIET, type(constants.QUIET).__name__)
-print('SLOW:', constants.SLOW, type(constants.SLOW).__name__)
-print('FAST:', constants.FAST, type(constants.FAST).__name__)
+print('LOUD:', runtime_constants.LOUD, type(runtime_constants.LOUD).__name__)
+print('QUIET:', runtime_constants.QUIET, type(runtime_constants.QUIET).__name__)
+print('SLOW:', runtime_constants.SLOW, type(runtime_constants.SLOW).__name__)
+print('FAST:', runtime_constants.FAST, type(runtime_constants.FAST).__name__)
 
 import lib.sound_rules as sr
 from lib.constants import (

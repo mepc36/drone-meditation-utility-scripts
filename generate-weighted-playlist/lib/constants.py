@@ -1,5 +1,3 @@
-from . import config as _cfg
-
 # Rhythmic durations (in quarter notes)
 QUARTER_NOTE = 1
 QUARTER_NOTE_REST = 0
@@ -38,16 +36,6 @@ SOUND_GROUP_TYPES: dict[str, set[str]] = {
 DUALPAN_LEFTRIGHT = 2.0   # sentinel: two samples panned hard left + hard right simultaneously
 DUALPAN_DIAGONAL  = 3.0   # sentinel: two samples panned diagonal left + diagonal right simultaneously
 UNTOUCHED         = None  # sentinel: pass audio through without any panning or processing
-
-# ── Config-sourced constants ───────────────────────────────────────────────────
-# Loaded at import time so that sound_rules (which imports this module) builds
-# its panning/volume/bpm rule dictionaries with real numeric values.
-
-_conf = _cfg.load()
-LOUD:  float = max(_conf['volume_levels_db'])
-QUIET: float = min(_conf['volume_levels_db'])
-SLOW:  float = min(_conf['bpm_values'])
-FAST:  float = max(_conf['bpm_values'])
 
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
 SINGLE_RHYTHM             = 'single'

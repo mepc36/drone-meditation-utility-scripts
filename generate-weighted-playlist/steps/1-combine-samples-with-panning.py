@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+import json
 import random
 import shutil
 from collections import deque
@@ -16,10 +17,13 @@ import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
 from lib.deck_builder import SlotSpec, plan_output_files
 from lib.sample_queue import (
+    build_biased_reservations,
     create_shuffled_sample_queue,
     draw_next_sample_of_types,
     draw_next_strings_sample,
     load_samples_grouped_by_type,
+    resolve_random_entries,
+    validate_sample_bias,
 )
 from lib.sound_rules import (
     passes_through_unmodified,
@@ -30,7 +34,6 @@ from lib.sound_rules import (
 from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
-    LOUD, SLOW, FAST, QUIET,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     STRINGS, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
@@ -41,6 +44,7 @@ from lib.constants import (
     BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE,
     MAX_DRAW_RETRIES,
 )
+from lib.runtime_constants import LOUD, QUIET, SLOW, FAST
 
 
 def clear_output_directory(output_dir: Path) -> None:
@@ -99,6 +103,7 @@ def resolve_slot(
     all_samples: list[str],
     seen_combinations: set,
     conf: dict,
+    forced_primary: str | None = None,
 ) -> tuple[list[str], dict[str, str], float, int, int] | None:
     loudest_idx = conf['loudest_volume_index']
     quietest_idx = conf['quietest_volume_index']
@@ -117,8 +122,12 @@ def resolve_slot(
             return None
         return sample_names, pan_assignments, 0.0, 0, slowest_idx
 
-    for _ in range(MAX_DRAW_RETRIES):
-        primary = draw_next_sample_of_types(sample_queue, all_samples, SOUND_GROUP_TYPES[slot.sound_group])
+    is_biased = forced_primary is not None
+
+    for _ in range(1 if is_biased else MAX_DRAW_RETRIES):
+        primary = forced_primary if is_biased else draw_next_sample_of_types(
+            sample_queue, all_samples, SOUND_GROUP_TYPES[slot.sound_group]
+        )
         if primary is None:
             return None
 
@@ -156,7 +165,7 @@ def resolve_slot(
             raise ValueError(f"Unhandled panning value: {slot.panning!r}")
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        if combo_key not in seen_combinations:
+        if is_biased or combo_key not in seen_combinations:
             volume_db = volume_levels_db[loudest_idx if slot.volume_label == LOUD else quietest_idx]
             volume_idx = loudest_idx if slot.volume_label == LOUD else quietest_idx
             bpm_idx = slowest_idx if slot.bpm_label == SLOW else fastest_idx
@@ -215,6 +224,25 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
         count = group_appearances[group]
         realized_pct = (count / non_strings_created * 100) if non_strings_created > 0 else 0
         print(f"  {group}: {count} files ({realized_pct:.1f}%, target {target_pct}%)")
+
+
+def print_biased_sample_report(
+    bias_config: dict,
+    sample_usage_count: dict[str, int],
+    group_targets: dict[str, int],
+) -> None:
+    print(f"\nBiased Sample Distribution:")
+    for group, entries in bias_config.items():
+        group_total = group_targets.get(group, 0)
+        for entry in entries:
+            if 'biased_sample' not in entry:
+                continue
+            sample = entry['biased_sample']
+            target_pct = entry['biased_pool_pct']
+            target_count = round(group_total * target_pct / 100)
+            actual_count = sample_usage_count.get(sample, 0)
+            actual_pct = (actual_count / group_total * 100) if group_total > 0 else 0
+            print(f"  {group}/{sample}: {actual_count} uses ({actual_pct:.1f}%, target {target_pct}%/{target_count} slots)")
 
 
 def generate_silence_files(
@@ -351,6 +379,17 @@ def main() -> None:
     sample_usage_count: dict[str, int] = {s: 0 for s in all_samples}
     seen_combinations: set = set()
 
+    if conf.get('sample_bias'):
+        validate_sample_bias(conf['sample_bias'], samples_by_type)
+    resolved_bias = resolve_random_entries(conf.get('sample_bias') or {}, samples_by_type)
+    biased_reservations = build_biased_reservations(resolved_bias, group_targets)
+
+    if resolved_bias:
+        _sidecar_dir = cfg.OUTPUT_AUDIO_DIR.parent / "analyze-ratios"
+        _sidecar_dir.mkdir(parents=True, exist_ok=True)
+        with open(_sidecar_dir / "last-run-resolved-bias.json", "w") as _f:
+            json.dump(resolved_bias, _f, indent=2)
+
     first_sample = list(samples_by_type.values())[0][0]
     _, sample_rate = load_audio(input_audio_dir, first_sample)
 
@@ -360,13 +399,19 @@ def main() -> None:
     volume_counts = [0] * len(conf['volume_levels_db'])
 
     for slot in full_deck:
-        resolved = resolve_slot(slot, sample_queue, all_samples, seen_combinations, conf)
+        forced_primary = None
+        reservation = biased_reservations.get(slot.sound_group)
+        if reservation:
+            forced_primary = reservation.popleft()
+
+        resolved = resolve_slot(slot, sample_queue, all_samples, seen_combinations, conf, forced_primary=forced_primary)
         if resolved is None:
             continue
         sample_names, pan_assignments, volume_db, volume_idx, bpm_idx = resolved
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        seen_combinations.add(combo_key)
+        if forced_primary is None:
+            seen_combinations.add(combo_key)
         for name in sample_names:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
 
@@ -442,6 +487,8 @@ def main() -> None:
         print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
 
     print_sound_group_report(group_appearances, non_strings_created, conf)
+    if resolved_bias:
+        print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
 
 

@@ -7,5 +7,43 @@
   "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "60:30:10",
   "strings_volume_reduction": 3,
-  "acappella_volume_reduction": 17
+  "acappella_volume_reduction": 17,
+  "sample_bias": {
+    "is_sample_bias_enabled": true,
+    "kicksnare": [
+      {
+        "is_random": true,
+        "biased_pool_pct": 10,
+        "include_all": true,
+        "include": []
+      },
+      {
+        "is_random": true,
+        "biased_pool_pct": 10,
+        "include_all": true,
+        "include": []
+      },
+      {
+        "is_random": true,
+        "biased_pool_pct": 10,
+        "include_all": true,
+        "include": []
+      },
+      {
+        "is_random": true,
+        "biased_pool_pct": 10,
+        "include_all": true,
+        "include": []
+      },
+      {
+        "is_random": true,
+        "biased_pool_pct": 10,
+        "include_all": true,
+        "include": []
+      },
+      {
+        "unbiased_pool_pct": 50
+      }
+    ]
+  }
 }
