@@ -18,8 +18,11 @@ from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
+    EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM,
     RHYTHM_PATTERN_SEQUENCES,
-    SINGLE_RHYTHM, DOUBLE_RHYTHM,
+    QUARTER_RHYTHM, DOUBLE_RHYTHM,
     MUSICAL_PATTERNS, VOLUMES, BPMS, MUSIC_PATTERN_PERCENT,
     RHYTHM_PATTERNS, RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
@@ -70,6 +73,9 @@ def _is_strings_file(fname):
 _BEAT_NAMES = {
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    EIGHTH:            BEAT_NAME_EIGHTH,
+    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
 }
 SUFFIX_MAP = {
     '-'.join(_BEAT_NAMES[b] for b in beats): name
@@ -185,7 +191,7 @@ expected_pan = {
 }
 
 # ── Print table ───────────────────────────────────────────────────────────────
-_LOG_RHYTHMS = [SINGLE_RHYTHM, DOUBLE_RHYTHM]
+_LOG_RHYTHMS = [QUARTER_RHYTHM, DOUBLE_RHYTHM]
 
 def _status(actual, expected):
     if expected == 0:
@@ -322,9 +328,9 @@ DIMS = [
     },
     {
         "title": "Rhythm Pattern",
-        "labels": list(RHYTHM_PATTERN_SEQUENCES.keys()),
-        "counts": [rhy_counts.get(k, 0) for k in RHYTHM_PATTERN_SEQUENCES],
-        "expected": [round(expected_rhy.get(k, 0)) for k in RHYTHM_PATTERN_SEQUENCES],
+        "labels": [k for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
+        "counts": [rhy_counts.get(k, 0) for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
+        "expected": [round(expected_rhy.get(k, 0)) for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
     },
 ]
 

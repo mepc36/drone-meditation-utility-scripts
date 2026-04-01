@@ -3,8 +3,9 @@ from .constants import (
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     SOUND_GROUP_TYPES,
-    QUARTER_NOTE, QUARTER_NOTE_REST,
-    SINGLE_RHYTHM, DOUBLE_RHYTHM, SINGLE_REST_RHYTHM, SINGLE_REST_SINGLE_RHYTHM, TRIPLE_RHYTHM, SINGLE_SINGLE_REST_RHYTHM,
+    QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    QUARTER_RHYTHM, DOUBLE_RHYTHM, QUARTER_REST_RHYTHM, QUARTER_REST_QUARTER_RHYTHM, TRIPLE_RHYTHM, QUARTER_QUARTER_REST_RHYTHM,
+    EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_QUARTER_RHYTHM, QUARTER_EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_RHYTHM, SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
@@ -15,7 +16,7 @@ from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
 def derive_type(pattern: list) -> str:
     if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE:
-        return SINGLE_RHYTHM
+        return QUARTER_RHYTHM
     if (len(pattern) == 2
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE):
@@ -23,12 +24,12 @@ def derive_type(pattern: list) -> str:
     if (len(pattern) == 2
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST):
-        return SINGLE_REST_RHYTHM
+        return QUARTER_REST_RHYTHM
     if (len(pattern) == 3
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST
             and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return SINGLE_REST_SINGLE_RHYTHM
+        return QUARTER_REST_QUARTER_RHYTHM
     if (len(pattern) == 3
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
@@ -38,14 +39,47 @@ def derive_type(pattern: list) -> str:
             and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
             and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE_REST):
-        return SINGLE_SINGLE_REST_RHYTHM
+        return QUARTER_QUARTER_REST_RHYTHM
+    if (len(pattern) == 2
+            and pattern[0][MUSICAL_DURATION] == EIGHTH
+            and pattern[1][MUSICAL_DURATION] == EIGHTH):
+        return EIGHTH_EIGHTH_RHYTHM
+    if (len(pattern) == 3
+            and pattern[0][MUSICAL_DURATION] == EIGHTH
+            and pattern[1][MUSICAL_DURATION] == EIGHTH
+            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
+        return EIGHTH_EIGHTH_QUARTER_RHYTHM
+    if (len(pattern) == 3
+            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
+            and pattern[1][MUSICAL_DURATION] == EIGHTH
+            and pattern[2][MUSICAL_DURATION] == EIGHTH):
+        return QUARTER_EIGHTH_EIGHTH_RHYTHM
+    if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == SIXTEENTH:
+        return SIXTEENTH_RHYTHM
+    if (len(pattern) == 5
+            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
+            and pattern[1][MUSICAL_DURATION] == SIXTEENTH
+            and pattern[2][MUSICAL_DURATION] == SIXTEENTH
+            and pattern[3][MUSICAL_DURATION] == SIXTEENTH
+            and pattern[4][MUSICAL_DURATION] == QUARTER_NOTE):
+        return SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM
+    if (len(pattern) == 2
+            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
+            and pattern[1][MUSICAL_DURATION] == DOTTED_EIGHTH):
+        return SIXTEENTH_DOTTEDEIGHTH_RHYTHM
     raise ValueError(
         f"Cannot derive pattern type from: {pattern!r}. "
-        f"Must be {SINGLE_RHYTHM} (len=1, QN), {DOUBLE_RHYTHM} (len=2, QN+QN), "
-        f"{SINGLE_REST_RHYTHM} (len=2, QN+QNR), "
-        f"{SINGLE_REST_SINGLE_RHYTHM} (len=3, QN+QNR+QN), "
+        f"Must be {QUARTER_RHYTHM} (len=1, QN), {DOUBLE_RHYTHM} (len=2, QN+QN), "
+        f"{QUARTER_REST_RHYTHM} (len=2, QN+QNR), "
+        f"{QUARTER_REST_QUARTER_RHYTHM} (len=3, QN+QNR+QN), "
         f"{TRIPLE_RHYTHM} (len=3, QN+QN+QN), "
-        f"or {SINGLE_SINGLE_REST_RHYTHM} (len=3, QN+QN+QNR)."
+        f"{QUARTER_QUARTER_REST_RHYTHM} (len=3, QN+QN+QNR), "
+        f"{EIGHTH_EIGHTH_RHYTHM} (len=2, E+E), "
+        f"{EIGHTH_EIGHTH_QUARTER_RHYTHM} (len=3, E+E+QN), "
+        f"{QUARTER_EIGHTH_EIGHTH_RHYTHM} (len=3, QN+E+E), "
+        f"{SIXTEENTH_RHYTHM} (len=1, S), "
+        f"{SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM} (len=5, S+S+S+S+QN), "
+        f"or {SIXTEENTH_DOTTEDEIGHTH_RHYTHM} (len=2, S+DE)."
     )
 
 
@@ -56,7 +90,7 @@ def derive_panning_key(entry: dict):
     return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
 
 
-def single_rhythm(panning) -> list:
+def quarter_rhythm(panning) -> list:
     return [
         {
             MUSICAL_DURATION: QUARTER_NOTE,
@@ -66,7 +100,53 @@ def single_rhythm(panning) -> list:
 
 
 def double_rhythm(panning1, panning2) -> list:
-    return [*single_rhythm(panning1), *single_rhythm(panning2)]
+    return [*quarter_rhythm(panning1), *quarter_rhythm(panning2)]
+
+
+def eighth_eighth_rhythm(panning1, panning2) -> list:
+    return [
+        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning1]},
+        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning2]},
+    ]
+
+
+def eighth_eighth_quarter_rhythm(panning1, panning2, panning3) -> list:
+    return [
+        {MUSICAL_DURATION: EIGHTH,        POSSIBLE_PANNINGS: [panning1]},
+        {MUSICAL_DURATION: EIGHTH,        POSSIBLE_PANNINGS: [panning2]},
+        {MUSICAL_DURATION: QUARTER_NOTE,  POSSIBLE_PANNINGS: [panning3]},
+    ]
+
+
+def quarter_eighth_eighth_rhythm(panning1, panning2, panning3) -> list:
+    return [
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning1]},
+        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning2]},
+        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning3]},
+    ]
+
+
+def sixteenth_rhythm(panning) -> list:
+    return [
+        {MUSICAL_DURATION: SIXTEENTH, POSSIBLE_PANNINGS: [panning]},
+    ]
+
+
+def sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
+    return [
+        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+    ]
+
+
+def sixteenth_dottedeighth_rhythm(panning) -> list:
+    return [
+        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: DOTTED_EIGHTH, POSSIBLE_PANNINGS: [panning]},
+    ]
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
@@ -76,44 +156,44 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(HARD_CENTER),
+                RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
                 RHYTHM_PERCENT: 100,
             },
         ],
     },
 ]
 
+KICKSTAB_SNARESTAB_RHYTHM_PATTERNS = [
+            {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 50,
+            },
+            {
+                RHYTHM_PATTERN: eighth_eighth_quarter_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
+                RHYTHM_PERCENT: 20,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
+                RHYTHM_PERCENT: 20,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 10,
+            },
+        ]
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         MUSIC_PATTERN_PERCENT: 30,
-        RHYTHM_PATTERNS: [
-            {
-                RHYTHM_PATTERN: single_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 50,
-            },
-            {
-                RHYTHM_PATTERN: double_rhythm(HARD_LEFT, HARD_LEFT),
-                RHYTHM_PERCENT: 50,
-            },
-        ],
+        RHYTHM_PATTERNS: KICKSTAB_SNARESTAB_RHYTHM_PATTERNS
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         MUSIC_PATTERN_PERCENT: 30,
-        RHYTHM_PATTERNS: [
-            {
-                RHYTHM_PATTERN: single_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 50,
-            },
-            {
-                RHYTHM_PATTERN: double_rhythm(HARD_RIGHT, HARD_RIGHT),
-                RHYTHM_PERCENT: 50,
-            },
-        ],
+        RHYTHM_PATTERNS: KICKSTAB_SNARESTAB_RHYTHM_PATTERNS
     },
     {
         VOLUMES: [LOUD],
@@ -121,7 +201,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 40,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(DUALPAN_LEFTRIGHT),
+                RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
                 RHYTHM_PERCENT: 100,
             },
         ],
@@ -136,7 +216,7 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: single_rhythm(DUALPAN_LEFTRIGHT),
+                RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
                 RHYTHM_PERCENT: 100,
             },
         ],

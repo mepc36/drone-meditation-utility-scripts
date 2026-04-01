@@ -42,6 +42,8 @@ from lib.constants import (
     MUSIC_PATTERN_PERCENT,
     QUARTER_NOTE, QUARTER_NOTE_REST,
     BEAT_NAME_QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE,
+    EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
     MAX_DRAW_RETRIES,
 )
 from lib.runtime_constants import LOUD, QUIET, SLOW, FAST
@@ -67,6 +69,9 @@ def panning_group_from_assignments(sample_names: list[str], pan_assignments: dic
 BEAT_NAMES: dict[float, str] = {
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
+    EIGHTH:            BEAT_NAME_EIGHTH,
+    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
 }
 
 

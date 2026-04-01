@@ -1,6 +1,9 @@
 # Rhythmic durations (in quarter notes)
-QUARTER_NOTE = 1
+QUARTER_NOTE   = 1
 QUARTER_NOTE_REST = 0
+EIGHTH         = 0.5
+SIXTEENTH      = 0.25
+DOTTED_EIGHTH  = 0.75
 
 # Panning positions (numeric: -1.0 = full left, 0.0 = center, 1.0 = full right)
 DIAGONAL_PAN = 0.38
@@ -38,23 +41,35 @@ DUALPAN_DIAGONAL  = 3.0   # sentinel: two samples panned diagonal left + diagona
 UNTOUCHED         = None  # sentinel: pass audio through without any panning or processing
 
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
-SINGLE_RHYTHM             = 'single'
-DOUBLE_RHYTHM             = 'double'
-SINGLE_REST_RHYTHM        = 'single_rest'
-SINGLE_REST_SINGLE_RHYTHM = 'single_rest_single'
-TRIPLE_RHYTHM             = 'triple'
-SINGLE_SINGLE_REST_RHYTHM = 'single_single_rest'
+QUARTER_RHYTHM                                          = 'quarter'
+DOUBLE_RHYTHM                                          = 'double'
+QUARTER_REST_RHYTHM                                    = 'quarter_rest'
+QUARTER_REST_QUARTER_RHYTHM                            = 'quarter_rest_quarter'
+TRIPLE_RHYTHM                                          = 'triple'
+QUARTER_QUARTER_REST_RHYTHM                            = 'quarter_quarter_rest'
+EIGHTH_EIGHTH_RHYTHM                                   = 'eighth_eighth'
+EIGHTH_EIGHTH_QUARTER_RHYTHM                           = 'eighth_eighth_quarter'
+QUARTER_EIGHTH_EIGHTH_RHYTHM                           = 'quarter_eighth_eighth'
+SIXTEENTH_RHYTHM                                       = 'sixteenth'
+SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM = 'sixteenth_sixteenth_sixteenth_sixteenth_quarter'
+SIXTEENTH_DOTTEDEIGHTH_RHYTHM                          = 'sixteenth_dottedeighth'
 
 # Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
 # Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
 # Update this whenever a new rhythm pattern is added.
-RHYTHM_PATTERN_SEQUENCES: dict[str, tuple[int, ...]] = {
-    SINGLE_RHYTHM:             (QUARTER_NOTE,),
-    DOUBLE_RHYTHM:             (QUARTER_NOTE, QUARTER_NOTE),
-    SINGLE_REST_RHYTHM:        (QUARTER_NOTE, QUARTER_NOTE_REST),
-    SINGLE_REST_SINGLE_RHYTHM: (QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
-    TRIPLE_RHYTHM:             (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
-    SINGLE_SINGLE_REST_RHYTHM: (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
+RHYTHM_PATTERN_SEQUENCES: dict[str, tuple] = {
+    QUARTER_RHYTHM:                                      (QUARTER_NOTE,),
+    DOUBLE_RHYTHM:                                       (QUARTER_NOTE, QUARTER_NOTE),
+    QUARTER_REST_RHYTHM:                                 (QUARTER_NOTE, QUARTER_NOTE_REST),
+    QUARTER_REST_QUARTER_RHYTHM:                         (QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
+    TRIPLE_RHYTHM:                                       (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
+    QUARTER_QUARTER_REST_RHYTHM:                         (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
+    EIGHTH_EIGHTH_RHYTHM:                                (EIGHTH, EIGHTH),
+    EIGHTH_EIGHTH_QUARTER_RHYTHM:                        (EIGHTH, EIGHTH, QUARTER_NOTE),
+    QUARTER_EIGHTH_EIGHTH_RHYTHM:                        (QUARTER_NOTE, EIGHTH, EIGHTH),
+    SIXTEENTH_RHYTHM:                                    (SIXTEENTH,),
+    SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM: (SIXTEENTH, SIXTEENTH, SIXTEENTH, SIXTEENTH, QUARTER_NOTE),
+    SIXTEENTH_DOTTEDEIGHTH_RHYTHM:                       (SIXTEENTH, DOTTED_EIGHTH),
 }
 
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
@@ -81,6 +96,9 @@ PANNING_LEFT_OR_RIGHT = 'leftorright'
 # ── Beat name strings for output filenames ────────────────────────────────────
 BEAT_NAME_QUARTER_NOTE_REST = 'quarternoterest'
 BEAT_NAME_QUARTER_NOTE      = 'quarter'
+BEAT_NAME_EIGHTH            = 'eighth'
+BEAT_NAME_SIXTEENTH         = 'sixteenth'
+BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
 
 # ── Operational limits ────────────────────────────────────────────────────────
 MAX_DRAW_RETRIES = 20
