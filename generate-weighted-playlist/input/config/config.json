@@ -13,36 +13,36 @@
     "kicksnare": [
       {
         "is_random": true,
-        "biased_pool_pct": 10,
+        "biased_pool_pct": 5,
         "include_all": true,
         "include": []
       },
       {
         "is_random": true,
-        "biased_pool_pct": 10,
+        "biased_pool_pct": 5,
         "include_all": true,
         "include": []
       },
       {
         "is_random": true,
-        "biased_pool_pct": 10,
+        "biased_pool_pct": 5,
         "include_all": true,
         "include": []
       },
       {
         "is_random": true,
-        "biased_pool_pct": 10,
+        "biased_pool_pct": 5,
         "include_all": true,
         "include": []
       },
       {
         "is_random": true,
-        "biased_pool_pct": 10,
+        "biased_pool_pct": 5,
         "include_all": true,
         "include": []
       },
       {
-        "unbiased_pool_pct": 50
+        "unbiased_pool_pct": 75
       }
     ]
   }
