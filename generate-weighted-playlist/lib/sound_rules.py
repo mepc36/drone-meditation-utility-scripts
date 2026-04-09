@@ -169,16 +169,12 @@ KICKSTAB_SNARESTAB_RHYTHM_PATTERNS = [
                 RHYTHM_PERCENT: 50,
             },
             {
-                RHYTHM_PATTERN: eighth_eighth_quarter_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
-                RHYTHM_PERCENT: 20,
-            },
-            {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
-                RHYTHM_PERCENT: 20,
+                RHYTHM_PERCENT: 35,
             },
             {
                 RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
+                RHYTHM_PERCENT: 15,
             },
         ]
 

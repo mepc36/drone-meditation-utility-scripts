@@ -335,6 +335,20 @@ DIMS = [
 ]
 
 if _resolved_bias:
+    _all_biased_samples: list[str] = [
+        _e['biased_sample']
+        for _grp_entries in _resolved_bias.values()
+        for _e in _grp_entries
+        if 'biased_sample' in _e
+    ]
+    _total_biased_expected: int = sum(
+        round(round(N * (cfg_sound_group_pcts[SOUND_GROUP_NAMES.index(_g)] if _g in SOUND_GROUP_NAMES else 0) / 100) * _e['biased_pool_pct'] / 100)
+        for _g, _g_entries in _resolved_bias.items()
+        for _e in _g_entries
+        if 'biased_sample' in _e
+    )
+    _unbiased_added = False
+
     _bias_labels: list[str] = []
     _bias_counts: list[int] = []
     _bias_expected: list[int] = []
@@ -344,18 +358,24 @@ if _resolved_bias:
         _grp_pct = cfg_sound_group_pcts[_grp_idx] if _grp_idx >= 0 else 0
         _grp_n = round(N * _grp_pct / 100)
         for _entry in _entries:
-            if 'biased_sample' not in _entry:
-                continue
-            _sample = _entry['biased_sample']
-            _was_random = _entry.get('was_random', False)
-            _count = sum(1 for f in wav if _file_contains_sample(f, _sample))
-            _expected = round(_grp_n * _entry['biased_pool_pct'] / 100)
-            _word = _sample.split('_')[1] if '_' in _sample else _sample
-            _label = _word
-            _bias_labels.append(_label)
-            _bias_counts.append(_count)
-            _bias_expected.append(_expected)
-            _bias_was_random.append(_was_random)
+            if 'biased_sample' in _entry:
+                _sample = _entry['biased_sample']
+                _was_random = _entry.get('was_random', False)
+                _count = sum(1 for f in wav if _file_contains_sample(f, _sample))
+                _expected = round(_grp_n * _entry['biased_pool_pct'] / 100)
+                _word = _sample.split('_')[1] if '_' in _sample else _sample
+                _bias_labels.append(_word)
+                _bias_counts.append(_count)
+                _bias_expected.append(_expected)
+                _bias_was_random.append(_was_random)
+            elif 'unbiased_pool_pct' in _entry and not _unbiased_added:
+                _unbiased_added = True
+                _count = sum(1 for f in wav if not any(_file_contains_sample(f, s) for s in _all_biased_samples))
+                _expected = N - _total_biased_expected
+                _bias_labels.append('unbiased')
+                _bias_counts.append(_count)
+                _bias_expected.append(_expected)
+                _bias_was_random.append(False)
     if _bias_labels:
         DIMS.append({
             "title": "Biased Samples",
