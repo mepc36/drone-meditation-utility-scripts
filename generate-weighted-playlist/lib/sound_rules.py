@@ -163,38 +163,11 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
     },
 ]
 
-KICKSTAB_SNARESTAB_RHYTHM_PATTERNS = [
-            {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 25,
-            },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
-                RHYTHM_PERCENT: 12,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 13,
-            },
-                        {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 25,
-            },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT, HARD_RIGHT, HARD_RIGHT),
-                RHYTHM_PERCENT: 12,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 13,
-            },
-        ]
-
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
-    {
+        {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 30,
+        MUSIC_PATTERN_PERCENT: 15,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
@@ -214,7 +187,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 30,
+        MUSIC_PATTERN_PERCENT: 15,
         RHYTHM_PATTERNS: [
                         {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
@@ -234,7 +207,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 40,
+        MUSIC_PATTERN_PERCENT: 70,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
@@ -249,10 +222,21 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [SLOW],
-        MUSIC_PATTERN_PERCENT: 100,
+        MUSIC_PATTERN_PERCENT: 50,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
+                RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 100,
+            },
+        ],
+    },
+        {
+        VOLUMES: [LOUD],
+        BPMS: [SLOW],
+        MUSIC_PATTERN_PERCENT: 50,
+        RHYTHM_PATTERNS: [
+            {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
                 RHYTHM_PERCENT: 100,
             },
         ],
@@ -283,7 +267,7 @@ _SOUND_TYPE_RULES: list[dict] = [
     },
     {
         MUSICAL_GROUPING: ACAPPELLA,
-        DUALPAN_PARTNERS: [ACAPPELLA],
+        DUALPAN_PARTNERS: [],
         MUSICAL_PATTERNS: ACAPPELLA_MUSICAL_PATTERNS,
     },
     {

@@ -332,14 +332,16 @@ def main() -> None:
     vol_targets    = {conf['loudest_volume_index']: 0, conf['quietest_volume_index']: 0}
     single_bpm     = conf['slowest_bpm_index'] == conf['fastest_bpm_index']
     for group, count in group_targets.items():
-        bpm_labels, vol_labels, pan_weights = set(), set(), {}
+        bpm_labels, vol_weights, pan_weights = set(), {}, {}
         for sound_type in SOUND_GROUP_TYPES[group]:
             rule = rules_by_sound_type.get(sound_type)
             if rule is None:
                 continue
             for entry in rule[MUSICAL_PATTERNS]:
                 bpm_labels.update(b for b in entry[BPMS] if b is not UNTOUCHED)
-                vol_labels.update(v for v in entry[VOLUMES] if v is not UNTOUCHED)
+                for v in entry[VOLUMES]:
+                    if v is not UNTOUCHED:
+                        vol_weights[v] = vol_weights.get(v, 0) + entry[MUSIC_PATTERN_PERCENT]
                 pkey = derive_panning_key(entry)
                 if pkey is not UNTOUCHED:
                     pan_weights[pkey] = pan_weights.get(pkey, 0) + entry[MUSIC_PATTERN_PERCENT]
@@ -350,10 +352,16 @@ def main() -> None:
             bpm_targets[conf['slowest_bpm_index']] += count
         elif FAST in bpm_labels and SLOW not in bpm_labels:
             bpm_targets[conf['fastest_bpm_index']] += count
-        if LOUD in vol_labels and QUIET not in vol_labels:
-            vol_targets[conf['loudest_volume_index']] += count
-        elif QUIET in vol_labels and LOUD not in vol_labels:
-            vol_targets[conf['quietest_volume_index']] += count
+        total_vol_w = sum(vol_weights.values()) or 1
+        vol_remaining = count
+        for i, (vlabel, vw) in enumerate(sorted(vol_weights.items(), key=lambda x: -x[1])):
+            share = vol_remaining if i == len(vol_weights) - 1 else round(count * vw / total_vol_w)
+            share = min(share, vol_remaining)
+            if vlabel == LOUD:
+                vol_targets[conf['loudest_volume_index']] += share
+            elif vlabel == QUIET:
+                vol_targets[conf['quietest_volume_index']] += share
+            vol_remaining -= share
         total_w = sum(pan_weights.values()) or 1
         remaining = count
         for i, (pkey, w) in enumerate(sorted(pan_weights.items(), key=lambda x: -x[1])):
