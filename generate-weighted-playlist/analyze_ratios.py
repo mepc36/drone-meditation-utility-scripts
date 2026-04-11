@@ -38,14 +38,21 @@ with open(cfg_path) as f:
     cfg = json.load(f)
 
 cfg_sound_group_pcts = [int(x) for x in cfg.get('kicksnare_stab_acappella_percents', '').split(':')]
-cfg_num_unique = cfg.get('num_unique_samples', 0)
 _sil_ratio = [int(x) for x in cfg.get('samples_to_silence_percents', '100:0').split(':')]
 _samp_pct, _sil_pct = _sil_ratio[0], (_sil_ratio[1] if len(_sil_ratio) > 1 else 0)
+
+# Derive total counts from actual kicksnare input files (mirrors lib/config.py logic)
+_kicksnare_count = sum(
+    1 for f in os.listdir(input_audio_dir)
+    if f.endswith('_kick.wav') or f.endswith('_snare.wav')
+)
+_kicksnare_pct = cfg_sound_group_pcts[0] if cfg_sound_group_pcts else 50
+cfg_num_audio = round(_kicksnare_count * 100 / _kicksnare_pct) if _kicksnare_pct else 0
 if _sil_pct > 0:
-    _sil_frac = _sil_pct / _samp_pct
-    cfg_num_silence = round(cfg_num_unique * _sil_frac / (1.0 + _sil_frac))
+    cfg_num_silence = round(cfg_num_audio * _sil_pct / _samp_pct)
 else:
     cfg_num_silence = 0
+cfg_num_unique = cfg_num_audio + cfg_num_silence
 
 # ── Input file counts ─────────────────────────────────────────────────────────
 input_wav = [f for f in os.listdir(input_audio_dir) if f.endswith(".wav")]

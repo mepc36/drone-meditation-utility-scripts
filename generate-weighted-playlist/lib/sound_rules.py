@@ -166,6 +166,38 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
 KICKSTAB_SNARESTAB_RHYTHM_PATTERNS = [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 25,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
+                RHYTHM_PERCENT: 12,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
+                RHYTHM_PERCENT: 13,
+            },
+                        {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 25,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT, HARD_RIGHT, HARD_RIGHT),
+                RHYTHM_PERCENT: 12,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 13,
+            },
+        ]
+
+KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 30,
+        RHYTHM_PATTERNS: [
+            {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
                 RHYTHM_PERCENT: 50,
             },
             {
@@ -178,18 +210,26 @@ KICKSTAB_SNARESTAB_RHYTHM_PATTERNS = [
             },
         ]
 
-KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
-    {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 30,
-        RHYTHM_PATTERNS: KICKSTAB_SNARESTAB_RHYTHM_PATTERNS
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
         MUSIC_PATTERN_PERCENT: 30,
-        RHYTHM_PATTERNS: KICKSTAB_SNARESTAB_RHYTHM_PATTERNS
+        RHYTHM_PATTERNS: [
+                        {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 50,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT, HARD_RIGHT, HARD_RIGHT),
+                RHYTHM_PERCENT: 35,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 15,
+            },
+        ]
+
     },
     {
         VOLUMES: [LOUD],

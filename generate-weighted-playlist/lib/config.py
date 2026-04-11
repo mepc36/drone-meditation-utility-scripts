@@ -172,7 +172,7 @@ def parse_sample_bias(
                 if slots < 1:
                     raise ValueError(
                         f"sample_bias.{key} biased_pool_pct {entry['biased_pool_pct']} yields 0 slots "
-                        f"for group size ~{group_slot_count} — increase num_unique_samples or lower biased_pool_pct"
+                        f"for group size ~{group_slot_count} — add more kick/snare input samples or lower biased_pool_pct"
                     )
 
         result[key] = parsed_entries
@@ -194,14 +194,27 @@ def load() -> dict:
     samples_percent = silence_ratio[0]
     silence_percent = silence_ratio[1] if len(silence_ratio) > 1 else 0
 
-    num_unique_samples = raw[CFG_NUM_UNIQUE_SAMPLES]
+    if CFG_SOUND_GROUP_PERCENTS not in raw:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
+    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
+    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
+    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
+
+    kicksnare_pct = sound_group_percents[0]
+    if kicksnare_pct == 0:
+        raise ValueError("kicksnare percent cannot be 0 — cannot derive total sample count from kicksnare files")
+    kicksnare_files = list(INPUT_AUDIO_DIR.glob("*_kick.wav")) + list(INPUT_AUDIO_DIR.glob("*_snare.wav"))
+    kicksnare_count = len(kicksnare_files)
+    if kicksnare_count == 0:
+        raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
+    num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
+
     if silence_percent == 0:
         num_silence_files = 0
-        num_audio_samples = num_unique_samples
     else:
-        silence_fraction = silence_percent / samples_percent
-        num_silence_files = round(num_unique_samples * silence_fraction / (1.0 + silence_fraction))
-        num_audio_samples = num_unique_samples - num_silence_files
+        num_silence_files = round(num_audio_samples * silence_percent / samples_percent)
+    num_unique_samples = num_audio_samples + num_silence_files
 
     silence_lengths_ms = parse_colon_ints(raw.get(CFG_SILENCE_LENGTHS_MS, "2000"))
     silence_length_percents = parse_colon_ints(raw.get(CFG_SILENCE_LEN_PCTS, "100"))
@@ -212,13 +225,6 @@ def load() -> dict:
     if len(volume_levels_db) != NUM_VOLUME_VALUES:
         raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
     volume_levels_db = sorted(volume_levels_db, reverse=True)  # loud→quiet (high dB first)
-
-    if CFG_SOUND_GROUP_PERCENTS not in raw:
-        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
-    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
-    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
-        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
-    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
 
     strings_volume_reduction = raw.get(CFG_STRINGS_VOL_REDUCTION, 0)
     if not isinstance(strings_volume_reduction, int) or strings_volume_reduction < 0:

@@ -309,10 +309,10 @@ def main() -> None:
     clear_output_directory(rhythmicized_output_dir)
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
-    if num_pass_through > conf['num_unique_samples']:
+    if num_pass_through > conf['num_audio_samples']:
         raise ValueError(
-            f"{num_pass_through} strings samples found but num_unique_samples is {conf['num_unique_samples']}. "
-            f"Increase num_unique_samples to at least {num_pass_through}."
+            f"{num_pass_through} strings samples found but total audio slots is {conf['num_audio_samples']}. "
+            f"Reduce the number of strings input files to at most {conf['num_audio_samples']}."
         )
     num_strings_samples = num_pass_through
     num_non_strings_samples = conf['num_audio_samples'] - num_strings_samples
@@ -470,7 +470,7 @@ def main() -> None:
     if created_count < conf['num_audio_samples']:
         print(f"\nWarning: Only created {created_count} audio samples (expected {conf['num_audio_samples']}).")
         print("  Some deck slots were skipped because no unique (sample + pan) combination could be")
-        print("  found within the retry limit. Try adding more input samples or reducing num_unique_samples.")
+        print("  found within the retry limit. Try adding more input samples or adjusting the kicksnare percents.")
     else:
         print(f"\nComplete! Created {created_count} audio samples.")
     print(f"  Output: {output_dir.resolve()}")
