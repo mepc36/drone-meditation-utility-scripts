@@ -13,18 +13,12 @@
     "kicksnare": [
       {
         "is_random": true,
-        "biased_pool_pct": 8,
+        "biased_pool_pct": 30,
         "include_all": true,
         "include": []
       },
       {
-        "is_random": true,
-        "biased_pool_pct": 8,
-        "include_all": true,
-        "include": []
-      },
-      {
-        "unbiased_pool_pct": 84
+        "unbiased_pool_pct": 70
       }
     ]
   }

@@ -22,9 +22,15 @@ MUSIC_GROUPS = {'strings', 'kick', 'snare', 'kickstab', 'snarestab', 'acappella'
 
 
 def truncate_filename(path_str: str) -> str:
-    """Return artist_sample_group.wav, stripping everything after the music group."""
+    """Return artist_sample_group.wav, stripping everything after the music group.
+    For dualpan files, returns both sample names joined by ' + '."""
     name = Path(path_str).stem
     parts = name.split('_')
+    group_indices = [i for i, part in enumerate(parts) if part in MUSIC_GROUPS]
+    if len(group_indices) >= 2 and 'dualpan' in parts:
+        first = '_'.join(parts[:group_indices[0] + 1])
+        second = '_'.join(parts[group_indices[0] + 1:group_indices[1] + 1])
+        return first + ' + ' + second
     for i, part in enumerate(parts):
         if part in MUSIC_GROUPS:
             return '_'.join(parts[:i + 1]) + '.wav'
