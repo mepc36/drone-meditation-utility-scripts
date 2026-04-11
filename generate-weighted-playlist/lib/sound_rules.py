@@ -220,11 +220,11 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER, HARD_CENTER),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 30,
             },
                         {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 20,
             },
         ],
     },
