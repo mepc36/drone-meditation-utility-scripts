@@ -57,6 +57,10 @@ EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM              = 'eighth_sixteenth_sixte
 SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM                 = 'sixteenth_dottedeighth_quarter'
 SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM             = 'sixteenth_eighth_sixteenth_quarter'
 SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM  = 'sixteenth_dottedeighth_sixteenth_dottedeighth'
+EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM                     = 'eighth_eighth_eighth_eighth'
+EIGHTH_EIGHTH_EIGHTH_RHYTHM                            = 'eighth_eighth_eighth'
+EIGHTH_RHYTHM                                          = 'eighth'
+QUADRUPLE_RHYTHM                                       = 'quadruple'
 
 # Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
 # Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
@@ -78,6 +82,10 @@ RHYTHM_PATTERN_SEQUENCES: dict[str, tuple] = {
     SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM:               (SIXTEENTH, DOTTED_EIGHTH, QUARTER_NOTE),
     SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM:           (SIXTEENTH, EIGHTH, SIXTEENTH, QUARTER_NOTE),
     SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM: (SIXTEENTH, DOTTED_EIGHTH, SIXTEENTH, DOTTED_EIGHTH),
+    EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM:                    (EIGHTH, EIGHTH, EIGHTH, EIGHTH),
+    EIGHTH_EIGHTH_EIGHTH_RHYTHM:                           (EIGHTH, EIGHTH, EIGHTH),
+    EIGHTH_RHYTHM:                                         (EIGHTH,),
+    QUADRUPLE_RHYTHM:                                      (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
 }
 
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
@@ -117,7 +125,7 @@ MAX_DRAW_RETRIES = 20
 # KICK_SNARE_NUM_RHYTHMS; stab and acappella scale to preserve
 # kicksnare_stab_acappella_percents. Set to False to revert to the original
 # probabilistic weighted-percent rhythm assignment derived from the pool size.
-KICK_SNARE_PERMUTATION_MODE: bool = True
+KICK_SNARE_PERMUTATION_MODE: bool = False
 # Must equal len(KICK_SNARE_MUSICAL_PATTERNS[0][RHYTHM_PATTERNS]) in
 # sound_rules.py. A startup check there raises ValueError if they diverge.
 KICK_SNARE_NUM_RHYTHMS: int = 3
