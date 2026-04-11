@@ -290,27 +290,23 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 40,
+                RHYTHM_PERCENT: 60,
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 12,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 12,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 12,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 12,
-            },
-            {
-                RHYTHM_PATTERN: eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 12,
+                RHYTHM_PERCENT: 10,
             },
         ],
     },
