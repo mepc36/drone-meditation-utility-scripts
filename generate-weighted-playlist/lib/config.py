@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from .constants import SOUND_GROUP_NAMES
+from .constants import SOUND_GROUP_NAMES, KICK_SNARE_PERMUTATION_MODE, KICK_SNARE_NUM_RHYTHMS
 
 
 CONFIG_PATH = Path("./input/config/config.json")
@@ -208,7 +208,13 @@ def load() -> dict:
     kicksnare_count = len(kicksnare_files)
     if kicksnare_count == 0:
         raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
-    num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
+    strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
+    strings_count = len(strings_files)
+    if KICK_SNARE_PERMUTATION_MODE:
+        non_strings_samples = round(kicksnare_count * KICK_SNARE_NUM_RHYTHMS * 100 / kicksnare_pct)
+        num_audio_samples = non_strings_samples + strings_count
+    else:
+        num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
 
     if silence_percent == 0:
         num_silence_files = 0

@@ -6,12 +6,14 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
+    KICK, SNARE, KICKSNARE,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
+    KICK_SNARE_PERMUTATION_MODE,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
-from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type
+from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,7 @@ class SlotSpec:
     bpm_label: float | str     # actual BPM float, or 'untouched' for strings slots
     rhythm: tuple[float | str, ...] = ()
     beat_pannings: tuple[float | str, ...] = ()  # per-beat chosen pannings, parallel to rhythm
+    forced_sample: str | None = None  # permutation mode: pre-assigned sample name (bypasses queue draw)
 
 
 def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:
@@ -328,3 +331,46 @@ def plan_output_files(
         )
 
     return deck
+
+
+def build_permutation_kick_snare_deck(
+    samples_by_type: dict[str, list[str]],
+) -> list[SlotSpec]:
+    """Permutation mode: one SlotSpec per (kick/snare sample × rhythm) pair.
+
+    The rhythm and forced_sample are pre-assigned so every combination appears
+    exactly once. The returned list is shuffled before being returned.
+    """
+    kick_snare_samples = (
+        list(samples_by_type.get(KICK, [])) +
+        list(samples_by_type.get(SNARE, []))
+    )
+
+    pattern_group = KICK_SNARE_MUSICAL_PATTERNS[0]
+    vol_label = pattern_group[VOLUMES][0]
+    bpm_label = pattern_group[BPMS][0]
+    rhythm_entries = pattern_group[RHYTHM_PATTERNS]
+
+    # Pre-compute hashable rhythm tuples once (avoid re-deriving per sample).
+    precomputed: list[tuple[tuple, tuple]] = []
+    for entry in rhythm_entries:
+        raw = entry[RHYTHM_PATTERN]
+        pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
+        rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
+        precomputed.append((rhythm, beat_pannings))
+
+    slots: list[SlotSpec] = [
+        SlotSpec(
+            sound_group=KICKSNARE,
+            panning=HARD_CENTER,
+            volume_label=vol_label,
+            bpm_label=bpm_label,
+            rhythm=rhythm,
+            beat_pannings=beat_pannings,
+            forced_sample=sample,
+        )
+        for sample in kick_snare_samples
+        for rhythm, beat_pannings in precomputed
+    ]
+    random.shuffle(slots)
+    return slots

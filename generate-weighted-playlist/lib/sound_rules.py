@@ -10,6 +10,7 @@ from .constants import (
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
+    KICK_SNARE_PERMUTATION_MODE, KICK_SNARE_NUM_RHYTHMS,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
@@ -229,6 +230,16 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         ],
     },
 ]
+
+# Startup check: KICK_SNARE_NUM_RHYTHMS in constants.py must stay in sync with
+# the actual number of rhythm entries in KICK_SNARE_MUSICAL_PATTERNS.
+_actual_ks_num_rhythms = len(KICK_SNARE_MUSICAL_PATTERNS[0][RHYTHM_PATTERNS])
+if KICK_SNARE_PERMUTATION_MODE and KICK_SNARE_NUM_RHYTHMS != _actual_ks_num_rhythms:
+    raise ValueError(
+        f"KICK_SNARE_NUM_RHYTHMS ({KICK_SNARE_NUM_RHYTHMS}) in constants.py does not match "
+        f"the actual rhythm pattern count ({_actual_ks_num_rhythms}) in "
+        f"KICK_SNARE_MUSICAL_PATTERNS. Update KICK_SNARE_NUM_RHYTHMS to match."
+    )
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         {

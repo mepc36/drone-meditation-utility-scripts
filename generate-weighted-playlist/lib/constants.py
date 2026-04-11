@@ -110,3 +110,14 @@ BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
 
 # ── Operational limits ────────────────────────────────────────────────────────
 MAX_DRAW_RETRIES = 20
+
+# ── Feature flags ─────────────────────────────────────────────────────────────
+# When True, generates every (kick/snare sample × rhythm) combination exactly
+# once per run. num_audio_samples is anchored to len(kick/snare files) ×
+# KICK_SNARE_NUM_RHYTHMS; stab and acappella scale to preserve
+# kicksnare_stab_acappella_percents. Set to False to revert to the original
+# probabilistic weighted-percent rhythm assignment derived from the pool size.
+KICK_SNARE_PERMUTATION_MODE: bool = True
+# Must equal len(KICK_SNARE_MUSICAL_PATTERNS[0][RHYTHM_PATTERNS]) in
+# sound_rules.py. A startup check there raises ValueError if they diverge.
+KICK_SNARE_NUM_RHYTHMS: int = 3

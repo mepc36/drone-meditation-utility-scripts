@@ -15,7 +15,7 @@ import soundfile as sf
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
-from lib.deck_builder import SlotSpec, plan_output_files
+from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck
 from lib.sample_queue import (
     build_biased_reservations,
     create_shuffled_sample_queue,
@@ -35,7 +35,7 @@ from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
-    STRINGS, ACAPPELLA,
+    STRINGS, ACAPPELLA, KICKSNARE,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT,
     PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
     MUSICAL_PATTERNS, VOLUMES, BPMS,
@@ -45,6 +45,7 @@ from lib.constants import (
     EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
     MAX_DRAW_RETRIES,
+    KICK_SNARE_PERMUTATION_MODE,
 )
 from lib.runtime_constants import LOUD, QUIET, SLOW, FAST
 
@@ -326,12 +327,15 @@ def main() -> None:
         largest_group = max(group_targets, key=group_targets.get)
         group_targets[largest_group] += num_non_strings_samples - group_total
 
-    # Derive panning quotas, bpm targets, and volume targets from sound_rules
+    # Derive panning quotas, bpm targets, and volume targets from sound_rules.
+    # In permutation mode, kick/snare slots are handled separately and excluded here.
     panning_quotas = {PANNING_CENTER: 0, PANNING_DIAGONAL: 0, PANNING_DUALPAN: 0, PANNING_LEFT: 0, PANNING_RIGHT: 0}
     bpm_targets    = {conf['slowest_bpm_index']: 0, conf['fastest_bpm_index']: 0}
     vol_targets    = {conf['loudest_volume_index']: 0, conf['quietest_volume_index']: 0}
     single_bpm     = conf['slowest_bpm_index'] == conf['fastest_bpm_index']
     for group, count in group_targets.items():
+        if KICK_SNARE_PERMUTATION_MODE and group == KICKSNARE:
+            continue
         bpm_labels, vol_weights, pan_weights = set(), {}, {}
         for sound_type in SOUND_GROUP_TYPES[group]:
             rule = rules_by_sound_type.get(sound_type)
@@ -379,11 +383,21 @@ def main() -> None:
                 panning_quotas[PANNING_RIGHT] += share
             remaining -= share
 
-    non_strings_deck = plan_output_files(
-        group_targets, panning_quotas, bpm_targets, vol_targets,
-        conf['slowest_bpm_index'], conf['fastest_bpm_index'],
-        conf['loudest_volume_index'], conf['quietest_volume_index'],
-    )
+    if KICK_SNARE_PERMUTATION_MODE:
+        ks_deck = build_permutation_kick_snare_deck(samples_by_type)
+        non_ks_targets = {g: t for g, t in group_targets.items() if g != KICKSNARE}
+        non_ks_deck = plan_output_files(
+            non_ks_targets, panning_quotas, bpm_targets, vol_targets,
+            conf['slowest_bpm_index'], conf['fastest_bpm_index'],
+            conf['loudest_volume_index'], conf['quietest_volume_index'],
+        )
+        non_strings_deck = ks_deck + non_ks_deck
+    else:
+        non_strings_deck = plan_output_files(
+            group_targets, panning_quotas, bpm_targets, vol_targets,
+            conf['slowest_bpm_index'], conf['fastest_bpm_index'],
+            conf['loudest_volume_index'], conf['quietest_volume_index'],
+        )
     strings_slots = [SlotSpec(STRINGS, UNTOUCHED, UNTOUCHED, UNTOUCHED, rhythm=(UNTOUCHED,))] * num_strings_samples
     full_deck = non_strings_deck + strings_slots
     random.shuffle(full_deck)
@@ -412,10 +426,13 @@ def main() -> None:
     volume_counts = [0] * len(conf['volume_levels_db'])
 
     for slot in full_deck:
-        forced_primary = None
-        reservation = biased_reservations.get(slot.sound_group)
-        if reservation:
-            forced_primary = reservation.popleft()
+        # In permutation mode, kick/snare slots carry a forced_sample assigned at
+        # deck-build time. That takes priority over any sample_bias reservation.
+        forced_primary = slot.forced_sample
+        if forced_primary is None:
+            reservation = biased_reservations.get(slot.sound_group)
+            if reservation:
+                forced_primary = reservation.popleft()
 
         resolved = resolve_slot(slot, sample_queue, all_samples, seen_combinations, conf, forced_primary=forced_primary)
         if resolved is None:
