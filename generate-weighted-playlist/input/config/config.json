@@ -1,9 +1,9 @@
 {
-  "bpms": "23:118",
-  "samples_to_silence_percents": "95:5",
+  "bpms": "41:118",
+  "samples_to_silence_percents": "85:15",
   "loud_quiet_values": "0:-30",
-  "silence_lengths_millisec": "5140",
-  "silence_lengths_percents": "100",
+  "silence_lengths_millisec": "1760:10780",
+  "silence_lengths_percents": "98:2",
   "kicksnare_stab_acappella_percents": "40:40:20",
   "strings_volume_reduction": 3,
   "acappella_volume_reduction": 17

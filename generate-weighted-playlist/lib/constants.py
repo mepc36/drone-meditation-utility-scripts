@@ -53,6 +53,10 @@ QUARTER_EIGHTH_EIGHTH_RHYTHM                           = 'quarter_eighth_eighth'
 SIXTEENTH_RHYTHM                                       = 'sixteenth'
 SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM = 'sixteenth_sixteenth_sixteenth_sixteenth_quarter'
 SIXTEENTH_DOTTEDEIGHTH_RHYTHM                          = 'sixteenth_dottedeighth'
+EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM              = 'eighth_sixteenth_sixteenth_quarter'
+SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM                 = 'sixteenth_dottedeighth_quarter'
+SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM             = 'sixteenth_eighth_sixteenth_quarter'
+SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM  = 'sixteenth_dottedeighth_sixteenth_dottedeighth'
 
 # Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
 # Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
@@ -70,6 +74,10 @@ RHYTHM_PATTERN_SEQUENCES: dict[str, tuple] = {
     SIXTEENTH_RHYTHM:                                    (SIXTEENTH,),
     SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM: (SIXTEENTH, SIXTEENTH, SIXTEENTH, SIXTEENTH, QUARTER_NOTE),
     SIXTEENTH_DOTTEDEIGHTH_RHYTHM:                       (SIXTEENTH, DOTTED_EIGHTH),
+    EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM:           (EIGHTH, SIXTEENTH, SIXTEENTH, QUARTER_NOTE),
+    SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM:               (SIXTEENTH, DOTTED_EIGHTH, QUARTER_NOTE),
+    SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM:           (SIXTEENTH, EIGHTH, SIXTEENTH, QUARTER_NOTE),
+    SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM: (SIXTEENTH, DOTTED_EIGHTH, SIXTEENTH, DOTTED_EIGHTH),
 }
 
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
