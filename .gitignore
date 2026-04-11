@@ -51,5 +51,6 @@ divide-song-into-quarter-note-samples/input/
 recreate-tinnitus-sound/input/
 generate-weighted-playlist/input/audio/
 generate-weighted-playlist/input-ing-verbs-only
+generate-weighted-playlist/input-not-ing-verbs-only
 output*
 .env
