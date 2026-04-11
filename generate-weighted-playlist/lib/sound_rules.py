@@ -150,29 +150,29 @@ def quarter_rhythm(panning) -> list:
     ]
 
 
-def double_rhythm(panning1, panning2) -> list:
-    return [*quarter_rhythm(panning1), *quarter_rhythm(panning2)]
+def double_rhythm(panning) -> list:
+    return [*quarter_rhythm(panning), *quarter_rhythm(panning)]
 
 
-def quarter_quarter_rhythm(panning1, panning2) -> list:
+def quarter_quarter_rhythm(panning) -> list:
     return [
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning1]},
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning2]},
+        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
     ]
 
 
-def eighth_eighth_rhythm(panning1, panning2) -> list:
+def eighth_eighth_rhythm(panning) -> list:
     return [
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning1]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning2]},
+        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
     ]
 
 
-def quarter_eighth_eighth_rhythm(panning1, panning2, panning3) -> list:
+def quarter_eighth_eighth_rhythm(panning) -> list:
     return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning1]},
-        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning2]},
-        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning3]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning]},
     ]
 
 
@@ -265,20 +265,20 @@ def quarter_rest_quarter_rhythm(panning) -> list:
     ]
 
 
-def quarter_quarter_quarter_rhythm(panning1, panning2, panning3) -> list:
+def quarter_quarter_quarter_rhythm(panning) -> list:
     return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning1]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning2]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning3]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
     ]
 
 
-def quarter_quarter_quarter_quarter_rhythm(panning1, panning2, panning3, panning4) -> list:
+def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
     return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning1]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning2]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning3]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning4]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
+        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
     ]
 
 
@@ -290,15 +290,27 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 50,
+                RHYTHM_PERCENT: 40,
             },
             {
-                RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER, HARD_CENTER),
-                RHYTHM_PERCENT: 30,
+                RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 12,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 20,
+                RHYTHM_PERCENT: 12,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 12,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 12,
+            },
+            {
+                RHYTHM_PATTERN: eighth_eighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 12,
             },
         ],
     },
@@ -325,7 +337,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
                 RHYTHM_PERCENT: 50,
             },
             {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT, HARD_LEFT, HARD_LEFT),
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
                 RHYTHM_PERCENT: 25,
             },
             {
@@ -345,7 +357,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
                 RHYTHM_PERCENT: 50,
             },
             {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT, HARD_RIGHT, HARD_RIGHT),
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
                 RHYTHM_PERCENT: 25,
             },
             {
