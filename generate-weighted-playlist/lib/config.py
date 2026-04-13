@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 
-from .constants import SOUND_GROUP_NAMES, KICK_SNARE_PERMUTATION_MODE, KICK_SNARE_NUM_RHYTHMS
+from math import gcd
+from .constants import SOUND_GROUP_NAMES, KICKSNARE, STAB, ACAPPELLA, PERMUTATION_COMBOS_PER_SAMPLE
 
 
 CONFIG_PATH = Path("./input/config/config.json")
@@ -20,6 +21,7 @@ CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
 CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
 CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
 CFG_SAMPLE_BIAS             = 'sample_bias'
+CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
 
 # ── Sample-bias helpers ─────────────────────────────────────────────────────────
 _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
@@ -27,6 +29,40 @@ _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
 # ── Config validation counts ───────────────────────────────────────────────────
 NUM_SOUND_GROUP_PERCENTS = 3
 NUM_VOLUME_VALUES        = 2
+
+
+def _compute_balanced_permutation_total(
+    raw_counts: dict[str, int],
+    group_percents: list[int],
+) -> int:
+    """Return total slot count after LCM-based replication that restores
+    the kicksnare_stab_acappella_percents ratio across all non-empty groups.
+
+    For each active group g: total_g = C * (pct_g / pct_gcd)
+    where C = LCM of (raw_g / gcd(raw_g, pct_g / pct_gcd)) for all active g.
+    """
+    active: list[tuple[str, int, int]] = []
+    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
+        raw = raw_counts.get(group, 0)
+        if raw > 0 and pct > 0:
+            active.append((group, raw, pct))
+
+    if not active:
+        return 0
+
+    # Reduce percents to simplest integer ratio
+    pct_gcd = active[0][2]
+    for _, _, pct in active[1:]:
+        pct_gcd = gcd(pct_gcd, pct)
+
+    # Minimum C = LCM of all (raw_g / gcd(raw_g, reduced_ratio_g))
+    C = 1
+    for _, raw, pct in active:
+        r = pct // pct_gcd
+        d = raw // gcd(raw, r)
+        C = C * d // gcd(C, d)
+
+    return sum(C * (pct // pct_gcd) for _, _, pct in active)
 
 
 def parse_colon_ints(raw: str) -> list[int]:
@@ -210,9 +246,22 @@ def load() -> dict:
         raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
-    if KICK_SNARE_PERMUTATION_MODE:
-        non_strings_samples = round(kicksnare_count * KICK_SNARE_NUM_RHYTHMS * 100 / kicksnare_pct)
-        num_audio_samples = non_strings_samples + strings_count
+    kick_snare_permutation_mode = bool(raw.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
+    if kick_snare_permutation_mode:
+        stab_count = len(
+            list(INPUT_AUDIO_DIR.glob("*_kickstab.wav")) +
+            list(INPUT_AUDIO_DIR.glob("*_snarestab.wav"))
+        )
+        acap_count = len(list(INPUT_AUDIO_DIR.glob("*_acappella.wav")))
+        raw_perm_counts = {
+            KICKSNARE: kicksnare_count * PERMUTATION_COMBOS_PER_SAMPLE[KICKSNARE],
+            STAB:      stab_count      * PERMUTATION_COMBOS_PER_SAMPLE[STAB],
+            ACAPPELLA: acap_count      * PERMUTATION_COMBOS_PER_SAMPLE[ACAPPELLA],
+        }
+        permutation_non_strings_samples = _compute_balanced_permutation_total(
+            raw_perm_counts, sound_group_percents
+        )
+        num_audio_samples = permutation_non_strings_samples + strings_count
     else:
         num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
 
@@ -267,6 +316,8 @@ def load() -> dict:
         "acappella_volume_reduction": acappella_volume_reduction,
 
         "sample_bias": sample_bias,
+
+        "kick_snare_permutation_mode": kick_snare_permutation_mode,
 
         "raw": raw,
     }

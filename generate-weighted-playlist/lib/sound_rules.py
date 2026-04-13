@@ -2,7 +2,9 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
+    KICKSNARE, STAB,
     SOUND_GROUP_TYPES,
+    PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     QUARTER_RHYTHM, DOUBLE_RHYTHM, QUARTER_REST_RHYTHM, QUARTER_REST_QUARTER_RHYTHM, TRIPLE_RHYTHM, QUARTER_QUARTER_REST_RHYTHM, QUADRUPLE_RHYTHM,
     EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_QUARTER_RHYTHM, QUARTER_EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_RHYTHM, SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM, SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_RHYTHM,
@@ -10,7 +12,6 @@ from .constants import (
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
-    KICK_SNARE_PERMUTATION_MODE, KICK_SNARE_NUM_RHYTHMS,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
@@ -294,37 +295,27 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 22,
+                RHYTHM_PERCENT: 20,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 7,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 7,
+                RHYTHM_PERCENT: 15,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 7,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 7,
+                RHYTHM_PERCENT: 5,
             },
         ],
-    },
+    }
 ]
-
-# Startup check: KICK_SNARE_NUM_RHYTHMS in constants.py must stay in sync with
-# the actual number of rhythm entries in KICK_SNARE_MUSICAL_PATTERNS.
-_actual_ks_num_rhythms = len(KICK_SNARE_MUSICAL_PATTERNS[0][RHYTHM_PATTERNS])
-if KICK_SNARE_PERMUTATION_MODE and KICK_SNARE_NUM_RHYTHMS != _actual_ks_num_rhythms:
-    raise ValueError(
-        f"KICK_SNARE_NUM_RHYTHMS ({KICK_SNARE_NUM_RHYTHMS}) in constants.py does not match "
-        f"the actual rhythm pattern count ({_actual_ks_num_rhythms}) in "
-        f"KICK_SNARE_MUSICAL_PATTERNS. Update KICK_SNARE_NUM_RHYTHMS to match."
-    )
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         {
@@ -405,6 +396,21 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
         ],
     },
 ]
+
+# Startup check: PERMUTATION_COMBOS_PER_SAMPLE in constants.py must stay in
+# sync with the actual rhythm counts in each musical pattern list.
+_actual_combos: dict[str, int] = {
+    KICKSNARE:  sum(len(mp[RHYTHM_PATTERNS]) for mp in KICK_SNARE_MUSICAL_PATTERNS),
+    STAB:       sum(len(mp[RHYTHM_PATTERNS]) for mp in KICKSTAB_SNARESTAB_MUSICAL_PATTERNS),
+    ACAPPELLA:  sum(len(mp[RHYTHM_PATTERNS]) for mp in ACAPPELLA_MUSICAL_PATTERNS),
+}
+for _group, _expected in PERMUTATION_COMBOS_PER_SAMPLE.items():
+    if _actual_combos.get(_group) != _expected:
+        raise ValueError(
+            f"PERMUTATION_COMBOS_PER_SAMPLE['{_group}'] is {_expected} in constants.py "
+            f"but the actual rhythm count is {_actual_combos.get(_group)}. "
+            f"Update PERMUTATION_COMBOS_PER_SAMPLE in constants.py to match."
+        )
 
 
 _SOUND_TYPE_RULES: list[dict] = [

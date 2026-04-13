@@ -119,13 +119,13 @@ BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
 # ── Operational limits ────────────────────────────────────────────────────────
 MAX_DRAW_RETRIES = 20
 
-# ── Feature flags ─────────────────────────────────────────────────────────────
-# When True, generates every (kick/snare sample × rhythm) combination exactly
-# once per run. num_audio_samples is anchored to len(kick/snare files) ×
-# KICK_SNARE_NUM_RHYTHMS; stab and acappella scale to preserve
-# kicksnare_stab_acappella_percents. Set to False to revert to the original
-# probabilistic weighted-percent rhythm assignment derived from the pool size.
-KICK_SNARE_PERMUTATION_MODE: bool = False
-# Must equal len(KICK_SNARE_MUSICAL_PATTERNS[0][RHYTHM_PATTERNS]) in
-# sound_rules.py. A startup check there raises ValueError if they diverge.
-KICK_SNARE_NUM_RHYTHMS: int = 3
+# ── Permutation mode combo counts ────────────────────────────────────────────
+# Total (musical_pattern × rhythm) slots generated per input sample in each
+# group during KICK_SNARE_PERMUTATION_MODE.  Must equal the actual rhythm-entry
+# sums in sound_rules.py — a startup check there raises ValueError if they
+# diverge.
+PERMUTATION_COMBOS_PER_SAMPLE: dict[str, int] = {
+    KICKSNARE: 6,   # KICK_SNARE_MUSICAL_PATTERNS: 1 pattern × 6 rhythms
+    STAB:      7,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 3 patterns × 3+3+1 rhythms
+    ACAPPELLA: 2,   # ACAPPELLA_MUSICAL_PATTERNS: 2 patterns × 1+1 rhythms
+}

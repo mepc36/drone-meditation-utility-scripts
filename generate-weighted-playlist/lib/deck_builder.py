@@ -6,14 +6,13 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
-    KICK, SNARE, KICKSNARE,
+    KICK, SNARE, KICKSNARE, KICKSTAB, SNARESTAB, STAB, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
-    KICK_SNARE_PERMUTATION_MODE,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
-from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS
+from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
 
 
 @dataclass(frozen=True)
@@ -374,3 +373,139 @@ def build_permutation_kick_snare_deck(
     ]
     random.shuffle(slots)
     return slots
+
+
+def build_permutation_stab_deck(
+    samples_by_type: dict[str, list[str]],
+) -> list[SlotSpec]:
+    """Permutation mode: one SlotSpec per (stab sample × musical_pattern × rhythm) combo.
+
+    The panning, rhythm, and forced_sample are pre-assigned so every combination
+    appears exactly once.  For DUALPAN slots the partner sample is drawn at
+    render time by resolve_slot (same as the probabilistic path).
+    """
+    stab_samples = (
+        list(samples_by_type.get(KICKSTAB, [])) +
+        list(samples_by_type.get(SNARESTAB, []))
+    )
+    if not stab_samples:
+        return []
+
+    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings)
+    for pattern_group in KICKSTAB_SNARESTAB_MUSICAL_PATTERNS:
+        vol_label = pattern_group[VOLUMES][0]
+        bpm_label = pattern_group[BPMS][0]
+        panning = derive_panning_key(pattern_group)
+        for entry in pattern_group[RHYTHM_PATTERNS]:
+            raw = entry[RHYTHM_PATTERN]
+            pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
+            rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
+            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings))
+
+    slots: list[SlotSpec] = [
+        SlotSpec(
+            sound_group=STAB,
+            panning=panning,
+            volume_label=vol_label,
+            bpm_label=bpm_label,
+            rhythm=rhythm,
+            beat_pannings=beat_pannings,
+            forced_sample=sample,
+        )
+        for sample in stab_samples
+        for panning, vol_label, bpm_label, rhythm, beat_pannings in slot_templates
+    ]
+    random.shuffle(slots)
+    return slots
+
+
+def build_permutation_acappella_deck(
+    samples_by_type: dict[str, list[str]],
+) -> list[SlotSpec]:
+    """Permutation mode: one SlotSpec per (acappella sample × musical_pattern × rhythm) combo."""
+    acap_samples = list(samples_by_type.get(ACAPPELLA, []))
+    if not acap_samples:
+        return []
+
+    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings)
+    for pattern_group in ACAPPELLA_MUSICAL_PATTERNS:
+        vol_label = pattern_group[VOLUMES][0]
+        bpm_label = pattern_group[BPMS][0]
+        panning = derive_panning_key(pattern_group)
+        for entry in pattern_group[RHYTHM_PATTERNS]:
+            raw = entry[RHYTHM_PATTERN]
+            pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
+            rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
+            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings))
+
+    slots: list[SlotSpec] = [
+        SlotSpec(
+            sound_group=ACAPPELLA,
+            panning=panning,
+            volume_label=vol_label,
+            bpm_label=bpm_label,
+            rhythm=rhythm,
+            beat_pannings=beat_pannings,
+            forced_sample=sample,
+        )
+        for sample in acap_samples
+        for panning, vol_label, bpm_label, rhythm, beat_pannings in slot_templates
+    ]
+    random.shuffle(slots)
+    return slots
+
+
+def balance_permutation_decks(
+    decks_by_group: dict[str, list[SlotSpec]],
+    group_percents: list[int],
+) -> list[SlotSpec]:
+    """Replicate each group's pre-built permutation deck so the final combined
+    deck honours the kicksnare_stab_acappella_percents ratio.
+
+    Algorithm (LCM-based minimum replication):
+      Let r_g = pct_g / gcd(all pcts).  For each group with raw > 0:
+        multiplier_g = C * r_g / raw_g
+      where C = LCM of (raw_g / gcd(raw_g, r_g)) for all active groups.
+    This guarantees all multipliers are positive integers and the totals
+    are exactly proportional to the requested percents.
+
+    Groups with 0 raw slots (no input samples) are silently skipped; their
+    percent share is ignored and the remaining groups keep their relative ratio.
+    """
+    from math import gcd
+
+    active: list[tuple[str, int, int]] = []  # (group, raw_count, pct)
+    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
+        raw = len(decks_by_group.get(group, []))
+        if raw > 0 and pct > 0:
+            active.append((group, raw, pct))
+
+    if not active:
+        return []
+
+    if len(active) == 1:
+        result = decks_by_group[active[0][0]][:]
+        random.shuffle(result)
+        return result
+
+    # Reduce percents to simplest integer ratio
+    pct_gcd = active[0][2]
+    for _, _, pct in active[1:]:
+        pct_gcd = gcd(pct_gcd, pct)
+
+    # C = LCM of all reduced denominators
+    C = 1
+    for _, raw, pct in active:
+        r = pct // pct_gcd
+        d = raw // gcd(raw, r)
+        C = C * d // gcd(C, d)
+
+    combined: list[SlotSpec] = []
+    for group, raw, pct in active:
+        m = C * (pct // pct_gcd) // raw  # always an integer by construction
+        deck = decks_by_group[group]
+        combined.extend(deck * m)
+        print(f"  Permutation deck: {group} — {raw} raw slots × {m} = {raw * m} total")
+
+    random.shuffle(combined)
+    return combined
