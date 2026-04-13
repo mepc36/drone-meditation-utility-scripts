@@ -27,7 +27,7 @@ def truncate_filename(path_str: str) -> str:
     name = Path(path_str).stem
     parts = name.split('_')
     group_indices = [i for i, part in enumerate(parts) if part in MUSIC_GROUPS]
-    if len(group_indices) >= 2 and 'dualpan' in parts:
+    if len(group_indices) >= 2:
         first = '_'.join(parts[:group_indices[0] + 1])
         second = '_'.join(parts[group_indices[0] + 1:group_indices[1] + 1])
         return first + ' + ' + second
