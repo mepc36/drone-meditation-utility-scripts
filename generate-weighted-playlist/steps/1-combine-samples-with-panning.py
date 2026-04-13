@@ -18,7 +18,7 @@ import soundfile as sf
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
-from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks
+from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_draw_multipliers
 from lib.sample_queue import (
     build_biased_reservations,
     create_shuffled_sample_queue,
@@ -360,14 +360,29 @@ def main() -> None:
     num_strings_samples = num_pass_through
     num_non_strings_samples = conf['num_audio_samples'] - num_strings_samples
 
-    group_targets = {
-        group: int(num_non_strings_samples * pct / 100)
+    # Adjust slot allocations so the configured ratio applies to actual sample draws,
+    # not just output file count.  Groups whose rhythm patterns include SampleRole.NEW
+    # beats draw extra samples per slot; we reduce their file-count allocation
+    # proportionally so the total draw counts honour the configured percentages.
+    draw_multipliers = compute_group_draw_multipliers()
+    _adj_weights = {
+        group: pct / draw_multipliers[group]
         for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents'])
+    }
+    _total_adj_weight = sum(_adj_weights.values()) or 1.0
+    group_targets = {
+        group: int(num_non_strings_samples * w / _total_adj_weight)
+        for group, w in _adj_weights.items()
     }
     group_total = sum(group_targets.values())
     if group_total < num_non_strings_samples:
         largest_group = max(group_targets, key=group_targets.get)
         group_targets[largest_group] += num_non_strings_samples - group_total
+    if any(m > 1.0 for m in draw_multipliers.values()):
+        print(f"  Multi-sample rhythm adjustment (draw multipliers: "
+              + ", ".join(f"{g}={m:.4f}" for g, m in draw_multipliers.items()) + ")")
+        print(f"  Adjusted file-count targets: "
+              + ", ".join(f"{g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
 
     # Derive panning quotas, bpm targets, and volume targets from sound_rules.
     # In permutation mode, kick/snare slots are handled separately and excluded here.
@@ -549,10 +564,10 @@ def main() -> None:
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
 
         extra_vol_db = 0.0
-        if slot.sound_group == STRINGS and conf['strings_volume_reduction']:
-            extra_vol_db = float(-conf['strings_volume_reduction'])
-        elif slot.sound_group == ACAPPELLA and conf['acappella_volume_reduction']:
-            extra_vol_db = float(-conf['acappella_volume_reduction'])
+        if slot.sound_group == STRINGS and conf['strings_volume_adjustment_db']:
+            extra_vol_db = float(conf['strings_volume_adjustment_db'])
+        elif slot.sound_group == ACAPPELLA and conf['acappella_volume_adjustment_db']:
+            extra_vol_db = float(conf['acappella_volume_adjustment_db'])
 
         render_key: tuple | None = None
         if render_cache is not None:

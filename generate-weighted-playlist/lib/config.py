@@ -18,8 +18,8 @@ CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
 CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
 CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
 CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
-CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
-CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
+CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
+CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
 CFG_SAMPLE_BIAS             = 'sample_bias'
 CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
 
@@ -281,13 +281,13 @@ def load() -> dict:
         raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
     volume_levels_db = sorted(volume_levels_db, reverse=True)  # loud→quiet (high dB first)
 
-    strings_volume_reduction = raw.get(CFG_STRINGS_VOL_REDUCTION, 0)
-    if not isinstance(strings_volume_reduction, int) or strings_volume_reduction < 0:
-        raise ValueError(f"{CFG_STRINGS_VOL_REDUCTION} must be a non-negative integer, got {strings_volume_reduction!r}")
+    strings_volume_adjustment = raw.get(CFG_STRINGS_VOL_ADJUSTMENT, 0)
+    if not isinstance(strings_volume_adjustment, (int, float)):
+        raise ValueError(f"{CFG_STRINGS_VOL_ADJUSTMENT} must be a number (dB), got {strings_volume_adjustment!r}")
 
-    acappella_volume_reduction = raw.get(CFG_ACAPPELLA_VOL_REDUCTION, 0)
-    if not isinstance(acappella_volume_reduction, int) or acappella_volume_reduction < 0:
-        raise ValueError(f"{CFG_ACAPPELLA_VOL_REDUCTION} must be a non-negative integer, got {acappella_volume_reduction!r}")
+    acappella_volume_adjustment = raw.get(CFG_ACAPPELLA_VOL_ADJUSTMENT, 0)
+    if not isinstance(acappella_volume_adjustment, (int, float)):
+        raise ValueError(f"{CFG_ACAPPELLA_VOL_ADJUSTMENT} must be a number (dB), got {acappella_volume_adjustment!r}")
 
     sample_bias = parse_sample_bias(raw, sound_group_percents, num_audio_samples)
 
@@ -312,8 +312,8 @@ def load() -> dict:
 
         "sound_group_percents": sound_group_percents,
 
-        "strings_volume_reduction": strings_volume_reduction,
-        "acappella_volume_reduction": acappella_volume_reduction,
+        "strings_volume_adjustment_db": strings_volume_adjustment,
+        "acappella_volume_adjustment_db": acappella_volume_adjustment,
 
         "sample_bias": sample_bias,
 
