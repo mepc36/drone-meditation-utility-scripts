@@ -2,7 +2,7 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
-    KICKSNARE, STAB,
+    KICKSNARE, STAB, SampleRole,
     SOUND_GROUP_TYPES,
     PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
@@ -143,20 +143,50 @@ def derive_panning_key(entry: dict):
 
 
 def with_roles(beats: list, roles: tuple) -> list:
-    """Attach SAMPLE_ROLE labels to beats, enabling different samples per beat position.
+    """Attach SampleRole labels to beats, enabling different samples per beat position.
 
     Example — A/B/A pattern on a triple rhythm:
-        with_roles(triple_rhythm(panning), ('A', 'B', 'A'))
+        with_roles(triple_rhythm(panning), (SampleRole.SAME, SampleRole.NEW, SampleRole.SAME))
 
-    Beats with the same role label share one drawn sample; different labels draw
-    independently (each new role excludes the previously drawn sample).
-    A None role means "no constraint — draw freely (same behavior as today)."
+    SampleRole.SAME  — reuse the primary sample drawn for this slot
+    SampleRole.NEW   — draw a fresh different sample for this beat
+    None             — no role constraint; draw freely (same behavior as today)
     """
+    if len(beats) < 2:
+        raise ValueError(
+            f"with_roles: needs at least 2 beats to be meaningful (got {len(beats)}). "
+            f"Use the plain rhythm function for single-beat patterns."
+        )
     if len(roles) != len(beats):
         raise ValueError(
             f"with_roles: roles length ({len(roles)}) does not match beats length ({len(beats)}). "
             f"roles={roles!r}"
         )
+    for i, role in enumerate(roles):
+        if role is not None and not isinstance(role, SampleRole):
+            raise TypeError(
+                f"with_roles: roles[{i}]={role!r} is not a SampleRole or None. "
+                f"Use SampleRole.SAME, SampleRole.NEW, or None."
+            )
+    if roles[0] == SampleRole.NEW:
+        raise ValueError(
+            f"with_roles: roles[0] cannot be SampleRole.NEW — the first beat establishes "
+            f"the primary sample; there is nothing to be 'new' relative to. "
+            f"Use SampleRole.SAME or None for the first beat."
+        )
+    if not any(r == SampleRole.NEW for r in roles):
+        raise ValueError(
+            f"with_roles: no SampleRole.NEW found in roles={roles!r}. "
+            f"If every beat reuses the primary sample, with_roles is unnecessary — "
+            f"use the plain rhythm function instead."
+        )
+    for i in range(1, len(roles)):
+        if roles[i] == SampleRole.NEW and roles[i - 1] == SampleRole.NEW:
+            raise ValueError(
+                f"with_roles: roles[{i - 1}] and roles[{i}] are both SampleRole.NEW. "
+                f"Consecutive NEW beats would draw a third distinct sample, which is not supported. "
+                f"Separate NEW beats with at least one SAME or None beat."
+            )
     result = []
     for beat, role in zip(beats, roles):
         if role is not None:
@@ -338,7 +368,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
                 RHYTHM_PERCENT: 4,
             },
             {
-                RHYTHM_PATTERN: with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER), ('A', 'B', 'A')),
+                RHYTHM_PATTERN: with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER), (SampleRole.SAME, SampleRole.NEW, SampleRole.SAME)),
                 RHYTHM_PERCENT: 4
             }
         ],

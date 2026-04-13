@@ -9,7 +9,7 @@ from .constants import (
     KICK, SNARE, KICKSNARE, KICKSTAB, SNARESTAB, STAB, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
-    RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE,
+    RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE, SampleRole,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
@@ -24,7 +24,7 @@ class SlotSpec:
     rhythm: tuple[float | str, ...] = ()
     beat_pannings: tuple[float | str, ...] = ()  # per-beat chosen pannings, parallel to rhythm
     forced_sample: str | None = None  # permutation mode: pre-assigned sample name (bypasses queue draw)
-    beat_roles: tuple[str | None, ...] = ()  # per-beat role labels; same label = reuse one sample, different label = draw a new one
+    beat_roles: tuple[SampleRole | None, ...] = ()  # per-beat role; SAME = reuse primary, NEW = draw fresh
 
 
 def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:

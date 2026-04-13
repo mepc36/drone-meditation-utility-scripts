@@ -88,6 +88,21 @@ RHYTHM_PATTERN_SEQUENCES: dict[str, tuple] = {
     QUADRUPLE_RHYTHM:                                      (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
 }
 
+# ── Sample role labels for with_roles() ─────────────────────────────────────
+from enum import IntEnum
+
+class SampleRole(IntEnum):
+    """Per-beat role for multi-sample rhythm patterns.
+
+    SAME  — this beat reuses the sample drawn for the previous SAME/FIRST beat
+            that shares the same contiguous block.  Use to repeat beat 1's
+            sample at beat 3 in an A/B/A pattern.
+    NEW   — draw a fresh sample for this beat (excluded from the previous one).
+    """
+    SAME = 0   # reuse: same sample as the most recently established 'reference'
+    NEW  = 1   # draw: a different sample from any beat already drawn this slot
+
+
 # ── Musical pattern dict keys ─────────────────────────────────────────────────
 MUSICAL_DURATION  = 'musical_duration'
 POSSIBLE_PANNINGS = 'possible_pannings'

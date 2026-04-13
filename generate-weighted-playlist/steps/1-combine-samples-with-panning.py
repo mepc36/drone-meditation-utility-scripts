@@ -36,6 +36,7 @@ from lib.sound_rules import (
 )
 from lib.constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
+    SampleRole,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     STRINGS, ACAPPELLA, KICKSNARE, STAB,
@@ -572,39 +573,33 @@ def main() -> None:
             if render_key is not None:
                 render_cache[render_key] = audio
 
-        # Role-based per-beat audio (e.g. A/B/A patterns): draw one sample per
-        # unique role; same role reuses the same audio, different role draws fresh.
+        # Role-based per-beat audio (e.g. A/B/A patterns).
+        # SampleRole.SAME  → reuse the primary sample's audio
+        # SampleRole.NEW   → draw a fresh different sample for this beat
         per_beat_audio_list: list | None = None
-        if slot.beat_roles and len({r for r in slot.beat_roles if r is not None}) > 1:
+        if slot.beat_roles and any(r == SampleRole.NEW for r in slot.beat_roles):
             allowed_types = SOUND_GROUP_TYPES[slot.sound_group]
-            role_to_sample: dict[str, str] = {}
-            role_to_audio: dict[str, object] = {}
-            first_role = next(r for r in slot.beat_roles if r is not None)
-            role_to_sample[first_role] = sample_names[0]
-            role_to_audio[first_role] = audio
+            new_sample: str | None = None
+            new_audio = None
             prev_drawn = sample_names[0]
-            for role in slot.beat_roles:
-                if role is None or role in role_to_sample:
-                    continue
-                other = draw_next_sample_of_types(sample_queue, all_samples, allowed_types, exclude_name=prev_drawn)
-                if other is None:
-                    continue
-                role_to_sample[role] = other
-                other_audio = mix_samples_into_stereo_clip(
+            other = draw_next_sample_of_types(sample_queue, all_samples, allowed_types, exclude_name=prev_drawn)
+            if other is not None:
+                new_sample = other
+                new_audio = mix_samples_into_stereo_clip(
                     [other], {other: slot.panning}, input_audio_dir, sample_rate,
                     volume_db, beat_length, prepared_cache=prepared_cache,
                 )
                 if extra_vol_db != 0.0:
-                    other_audio = reduce_volume_by_db(other_audio, extra_vol_db)
-                role_to_audio[role] = other_audio
+                    new_audio = reduce_volume_by_db(new_audio, extra_vol_db)
                 sample_usage_count[other] = sample_usage_count.get(other, 0) + 1
-                prev_drawn = other
-            per_beat_audio_list = [role_to_audio.get(r, audio) for r in slot.beat_roles]
-            # Expand sample_names / pan_assignments to include all role samples for the filename.
-            for s in role_to_sample.values():
-                if s not in pan_assignments:
-                    pan_assignments = {**pan_assignments, s: slot.panning}
-            sample_names = list(dict.fromkeys(role_to_sample.values()))  # unique, insertion-ordered
+            per_beat_audio_list = [
+                (new_audio if new_audio is not None else audio) if r == SampleRole.NEW else audio
+                for r in slot.beat_roles
+            ]
+            # Expand sample_names / pan_assignments for the output filename.
+            if new_sample is not None:
+                pan_assignments = {**pan_assignments, new_sample: slot.panning}
+                sample_names = [sample_names[0], new_sample]
 
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         rhythmicized_path = (rhythmicized_output_dir / filename) if slot.rhythm else None
