@@ -1,11 +1,11 @@
 {
-  "bpms": "41:118",
+  "bpms": "40:120",
   "samples_to_silence_percents": "85:15",
-  "loud_quiet_values": "0:-30",
-  "silence_lengths_millisec": "1760:10780",
-  "silence_lengths_percents": "99:1",
+  "loud_quiet_values": "0:-32",
+  "silence_lengths_millisec": "1760",
+  "silence_lengths_percents": "100",
   "kicksnare_stab_acappella_percents": "40:40:20",
   "strings_volume_reduction": 3,
   "acappella_volume_reduction": 17,
-  "kick_snare_permutation_mode": true
+  "kick_snare_permutation_mode": false
 }

@@ -13,7 +13,7 @@ _CLIP_CEILING = 0.95
 
 
 def load_audio(input_audio_dir: Path, sample_name: str) -> tuple[np.ndarray, int]:
-    audio, sample_rate = sf.read(input_audio_dir / f"{sample_name}.wav")
+    audio, sample_rate = sf.read(input_audio_dir / f"{sample_name}.wav", dtype='float32')
     return audio, sample_rate
 
 
@@ -72,6 +72,25 @@ def mono_to_stereo_center(audio: np.ndarray) -> np.ndarray:
     return np.column_stack([audio, audio]) if audio.ndim == 1 else audio
 
 
+def load_and_prepare_sample(
+    sample_name: str,
+    input_audio_dir: Path,
+    target_sample_rate: int,
+) -> np.ndarray:
+    """Load, resample, and (where applicable) normalize one input sample.
+
+    Returns the array ready to be panned/trimmed by mix_samples_into_stereo_clip.
+    Safe to cache: the result is independent of panning, BPM, and rhythm.
+    """
+    audio, sr = load_audio(input_audio_dir, sample_name)
+    audio = resample_to_rate(audio, sr, target_sample_rate)
+    if passes_through_unmodified(sound_type_of(sample_name)):
+        return mono_to_stereo_center(audio)
+    if sound_type_of(sample_name) == ACAPPELLA:
+        return audio  # acappella skips normalize_loudness
+    return normalize_loudness(audio)
+
+
 def mix_samples_into_stereo_clip(
     sample_names: list[str],
     pan_assignments: dict[str, str],
@@ -79,23 +98,32 @@ def mix_samples_into_stereo_clip(
     sample_rate: int,
     volume_db: float,
     beat_length_seconds: float,
+    prepared_cache: dict[str, np.ndarray] | None = None,
 ) -> np.ndarray:
-    loaded: dict[str, np.ndarray] = {}
+    prepared: dict[str, np.ndarray] = {}
     for name in sample_names:
-        audio, sr = load_audio(input_audio_dir, name)
-        loaded[name] = resample_to_rate(audio, sr, sample_rate)
+        if prepared_cache is not None and name in prepared_cache:
+            prepared[name] = prepared_cache[name]
+        else:
+            audio, sr = load_audio(input_audio_dir, name)
+            audio = resample_to_rate(audio, sr, sample_rate)
+            if passes_through_unmodified(sound_type_of(name)):
+                prepared[name] = mono_to_stereo_center(audio)
+            elif sound_type_of(name) == ACAPPELLA:
+                prepared[name] = audio
+            else:
+                prepared[name] = normalize_loudness(audio)
 
     has_pass_through = any(passes_through_unmodified(sound_type_of(n)) for n in sample_names)
 
     mixed = None
     for name in sample_names:
-        audio = loaded[name]
+        audio = prepared[name]
         if passes_through_unmodified(sound_type_of(name)):
-            stereo = mono_to_stereo_center(audio)
+            stereo = audio  # already mono_to_stereo'd by load_and_prepare_sample
         else:
-            normalized = audio if sound_type_of(name) == ACAPPELLA else normalize_loudness(audio)
             stereo = pad_or_trim_to_duration(
-                pan_to_stereo(normalized, pan_assignments[name]),
+                pan_to_stereo(audio, pan_assignments[name]),
                 sample_rate,
                 beat_length_seconds,
             )

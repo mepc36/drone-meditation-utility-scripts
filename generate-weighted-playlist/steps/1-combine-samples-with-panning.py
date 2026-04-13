@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 import json
 import random
 import shutil
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from functools import reduce
 from math import gcd
 from pathlib import Path
+from threading import Semaphore
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import soundfile as sf
 
 import lib.config as cfg
-from lib.audio_processing import apply_rhythm_pattern, load_audio, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
+from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
 from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks
 from lib.sample_queue import (
     build_biased_reservations,
@@ -47,6 +50,44 @@ from lib.constants import (
     MAX_DRAW_RETRIES,
 )
 from lib.runtime_constants import LOUD, QUIET, SLOW, FAST
+
+
+_RENDER_WORKERS = min(4, os.cpu_count() or 2)
+_MAX_PENDING_RENDERS = _RENDER_WORKERS * 8
+_WRITE_WORKERS = min(16, (os.cpu_count() or 4) * 2)
+_MAX_PENDING_WRITES = _WRITE_WORKERS * 8
+
+
+def _bounded_write(path: Path, audio, sample_rate: int, sem: Semaphore) -> None:
+    try:
+        sf.write(path, audio, sample_rate)
+    finally:
+        sem.release()
+
+
+def _render_and_write(
+    audio,
+    sample_rate: int,
+    beat_length: float,
+    rhythm: tuple,
+    beat_pannings: tuple,
+    output_path: Path,
+    rhythmicized_path,
+    write_sem: Semaphore,
+    write_executor: ThreadPoolExecutor,
+    render_sem: Semaphore,
+) -> None:
+    try:
+        write_sem.acquire()
+        write_executor.submit(_bounded_write, output_path, audio, sample_rate, write_sem)
+        if rhythmicized_path is not None:
+            rhythmicized_audio = audio if rhythm == (UNTOUCHED,) else apply_rhythm_pattern(
+                audio, sample_rate, beat_length, rhythm, beat_pannings
+            )
+            write_sem.acquire()
+            write_executor.submit(_bounded_write, rhythmicized_path, rhythmicized_audio, sample_rate, write_sem)
+    finally:
+        render_sem.release()
 
 
 def clear_output_directory(output_dir: Path) -> None:
@@ -401,6 +442,7 @@ def main() -> None:
     random.shuffle(full_deck)
 
     total_slots = len(full_deck)
+    _print_interval = max(100, total_slots // 200)
     print(f"\n  Total samples to generate: {total_slots}")
     if sys.stdin.isatty():
         answer = input("  Proceed? [Y/n] ").strip().lower()
@@ -413,6 +455,12 @@ def main() -> None:
     sample_queue, all_samples = create_shuffled_sample_queue(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_samples}
     seen_combinations: set = set()
+    # In permutation mode each (sample × panning × bpm) combo repeats exactly
+    # M times (the LCM multiplier). Cache only the base stereo audio (pre-rhythm)
+    # so each mix is computed once and rhythm is re-applied cheaply per slot.
+    render_cache: dict[tuple, np.ndarray] | None = (
+        {} if conf['kick_snare_permutation_mode'] else None
+    )
 
     if conf.get('sample_bias'):
         validate_sample_bias(conf['sample_bias'], samples_by_type)
@@ -428,10 +476,25 @@ def main() -> None:
     first_sample = list(samples_by_type.values())[0][0]
     _, sample_rate = load_audio(input_audio_dir, first_sample)
 
+    # Pre-load every input sample once: load + resample + normalize.
+    # The render loop re-uses these arrays instead of hitting disk per slot.
+    all_unique_samples = sorted(s for samples in samples_by_type.values() for s in samples)
+    print(f"  Pre-loading {len(all_unique_samples)} input sample(s)...")
+    prepared_cache: dict[str, np.ndarray] = {
+        name: load_and_prepare_sample(name, input_audio_dir, sample_rate)
+        for name in all_unique_samples
+    }
+
     created_count = strings_created = non_strings_created = 0
     group_appearances: dict[str, int] = {g: 0 for g in SOUND_GROUP_NAMES}
     center_count = left_count = right_count = dualpan_count = hard_left_count = hard_right_count = 0
     volume_counts = [0] * len(conf['volume_levels_db'])
+
+    _render_sem = Semaphore(_MAX_PENDING_RENDERS)
+    render_executor = ThreadPoolExecutor(max_workers=_RENDER_WORKERS)
+    _write_sem = Semaphore(_MAX_PENDING_WRITES)
+    write_executor = ThreadPoolExecutor(max_workers=_WRITE_WORKERS)
+    print(f"  Rendering with {_RENDER_WORKERS} worker(s), writing with {_WRITE_WORKERS} worker(s)")
 
     for slot in full_deck:
         # In permutation mode, kick/snare slots carry a forced_sample assigned at
@@ -482,23 +545,47 @@ def main() -> None:
             volume_counts[volume_idx] += 1
 
         beat_length = conf['beat_lengths_seconds'][bpm_idx]
-        audio = mix_samples_into_stereo_clip(sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length)
+
+        extra_vol_db = 0.0
         if slot.sound_group == STRINGS and conf['strings_volume_reduction']:
-            audio = reduce_volume_by_db(audio, -conf['strings_volume_reduction'])
-        if slot.sound_group == ACAPPELLA and conf['acappella_volume_reduction']:
-            audio = reduce_volume_by_db(audio, -conf['acappella_volume_reduction'])
+            extra_vol_db = float(-conf['strings_volume_reduction'])
+        elif slot.sound_group == ACAPPELLA and conf['acappella_volume_reduction']:
+            extra_vol_db = float(-conf['acappella_volume_reduction'])
+
+        render_key: tuple | None = None
+        if render_cache is not None:
+            render_key = (
+                tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names)),
+                bpm_idx, volume_db, extra_vol_db,
+            )
+
+        if render_key is not None and render_key in render_cache:
+            audio = render_cache[render_key]
+        else:
+            audio = mix_samples_into_stereo_clip(
+                sample_names, pan_assignments, input_audio_dir, sample_rate, volume_db, beat_length,
+                prepared_cache=prepared_cache,
+            )
+            if extra_vol_db != 0.0:
+                audio = reduce_volume_by_db(audio, extra_vol_db)
+            if render_key is not None:
+                render_cache[render_key] = audio
+
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
-        sf.write(output_dir / filename, audio, sample_rate)
+        rhythmicized_path = (rhythmicized_output_dir / filename) if slot.rhythm else None
+        _render_sem.acquire()
+        render_executor.submit(
+            _render_and_write,
+            audio, sample_rate, beat_length, slot.rhythm, slot.beat_pannings,
+            output_dir / filename, rhythmicized_path,
+            _write_sem, write_executor, _render_sem,
+        )
 
-        if slot.rhythm:
-            if slot.rhythm == (UNTOUCHED,):
-                sf.write(rhythmicized_output_dir / filename, audio, sample_rate)
-            else:
-                rhythmicized_audio = apply_rhythm_pattern(audio, sample_rate, beat_length, slot.rhythm, slot.beat_pannings)
-                sf.write(rhythmicized_output_dir / filename, rhythmicized_audio, sample_rate)
-
-        if created_count % 10 == 0 or created_count == conf['num_audio_samples']:
+        if created_count % _print_interval == 0 or created_count == conf['num_audio_samples']:
             print(f"  Created {created_count}/{conf['num_audio_samples']} samples...")
+
+    render_executor.shutdown(wait=True)
+    write_executor.shutdown(wait=True)
 
     if created_count < conf['num_audio_samples']:
         print(f"\nWarning: Only created {created_count} audio samples (expected {conf['num_audio_samples']}).")
