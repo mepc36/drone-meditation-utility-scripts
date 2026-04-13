@@ -168,6 +168,8 @@ generate-weighted-playlist/
 
 All settings live in `./input/config/config.json`. Required fields are marked **[required]**; all others are optional.
 
+> **Note:** The total number of output files (`num_unique_samples`) is no longer a config field. It is auto-derived from the number of kick/snare input files in `./input/audio/` and the `kicksnare_stab_acappella_percents` ratio: `round(kicksnare_file_count × 100 / kicksnare_pct)`.
+
 ### Annotated example
 
 ```json
@@ -176,9 +178,6 @@ All settings live in `./input/config/config.json`. Required fields are marked **
   // Single value: all samples use one beat length.
   // Two values: the pipeline draws samples at both tempos. Order is normalized automatically (slow to fast).
   "bpms": "75:118",
-
-  // [required] Total number of unique files to generate across audio samples and silence combined.
-  "num_unique_samples": 200,
 
   // [required] Percentage split across the three sound groups, in the order kicksnare:stab:acappella.
   // Must have exactly 3 colon-separated values summing to 100.
@@ -253,7 +252,6 @@ All settings live in `./input/config/config.json`. Required fields are marked **
 | Field | Required | Type | Default | Description |
 |---|---|---|---|---|
 | `bpms` | Yes | string | — | Colon-separated BPM values. One or two values. |
-| `num_unique_samples` | Yes | integer | — | Total files to generate (audio + silence combined). |
 | `kicksnare_stab_acappella_percents` | Yes | string | — | Three colon-separated percents for kicksnare:stab:acappella. Must sum to 100. |
 | `samples_to_silence_percents` | No | string | `"100:0"` | Colon-separated percents for audio:silence split. Must sum to 100. |
 | `silence_lengths_millisec` | No | string | `"2000"` | Colon-separated millisecond values for silence durations. |
@@ -282,7 +280,7 @@ The following assumptions are made about the config and the environment. Violati
 - `include_all` and `exclude` are mutually exclusive within a single `is_random` bucket. Specifying both raises an error.
 - An `is_random` bucket with `include` (and `include_all` not set) must provide a non-empty list. An empty list raises an error.
 - `strings_volume_reduction` and `acappella_volume_reduction` are applied additively on top of the sample's assigned loud/quiet dB level. They are not an absolute target level.
-- Each `biased_pool_pct` value, when applied to the group's calculated slot count, yields at least one slot. Very small percentages combined with a small `num_unique_samples` may raise an error.
+- Each `biased_pool_pct` value, when applied to the group's calculated slot count, yields at least one slot. Very small percentages combined with few kicksnare input files may raise an error.
 
 ## Todos
 
