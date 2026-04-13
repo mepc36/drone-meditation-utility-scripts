@@ -9,7 +9,7 @@ from .constants import (
     KICK, SNARE, KICKSNARE, KICKSTAB, SNARESTAB, STAB, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
-    RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE, SampleRole,
+    RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE, SampleRole, MUSIC_PATTERN_PERCENT,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
@@ -247,6 +247,46 @@ def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
                     seen.add(pat)
                     found.append(pat)
     return found
+
+
+def compute_group_draw_multipliers() -> dict[str, float]:
+    """Return the expected sample draws per allocated slot for each sound group.
+
+    Two sources of extra draws beyond 1.0 are counted:
+    - Dualpan slots: draw a primary + a partner sample = +1.0 draw per slot.
+    - SampleRole.NEW beats: each NEW beat in a rhythm draws an additional sample = +1.0 per beat.
+
+    The multiplier is the weighted average across all musical patterns and rhythm
+    patterns for the group.
+
+    Used to pre-correct group_targets so the configured ratio applies to actual
+    sample draws, not just output file counts.
+    """
+    multipliers: dict[str, float] = {}
+    for group in SOUND_GROUP_NAMES:
+        sound_type = next(iter(SOUND_GROUP_TYPES[group]))
+        rule = rules_by_sound_type.get(sound_type)
+        if rule is None:
+            multipliers[group] = 1.0
+            continue
+        extra = 0.0
+        for mp in rule[MUSICAL_PATTERNS]:
+            mp_weight = mp[MUSIC_PATTERN_PERCENT] / 100.0
+            rp_list = mp[RHYTHM_PATTERNS]
+            if not rp_list or rp_list[0] is UNTOUCHED:
+                continue
+            panning_key = derive_panning_key(mp)
+            dualpan_extra = 1.0 if panning_key in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) else 0.0
+            for rp_entry in rp_list:
+                rp_weight = rp_entry[RHYTHM_PERCENT] / 100.0
+                beats = rp_entry[RHYTHM_PATTERN]
+                new_count = sum(
+                    1 for b in beats
+                    if isinstance(b, dict) and b.get(SAMPLE_ROLE) == SampleRole.NEW
+                )
+                extra += mp_weight * rp_weight * (dualpan_extra + new_count)
+        multipliers[group] = 1.0 + extra
+    return multipliers
 
 
 def plan_output_files(
