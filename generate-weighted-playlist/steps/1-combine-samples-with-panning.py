@@ -99,9 +99,11 @@ def clear_output_directory(output_dir: Path) -> None:
 
 
 def panning_group_from_assignments(sample_names: list[str], pan_assignments: dict) -> str:
-    if len(sample_names) == 2:
+    pannings = {pan_assignments[n] for n in sample_names}
+    if len(pannings) > 1:
+        # Two samples with distinct positions (e.g. HARD_LEFT+HARD_RIGHT or DIAGONAL pair) → dualpan
         return PANNING_DUALPAN
-    pan = pan_assignments[sample_names[0]]
+    pan = next(iter(pannings))
     if pan == HARD_CENTER:
         return PANNING_CENTER
     if pan in (HARD_LEFT, HARD_RIGHT):
