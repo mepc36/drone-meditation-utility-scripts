@@ -9,7 +9,7 @@ from .constants import (
     KICK, SNARE, KICKSNARE, KICKSTAB, SNARESTAB, STAB, ACAPPELLA,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
-    RHYTHM_PATTERN, RHYTHM_PERCENT,
+    RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
@@ -24,6 +24,7 @@ class SlotSpec:
     rhythm: tuple[float | str, ...] = ()
     beat_pannings: tuple[float | str, ...] = ()  # per-beat chosen pannings, parallel to rhythm
     forced_sample: str | None = None  # permutation mode: pre-assigned sample name (bypasses queue draw)
+    beat_roles: tuple[str | None, ...] = ()  # per-beat role labels; same label = reuse one sample, different label = draw a new one
 
 
 def _expand_directional_quotas(panning_quotas: dict[str, int]) -> dict:
@@ -117,29 +118,32 @@ def _allocate_panning_slots(
 
 
 def _hashable_beat(b) -> tuple:
-    """Convert a beat dict to a hashable (duration, (panning, ...)) tuple."""
+    """Convert a beat dict to a hashable (duration, (panning, ...), role) tuple."""
     if not isinstance(b, dict):
         raise TypeError(f"Beat must be a dict with 'musical_duration' and 'possible_pannings', got {b!r}")
-    return (float(b[MUSICAL_DURATION]), tuple(b[POSSIBLE_PANNINGS]))
+    return (float(b[MUSICAL_DURATION]), tuple(b[POSSIBLE_PANNINGS]), b.get(SAMPLE_ROLE))
 
 
-def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple]:
-    """Split a raw (hashable) beat pattern into separate duration and panning tuples.
+def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tuple]:
+    """Split a raw (hashable) beat pattern into duration, panning, and role tuples.
 
-    Format: (type_str, rhythm_percent, (duration, (pannings,...)), ...).
+    Format: (type_str, rhythm_percent, (duration, (pannings,...), role), ...).
     A panning is randomly chosen from the candidate list for each beat.
     """
     if raw_pattern == (UNTOUCHED,):
-        return (UNTOUCHED,), ()
+        return (UNTOUCHED,), (), ()
     durations: list = []
     pannings: list = []
+    roles: list = []
     for b in raw_pattern[2:]:  # skip type string at index 0 and percent at index 1
-        if not (isinstance(b, tuple) and len(b) == 2 and isinstance(b[1], tuple)):
-            raise TypeError(f"Hashed beat must be a (duration, (pannings,...)) tuple, got {b!r}")
-        duration, pan_options = b
+        if not (isinstance(b, tuple) and len(b) in (2, 3) and isinstance(b[1], tuple)):
+            raise TypeError(f"Hashed beat must be a (duration, (pannings,...)[, role]) tuple, got {b!r}")
+        duration, pan_options = b[0], b[1]
+        role = b[2] if len(b) == 3 else None
         durations.append(float(duration))
         pannings.append(random.choice(pan_options) if pan_options else '')
-    return tuple(durations), tuple(pannings)
+        roles.append(role)
+    return tuple(durations), tuple(pannings), tuple(roles)
 
 
 def _allowed_volume_bpm_combos(group: str, panning: float | None) -> set[tuple]:
@@ -282,6 +286,7 @@ def plan_output_files(
 
     assigned_rhythms: list[tuple] = [()] * len(deck)
     assigned_pannings: list[tuple] = [()] * len(deck)
+    assigned_roles: list[tuple] = [()] * len(deck)
     for avail_tuple, indices in groups.items():
         if not avail_tuple:
             continue
@@ -296,12 +301,13 @@ def plan_output_files(
         flat: list[tuple] = [pat for pat, cnt in zip(patterns, counts) for _ in range(cnt)]
         random.shuffle(flat)
         for idx, raw_pattern in zip(indices, flat):
-            rhythm, beat_pannings = _extract_rhythm_and_pannings(raw_pattern)
+            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(raw_pattern)
             assigned_rhythms[idx] = rhythm
             assigned_pannings[idx] = beat_pannings
+            assigned_roles[idx] = beat_roles
 
     deck = [
-        dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i])
+        dataclasses.replace(slot, rhythm=assigned_rhythms[i], beat_pannings=assigned_pannings[i], beat_roles=assigned_roles[i])
         for i, slot in enumerate(deck)
     ]
 
@@ -351,12 +357,12 @@ def build_permutation_kick_snare_deck(
     rhythm_entries = pattern_group[RHYTHM_PATTERNS]
 
     # Pre-compute hashable rhythm tuples once (avoid re-deriving per sample).
-    precomputed: list[tuple[tuple, tuple]] = []
+    precomputed: list[tuple[tuple, tuple, tuple]] = []
     for entry in rhythm_entries:
         raw = entry[RHYTHM_PATTERN]
         pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-        rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
-        precomputed.append((rhythm, beat_pannings))
+        rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
+        precomputed.append((rhythm, beat_pannings, beat_roles))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -366,10 +372,11 @@ def build_permutation_kick_snare_deck(
             bpm_label=bpm_label,
             rhythm=rhythm,
             beat_pannings=beat_pannings,
+            beat_roles=beat_roles,
             forced_sample=sample,
         )
         for sample in kick_snare_samples
-        for rhythm, beat_pannings in precomputed
+        for rhythm, beat_pannings, beat_roles in precomputed
     ]
     random.shuffle(slots)
     return slots
@@ -391,7 +398,7 @@ def build_permutation_stab_deck(
     if not stab_samples:
         return []
 
-    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings)
+    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles)
     for pattern_group in KICKSTAB_SNARESTAB_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
@@ -399,8 +406,8 @@ def build_permutation_stab_deck(
         for entry in pattern_group[RHYTHM_PATTERNS]:
             raw = entry[RHYTHM_PATTERN]
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
-            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings))
+            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
+            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -410,10 +417,11 @@ def build_permutation_stab_deck(
             bpm_label=bpm_label,
             rhythm=rhythm,
             beat_pannings=beat_pannings,
+            beat_roles=beat_roles,
             forced_sample=sample,
         )
         for sample in stab_samples
-        for panning, vol_label, bpm_label, rhythm, beat_pannings in slot_templates
+        for panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles in slot_templates
     ]
     random.shuffle(slots)
     return slots
@@ -427,7 +435,7 @@ def build_permutation_acappella_deck(
     if not acap_samples:
         return []
 
-    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings)
+    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles)
     for pattern_group in ACAPPELLA_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
@@ -435,8 +443,8 @@ def build_permutation_acappella_deck(
         for entry in pattern_group[RHYTHM_PATTERNS]:
             raw = entry[RHYTHM_PATTERN]
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            rhythm, beat_pannings = _extract_rhythm_and_pannings(pat)
-            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings))
+            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
+            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -446,10 +454,11 @@ def build_permutation_acappella_deck(
             bpm_label=bpm_label,
             rhythm=rhythm,
             beat_pannings=beat_pannings,
+            beat_roles=beat_roles,
             forced_sample=sample,
         )
         for sample in acap_samples
-        for panning, vol_label, bpm_label, rhythm, beat_pannings in slot_templates
+        for panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles in slot_templates
     ]
     random.shuffle(slots)
     return slots

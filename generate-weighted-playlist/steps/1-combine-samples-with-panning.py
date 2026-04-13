@@ -76,13 +76,14 @@ def _render_and_write(
     write_sem: Semaphore,
     write_executor: ThreadPoolExecutor,
     render_sem: Semaphore,
+    per_beat_audio: list | None = None,
 ) -> None:
     try:
         write_sem.acquire()
         write_executor.submit(_bounded_write, output_path, audio, sample_rate, write_sem)
         if rhythmicized_path is not None:
             rhythmicized_audio = audio if rhythm == (UNTOUCHED,) else apply_rhythm_pattern(
-                audio, sample_rate, beat_length, rhythm, beat_pannings
+                audio, sample_rate, beat_length, rhythm, beat_pannings, per_beat_audio
             )
             write_sem.acquire()
             write_executor.submit(_bounded_write, rhythmicized_path, rhythmicized_audio, sample_rate, write_sem)
@@ -571,6 +572,40 @@ def main() -> None:
             if render_key is not None:
                 render_cache[render_key] = audio
 
+        # Role-based per-beat audio (e.g. A/B/A patterns): draw one sample per
+        # unique role; same role reuses the same audio, different role draws fresh.
+        per_beat_audio_list: list | None = None
+        if slot.beat_roles and len({r for r in slot.beat_roles if r is not None}) > 1:
+            allowed_types = SOUND_GROUP_TYPES[slot.sound_group]
+            role_to_sample: dict[str, str] = {}
+            role_to_audio: dict[str, object] = {}
+            first_role = next(r for r in slot.beat_roles if r is not None)
+            role_to_sample[first_role] = sample_names[0]
+            role_to_audio[first_role] = audio
+            prev_drawn = sample_names[0]
+            for role in slot.beat_roles:
+                if role is None or role in role_to_sample:
+                    continue
+                other = draw_next_sample_of_types(sample_queue, all_samples, allowed_types, exclude_name=prev_drawn)
+                if other is None:
+                    continue
+                role_to_sample[role] = other
+                other_audio = mix_samples_into_stereo_clip(
+                    [other], {other: slot.panning}, input_audio_dir, sample_rate,
+                    volume_db, beat_length, prepared_cache=prepared_cache,
+                )
+                if extra_vol_db != 0.0:
+                    other_audio = reduce_volume_by_db(other_audio, extra_vol_db)
+                role_to_audio[role] = other_audio
+                sample_usage_count[other] = sample_usage_count.get(other, 0) + 1
+                prev_drawn = other
+            per_beat_audio_list = [role_to_audio.get(r, audio) for r in slot.beat_roles]
+            # Expand sample_names / pan_assignments to include all role samples for the filename.
+            for s in role_to_sample.values():
+                if s not in pan_assignments:
+                    pan_assignments = {**pan_assignments, s: slot.panning}
+            sample_names = list(dict.fromkeys(role_to_sample.values()))  # unique, insertion-ordered
+
         filename = build_output_filename(sample_names, pan_assignments, volume_db, created_count, conf['bpm_values'][bpm_idx], slot.rhythm)
         rhythmicized_path = (rhythmicized_output_dir / filename) if slot.rhythm else None
         _render_sem.acquire()
@@ -579,6 +614,7 @@ def main() -> None:
             audio, sample_rate, beat_length, slot.rhythm, slot.beat_pannings,
             output_dir / filename, rhythmicized_path,
             _write_sem, write_executor, _render_sem,
+            per_beat_audio_list,
         )
 
         if created_count % _print_interval == 0 or created_count == conf['num_audio_samples']:

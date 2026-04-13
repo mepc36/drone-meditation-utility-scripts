@@ -141,6 +141,7 @@ def apply_rhythm_pattern(
     beat_length_seconds: float,
     pattern: tuple[float, ...],
     beat_pannings: tuple[str, ...] = (),
+    per_beat_audio: list[np.ndarray] | None = None,
 ) -> np.ndarray:
     """Chop audio into rhythmic segments and concatenate into a new clip.
 
@@ -157,7 +158,35 @@ def apply_rhythm_pattern(
     that successive beats can occupy different stereo positions.  Beats with
     an empty-string panning inherit the slot-level panning already baked into
     `audio`.  All output chunks are stereo when any beat has an explicit panning.
+
+    When `per_beat_audio` is provided (parallel to `pattern`), each beat uses
+    its own pre-prepared stereo audio array instead of `audio`.  This is used
+    by role-based rhythms (e.g. A/B/A patterns) where different beats come from
+    different samples.  `beat_pannings` re-panning is skipped for this path since
+    each beat's audio already has the correct panning baked in.
     """
+    # Fast path: per-beat audio already prepared (role-based rhythms).
+    if per_beat_audio is not None:
+        chunks = []
+        for i, duration_beats in enumerate(pattern):
+            beat_src = per_beat_audio[i] if i < len(per_beat_audio) else audio
+            n_ch = beat_src.shape[1] if beat_src.ndim == 2 else 1
+            if duration_beats == 0:
+                n_sil = int(beat_length_seconds * sample_rate)
+                chunks.append(np.zeros((n_sil, n_ch) if n_ch > 1 else (n_sil,)))
+                continue
+            sound_beats = min(duration_beats, 1.0)
+            silence_beats = duration_beats - sound_beats
+            sound_samples = int(sound_beats * beat_length_seconds * sample_rate)
+            chunk = beat_src[:sound_samples]
+            if len(chunk) < sound_samples:
+                pad = np.zeros((sound_samples - len(chunk), n_ch) if n_ch > 1 else (sound_samples - len(chunk),))
+                chunk = np.concatenate([chunk, pad])
+            chunks.append(chunk)
+            if silence_beats > 0:
+                n_sil = int(silence_beats * beat_length_seconds * sample_rate)
+                chunks.append(np.zeros((n_sil, n_ch) if n_ch > 1 else (n_sil,)))
+        return np.concatenate(chunks) if chunks else np.zeros((0, 2))
     n_channels = audio.shape[1] if audio.ndim == 2 else 1
     output_stereo = bool(beat_pannings) and any(p for p in beat_pannings)
 

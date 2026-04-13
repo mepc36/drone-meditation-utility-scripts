@@ -8,7 +8,7 @@ from .constants import (
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     QUARTER_RHYTHM, DOUBLE_RHYTHM, QUARTER_REST_RHYTHM, QUARTER_REST_QUARTER_RHYTHM, TRIPLE_RHYTHM, QUARTER_QUARTER_REST_RHYTHM, QUADRUPLE_RHYTHM,
     EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_QUARTER_RHYTHM, QUARTER_EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_RHYTHM, SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM, SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_RHYTHM,
-    MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
+    MUSICAL_DURATION, POSSIBLE_PANNINGS, SAMPLE_ROLE, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
@@ -140,6 +140,30 @@ def derive_panning_key(entry: dict):
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
     return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+
+
+def with_roles(beats: list, roles: tuple) -> list:
+    """Attach SAMPLE_ROLE labels to beats, enabling different samples per beat position.
+
+    Example — A/B/A pattern on a triple rhythm:
+        with_roles(triple_rhythm(panning), ('A', 'B', 'A'))
+
+    Beats with the same role label share one drawn sample; different labels draw
+    independently (each new role excludes the previously drawn sample).
+    A None role means "no constraint — draw freely (same behavior as today)."
+    """
+    if len(roles) != len(beats):
+        raise ValueError(
+            f"with_roles: roles length ({len(roles)}) does not match beats length ({len(beats)}). "
+            f"roles={roles!r}"
+        )
+    result = []
+    for beat, role in zip(beats, roles):
+        if role is not None:
+            result.append({**beat, SAMPLE_ROLE: role})
+        else:
+            result.append(beat)
+    return result
 
 
 def quarter_rhythm(panning) -> list:
@@ -291,7 +315,11 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 50,
+                RHYTHM_PERCENT: 49,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 15,
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
@@ -299,20 +327,20 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 15,
+                RHYTHM_PERCENT: 4,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 4,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 4,
             },
+            {
+                RHYTHM_PATTERN: with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER), ('A', 'B', 'A')),
+                RHYTHM_PERCENT: 4
+            }
         ],
     }
 ]
