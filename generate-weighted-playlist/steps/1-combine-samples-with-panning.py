@@ -463,12 +463,12 @@ def main() -> None:
     total_slots = len(full_deck)
     _print_interval = max(100, total_slots // 200)
     print(f"\n  Total samples to generate: {total_slots}")
-    if sys.stdin.isatty():
+    if conf['kick_snare_permutation_mode'] and sys.stdin.isatty():
         answer = input("  Proceed? [Y/n] ").strip().lower()
         if answer and answer not in ('y', 'yes'):
             print("  Aborted.")
             sys.exit(0)
-    else:
+    elif conf['kick_snare_permutation_mode']:
         print("  (Non-interactive mode — proceeding automatically)")
 
     sample_queue, all_samples = create_shuffled_sample_queue(samples_by_type)
