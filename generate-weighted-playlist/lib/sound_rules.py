@@ -6,8 +6,7 @@ from .constants import (
     SOUND_GROUP_TYPES,
     PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
-    QUARTER_RHYTHM, DOUBLE_RHYTHM, QUARTER_REST_RHYTHM, QUARTER_REST_QUARTER_RHYTHM, TRIPLE_RHYTHM, QUARTER_QUARTER_REST_RHYTHM, QUADRUPLE_RHYTHM,
-    EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_QUARTER_RHYTHM, QUARTER_EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_RHYTHM, SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM, SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_EIGHTH_EIGHTH_RHYTHM, EIGHTH_RHYTHM,
+    RHYTHM_PATTERN_SEQUENCES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, SAMPLE_ROLE, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
@@ -16,122 +15,20 @@ from .constants import (
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
 
+# Reverse of RHYTHM_PATTERN_SEQUENCES: duration tuple → rhythm name.
+_RHYTHM_BY_SEQUENCE: dict[tuple, str] = {
+    seq: name for name, seq in RHYTHM_PATTERN_SEQUENCES.items()
+}
+
+
 def derive_type(pattern: list) -> str:
-    if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE:
-        return QUARTER_RHYTHM
-    if (len(pattern) == 2
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE):
-        return DOUBLE_RHYTHM
-    if (len(pattern) == 2
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST):
-        return QUARTER_REST_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE_REST
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return QUARTER_REST_QUARTER_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return TRIPLE_RHYTHM
-    if (len(pattern) == 4
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[3][MUSICAL_DURATION] == QUARTER_NOTE):
-        return QUADRUPLE_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE_REST):
-        return QUARTER_QUARTER_REST_RHYTHM
-    if (len(pattern) == 2
-            and pattern[0][MUSICAL_DURATION] == EIGHTH
-            and pattern[1][MUSICAL_DURATION] == EIGHTH):
-        return EIGHTH_EIGHTH_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == EIGHTH
-            and pattern[1][MUSICAL_DURATION] == EIGHTH
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return EIGHTH_EIGHTH_QUARTER_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == QUARTER_NOTE
-            and pattern[1][MUSICAL_DURATION] == EIGHTH
-            and pattern[2][MUSICAL_DURATION] == EIGHTH):
-        return QUARTER_EIGHTH_EIGHTH_RHYTHM
-    if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == SIXTEENTH:
-        return SIXTEENTH_RHYTHM
-    if (len(pattern) == 5
-            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[1][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[2][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[3][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[4][MUSICAL_DURATION] == QUARTER_NOTE):
-        return SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM
-    if (len(pattern) == 2
-            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[1][MUSICAL_DURATION] == DOTTED_EIGHTH):
-        return SIXTEENTH_DOTTEDEIGHTH_RHYTHM
-    if (len(pattern) == 4
-            and pattern[0][MUSICAL_DURATION] == EIGHTH
-            and pattern[1][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[2][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[3][MUSICAL_DURATION] == QUARTER_NOTE):
-        return EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[1][MUSICAL_DURATION] == DOTTED_EIGHTH
-            and pattern[2][MUSICAL_DURATION] == QUARTER_NOTE):
-        return SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM
-    if (len(pattern) == 4
-            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[1][MUSICAL_DURATION] == EIGHTH
-            and pattern[2][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[3][MUSICAL_DURATION] == QUARTER_NOTE):
-        return SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM
-    if (len(pattern) == 4
-            and pattern[0][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[1][MUSICAL_DURATION] == DOTTED_EIGHTH
-            and pattern[2][MUSICAL_DURATION] == SIXTEENTH
-            and pattern[3][MUSICAL_DURATION] == DOTTED_EIGHTH):
-        return SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM
-    if (len(pattern) == 4
-            and pattern[0][MUSICAL_DURATION] == EIGHTH
-            and pattern[1][MUSICAL_DURATION] == EIGHTH
-            and pattern[2][MUSICAL_DURATION] == EIGHTH
-            and pattern[3][MUSICAL_DURATION] == EIGHTH):
-        return EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM
-    if (len(pattern) == 3
-            and pattern[0][MUSICAL_DURATION] == EIGHTH
-            and pattern[1][MUSICAL_DURATION] == EIGHTH
-            and pattern[2][MUSICAL_DURATION] == EIGHTH):
-        return EIGHTH_EIGHTH_EIGHTH_RHYTHM
-    if len(pattern) == 1 and pattern[0][MUSICAL_DURATION] == EIGHTH:
-        return EIGHTH_RHYTHM
+    seq = tuple(beat[MUSICAL_DURATION] for beat in pattern)
+    name = _RHYTHM_BY_SEQUENCE.get(seq)
+    if name is not None:
+        return name
     raise ValueError(
-        f"Cannot derive pattern type from: {pattern!r}. "
-        f"Must be {QUARTER_RHYTHM} (len=1, QN), {DOUBLE_RHYTHM} (len=2, QN+QN), "
-        f"{QUARTER_REST_RHYTHM} (len=2, QN+QNR), "
-        f"{QUARTER_REST_QUARTER_RHYTHM} (len=3, QN+QNR+QN), "
-        f"{TRIPLE_RHYTHM} (len=3, QN+QN+QN), "
-        f"{QUARTER_QUARTER_REST_RHYTHM} (len=3, QN+QN+QNR), "
-        f"{EIGHTH_EIGHTH_RHYTHM} (len=2, E+E), "
-        f"{EIGHTH_EIGHTH_QUARTER_RHYTHM} (len=3, E+E+QN), "
-        f"{QUARTER_EIGHTH_EIGHTH_RHYTHM} (len=3, QN+E+E), "
-        f"{SIXTEENTH_RHYTHM} (len=1, S), "
-        f"{SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM} (len=5, S+S+S+S+QN), "
-        f"{SIXTEENTH_DOTTEDEIGHTH_RHYTHM} (len=2, S+DE), "
-        f"{EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM} (len=4, E+S+S+QN), "
-        f"{SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM} (len=3, S+DE+QN), "
-        f"{SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM} (len=4, S+E+S+QN), "
-        f"{SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM} (len=4, S+DE+S+DE), "
-        f"{EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM} (len=4, E+E+E+E), "
-        f"{EIGHTH_EIGHTH_EIGHTH_RHYTHM} (len=3, E+E+E), "
-        f"or {EIGHTH_RHYTHM} (len=1, E), "
-        f"or {QUADRUPLE_RHYTHM} (len=4, QN+QN+QN+QN)."
+        f"Cannot derive rhythm type from duration sequence {seq!r}. "
+        f"Known patterns: {list(_RHYTHM_BY_SEQUENCE)}"
     )
 
 
@@ -196,145 +93,80 @@ def with_roles(beats: list, roles: tuple) -> list:
     return result
 
 
+def _beat(duration: float, panning) -> dict:
+    return {MUSICAL_DURATION: duration, POSSIBLE_PANNINGS: [panning]}
+
+
 def quarter_rhythm(panning) -> list:
-    return [
-        {
-            MUSICAL_DURATION: QUARTER_NOTE,
-            POSSIBLE_PANNINGS: [panning],
-        },
-    ]
-
-
-def double_rhythm(panning) -> list:
-    return [*quarter_rhythm(panning), *quarter_rhythm(panning)]
+    return [_beat(QUARTER_NOTE, panning)]
 
 
 def quarter_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(QUARTER_NOTE, panning), _beat(QUARTER_NOTE, panning)]
 
 
 def eighth_eighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning), _beat(EIGHTH, panning)]
 
 
 def quarter_eighth_eighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH,       POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(QUARTER_NOTE, panning), _beat(EIGHTH, panning), _beat(EIGHTH, panning)]
 
 
 def sixteenth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning)]
 
 
 def sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning) for _ in range(4)] + [_beat(QUARTER_NOTE, panning)]
+
 
 def eighth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,    POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
+
 
 def sixteenth_dottedeighth_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: DOTTED_EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning), _beat(QUARTER_NOTE, panning)]
+
 
 def sixteenth_eighth_sixteenth_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning), _beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
+
 
 def sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: DOTTED_EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: DOTTED_EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning)]
+
 
 def sixteenth_dottedeighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: SIXTEENTH,     POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: DOTTED_EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning)]
+
 
 def eighth_eighth_eighth_eighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning) for _ in range(4)]
 
 
 def eighth_eighth_eighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning) for _ in range(3)]
+
 
 def eighth_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning)]
 
 
 def eighth_eighth_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: EIGHTH,        POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: EIGHTH,        POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE,  POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(EIGHTH, panning), _beat(EIGHTH, panning), _beat(QUARTER_NOTE, panning)]
+
 
 def quarter_rest_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE_REST, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE,      POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(QUARTER_NOTE, panning), _beat(QUARTER_NOTE_REST, panning), _beat(QUARTER_NOTE, panning)]
 
 
 def quarter_quarter_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(QUARTER_NOTE, panning) for _ in range(3)]
 
 
 def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
-    return [
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-        {MUSICAL_DURATION: QUARTER_NOTE, POSSIBLE_PANNINGS: [panning]},
-    ]
+    return [_beat(QUARTER_NOTE, panning) for _ in range(4)]
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [

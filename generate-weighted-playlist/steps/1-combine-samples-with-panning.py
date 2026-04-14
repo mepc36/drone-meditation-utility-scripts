@@ -15,6 +15,7 @@ from threading import Semaphore
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import soundfile as sf
+import numpy as np
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file

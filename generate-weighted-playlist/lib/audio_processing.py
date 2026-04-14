@@ -105,14 +105,7 @@ def mix_samples_into_stereo_clip(
         if prepared_cache is not None and name in prepared_cache:
             prepared[name] = prepared_cache[name]
         else:
-            audio, sr = load_audio(input_audio_dir, name)
-            audio = resample_to_rate(audio, sr, sample_rate)
-            if passes_through_unmodified(sound_type_of(name)):
-                prepared[name] = mono_to_stereo_center(audio)
-            elif sound_type_of(name) == ACAPPELLA:
-                prepared[name] = audio
-            else:
-                prepared[name] = normalize_loudness(audio)
+            prepared[name] = load_and_prepare_sample(name, input_audio_dir, sample_rate)
 
     has_pass_through = any(passes_through_unmodified(sound_type_of(n)) for n in sample_names)
 

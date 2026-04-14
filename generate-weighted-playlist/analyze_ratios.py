@@ -72,11 +72,6 @@ for t, n in input_type_counts.items():
 
 
 # ── Output file counts ────────────────────────────────────────────────────────
-def _is_strings_file(fname):
-    stem = fname[:-4] if fname.endswith(".wav") else fname
-    parts = stem.split("_")
-    return len(parts) >= 3 and parts[2].split(".")[0].lower() == STRINGS
-
 _BEAT_NAMES = {
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
@@ -91,8 +86,8 @@ SUFFIX_MAP = {
 
 all_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
 silence_wav = [f for f in all_wav if f.startswith("silence_")]
-strings_wav = [f for f in all_wav if _is_strings_file(f) and not f.startswith("silence_")]
-wav = [f for f in all_wav if not _is_strings_file(f) and not f.startswith("silence_")]
+strings_wav = [f for f in all_wav if sound_type_of(f) == STRINGS and not f.startswith("silence_")]
+wav = [f for f in all_wav if sound_type_of(f) != STRINGS and not f.startswith("silence_")]
 N = len(wav)  # non-strings musical files
 N_strings = len(strings_wav)
 N_total = len(all_wav)
@@ -271,13 +266,17 @@ print()
 out_dir = os.path.join(BASE, "output/analyze-ratios")
 os.makedirs(out_dir, exist_ok=True)
 
-_sidecar_path_early = os.path.join(out_dir, "last-run-resolved-bias.json")
-if os.path.exists(_sidecar_path_early):
-    with open(_sidecar_path_early) as _sf:
-        _early_bias = json.load(_sf)
+_sidecar_path = os.path.join(out_dir, "last-run-resolved-bias.json")
+_resolved_bias = None
+if os.path.exists(_sidecar_path):
+    with open(_sidecar_path) as _f:
+        _resolved_bias = json.load(_f)
+
+# Print any randomly-resolved sample bias entries from the last run
+if _resolved_bias:
     _random_entries = [
         (grp, entry)
-        for grp, entries in _early_bias.items()
+        for grp, entries in _resolved_bias.items()
         for entry in entries
         if entry.get('was_random')
     ]
@@ -286,16 +285,6 @@ if os.path.exists(_sidecar_path_early):
         for _grp, _entry in _random_entries:
             print(f"    {_grp:<14}  {_entry['biased_sample']}  ({_entry['biased_pool_pct']}%)")
         print()
-
-out_dir = os.path.join(BASE, "output/analyze-ratios")
-os.makedirs(out_dir, exist_ok=True)
-
-# Read resolved-bias sidecar (written by step 1 when sample_bias is active)
-_sidecar_path = os.path.join(out_dir, "last-run-resolved-bias.json")
-_resolved_bias = None
-if os.path.exists(_sidecar_path):
-    with open(_sidecar_path) as _f:
-        _resolved_bias = json.load(_f)
 
 
 def _file_contains_sample(fname: str, sample_name: str) -> bool:
