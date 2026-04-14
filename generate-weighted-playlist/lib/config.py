@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+from math import gcd
+from .constants import SOUND_GROUP_NAMES, KICKSNARE, STAB, ACAPPELLA, PERMUTATION_COMBOS_PER_SAMPLE
+
 
 CONFIG_PATH = Path("./input/config/config.json")
 INPUT_AUDIO_DIR = Path("./input/audio")
@@ -15,12 +18,51 @@ CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
 CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
 CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
 CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
-CFG_STRINGS_VOL_REDUCTION = 'strings_volume_reduction'
-CFG_ACAPPELLA_VOL_REDUCTION = 'acappella_volume_reduction'
+CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
+CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
+CFG_SAMPLE_BIAS             = 'sample_bias'
+CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
+
+# ── Sample-bias helpers ─────────────────────────────────────────────────────────
+_VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
 
 # ── Config validation counts ───────────────────────────────────────────────────
 NUM_SOUND_GROUP_PERCENTS = 3
 NUM_VOLUME_VALUES        = 2
+
+
+def _compute_balanced_permutation_total(
+    raw_counts: dict[str, int],
+    group_percents: list[int],
+) -> int:
+    """Return total slot count after LCM-based replication that restores
+    the kicksnare_stab_acappella_percents ratio across all non-empty groups.
+
+    For each active group g: total_g = C * (pct_g / pct_gcd)
+    where C = LCM of (raw_g / gcd(raw_g, pct_g / pct_gcd)) for all active g.
+    """
+    active: list[tuple[str, int, int]] = []
+    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
+        raw = raw_counts.get(group, 0)
+        if raw > 0 and pct > 0:
+            active.append((group, raw, pct))
+
+    if not active:
+        return 0
+
+    # Reduce percents to simplest integer ratio
+    pct_gcd = active[0][2]
+    for _, _, pct in active[1:]:
+        pct_gcd = gcd(pct_gcd, pct)
+
+    # Minimum C = LCM of all (raw_g / gcd(raw_g, reduced_ratio_g))
+    C = 1
+    for _, raw, pct in active:
+        r = pct // pct_gcd
+        d = raw // gcd(raw, r)
+        C = C * d // gcd(C, d)
+
+    return sum(C * (pct // pct_gcd) for _, _, pct in active)
 
 
 def parse_colon_ints(raw: str) -> list[int]:
@@ -41,6 +83,139 @@ def require_same_length(a: list, b: list, key_a: str, key_b: str) -> None:
         raise ValueError(f"{key_a} has {len(a)} values but {key_b} has {len(b)}")
 
 
+def parse_sample_bias(
+    raw: dict,
+    sound_group_percents: list[int],
+    num_audio_samples: int,
+) -> dict | None:
+    if CFG_SAMPLE_BIAS not in raw:
+        return None
+    bias_raw = raw[CFG_SAMPLE_BIAS]
+    if not bias_raw.get('is_sample_bias_enabled', False):
+        return None
+
+    group_pct_map = dict(zip(SOUND_GROUP_NAMES, sound_group_percents))
+    result: dict[str, list[dict]] = {}
+
+    for key, entries in bias_raw.items():
+        if key == 'is_sample_bias_enabled':
+            continue
+        if key not in _VALID_BIAS_GROUPS:
+            raise ValueError(
+                f"sample_bias contains unknown group '{key}'. "
+                f"Must be one of: {sorted(_VALID_BIAS_GROUPS)}"
+            )
+        if not isinstance(entries, list) or not entries:
+            raise ValueError(f"sample_bias.{key} must be a non-empty list")
+
+        total_pct = 0
+        has_unbiased = False
+        parsed_entries: list[dict] = []
+        seen_biased_samples: set[str] = set()
+        for entry in entries:
+            if 'unbiased_pool_pct' in entry:
+                if has_unbiased:
+                    raise ValueError(f"sample_bias.{key} has more than one unbiased_pool_pct entry")
+                pct_val = entry['unbiased_pool_pct']
+                if not isinstance(pct_val, int) or pct_val <= 0:
+                    raise ValueError(
+                        f"sample_bias.{key} unbiased_pool_pct must be a positive integer, got {pct_val!r}"
+                    )
+                has_unbiased = True
+                total_pct += pct_val
+                parsed_entries.append({'unbiased_pool_pct': pct_val})
+            elif entry.get('is_random') is True:
+                if 'biased_pool_pct' not in entry:
+                    raise ValueError(
+                        f"sample_bias.{key} is_random entry is missing 'biased_pool_pct'"
+                    )
+                pct_val = entry['biased_pool_pct']
+                if not isinstance(pct_val, int) or pct_val <= 0:
+                    raise ValueError(
+                        f"sample_bias.{key} is_random biased_pool_pct must be a positive integer, got {pct_val!r}"
+                    )
+                if 'include' in entry and 'exclude' in entry:
+                    raise ValueError(
+                        f"sample_bias.{key} is_random entry cannot specify both 'include' and 'exclude'"
+                    )
+                include_all = entry.get('include_all', False)
+                if include_all and 'exclude' in entry:
+                    raise ValueError(
+                        f"sample_bias.{key} is_random entry cannot specify both 'include_all' and 'exclude'"
+                    )
+                for filter_key in ('include', 'exclude'):
+                    if filter_key in entry:
+                        if not isinstance(entry[filter_key], list):
+                            raise ValueError(
+                                f"sample_bias.{key} is_random entry '{filter_key}' must be a list"
+                            )
+                        if not include_all and len(entry[filter_key]) == 0:
+                            raise ValueError(
+                                f"sample_bias.{key} is_random entry '{filter_key}' must not be empty — "
+                                f"omit the key entirely to allow the full group pool"
+                            )
+                total_pct += pct_val
+                parsed_entry: dict = {
+                    'is_random': True,
+                    'biased_pool_pct': pct_val,
+                }
+                if include_all:
+                    parsed_entry['include_all'] = True
+                elif 'include' in entry:
+                    parsed_entry['include'] = list(entry['include'])
+                if 'exclude' in entry:
+                    parsed_entry['exclude'] = list(entry['exclude'])
+                parsed_entries.append(parsed_entry)
+            elif 'biased_sample' in entry and 'biased_pool_pct' in entry:
+                pct_val = entry['biased_pool_pct']
+                if not isinstance(pct_val, int) or pct_val <= 0:
+                    raise ValueError(
+                        f"sample_bias.{key} biased_pool_pct must be a positive integer, got {pct_val!r}"
+                    )
+                sample_name = entry['biased_sample']
+                if sample_name in seen_biased_samples:
+                    raise ValueError(
+                        f"sample_bias.{key} biased_sample '{sample_name}' appears more than once "
+                        f"in the same group"
+                    )
+                seen_biased_samples.add(sample_name)
+                total_pct += pct_val
+                parsed_entries.append({
+                    'biased_sample': sample_name,
+                    'biased_pool_pct': pct_val,
+                })
+            else:
+                raise ValueError(
+                    f"sample_bias.{key} entry must have 'biased_sample' + 'biased_pool_pct', "
+                    f"'is_random: true' + 'biased_pool_pct', "
+                    f"or 'unbiased_pool_pct', got: {entry!r}"
+                )
+
+        if total_pct != 100:
+            raise ValueError(
+                f"sample_bias.{key} percents must sum to 100, got {total_pct}"
+            )
+
+        group_slot_count = round(num_audio_samples * group_pct_map.get(key, 0) / 100)
+        if group_slot_count == 0:
+            raise ValueError(
+                f"sample_bias.{key} is configured but '{key}' has 0% in "
+                f"{CFG_SOUND_GROUP_PERCENTS} — either remove the bias entry or increase its percent"
+            )
+        for entry in parsed_entries:
+            if 'biased_pool_pct' in entry:
+                slots = round(group_slot_count * entry['biased_pool_pct'] / 100)
+                if slots < 1:
+                    raise ValueError(
+                        f"sample_bias.{key} biased_pool_pct {entry['biased_pool_pct']} yields 0 slots "
+                        f"for group size ~{group_slot_count} — add more kick/snare input samples or lower biased_pool_pct"
+                    )
+
+        result[key] = parsed_entries
+
+    return result if result else None
+
+
 def load() -> dict:
     with open(CONFIG_PATH) as f:
         raw = json.load(f)
@@ -55,14 +230,46 @@ def load() -> dict:
     samples_percent = silence_ratio[0]
     silence_percent = silence_ratio[1] if len(silence_ratio) > 1 else 0
 
-    num_unique_samples = raw[CFG_NUM_UNIQUE_SAMPLES]
+    if CFG_SOUND_GROUP_PERCENTS not in raw:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
+    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
+    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
+        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
+    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
+
+    kicksnare_pct = sound_group_percents[0]
+    if kicksnare_pct == 0:
+        raise ValueError("kicksnare percent cannot be 0 — cannot derive total sample count from kicksnare files")
+    kicksnare_files = list(INPUT_AUDIO_DIR.glob("*_kick.wav")) + list(INPUT_AUDIO_DIR.glob("*_snare.wav"))
+    kicksnare_count = len(kicksnare_files)
+    if kicksnare_count == 0:
+        raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
+    strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
+    strings_count = len(strings_files)
+    kick_snare_permutation_mode = bool(raw.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
+    if kick_snare_permutation_mode:
+        stab_count = len(
+            list(INPUT_AUDIO_DIR.glob("*_kickstab.wav")) +
+            list(INPUT_AUDIO_DIR.glob("*_snarestab.wav"))
+        )
+        acap_count = len(list(INPUT_AUDIO_DIR.glob("*_acappella.wav")))
+        raw_perm_counts = {
+            KICKSNARE: kicksnare_count * PERMUTATION_COMBOS_PER_SAMPLE[KICKSNARE],
+            STAB:      stab_count      * PERMUTATION_COMBOS_PER_SAMPLE[STAB],
+            ACAPPELLA: acap_count      * PERMUTATION_COMBOS_PER_SAMPLE[ACAPPELLA],
+        }
+        permutation_non_strings_samples = _compute_balanced_permutation_total(
+            raw_perm_counts, sound_group_percents
+        )
+        num_audio_samples = permutation_non_strings_samples + strings_count
+    else:
+        num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
+
     if silence_percent == 0:
         num_silence_files = 0
-        num_audio_samples = num_unique_samples
     else:
-        silence_fraction = silence_percent / samples_percent
-        num_silence_files = round(num_unique_samples * silence_fraction / (1.0 + silence_fraction))
-        num_audio_samples = num_unique_samples - num_silence_files
+        num_silence_files = round(num_audio_samples * silence_percent / samples_percent)
+    num_unique_samples = num_audio_samples + num_silence_files
 
     silence_lengths_ms = parse_colon_ints(raw.get(CFG_SILENCE_LENGTHS_MS, "2000"))
     silence_length_percents = parse_colon_ints(raw.get(CFG_SILENCE_LEN_PCTS, "100"))
@@ -74,20 +281,15 @@ def load() -> dict:
         raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
     volume_levels_db = sorted(volume_levels_db, reverse=True)  # loud→quiet (high dB first)
 
-    if CFG_SOUND_GROUP_PERCENTS not in raw:
-        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must be set in config.json")
-    sound_group_percents = parse_colon_ints(raw[CFG_SOUND_GROUP_PERCENTS])
-    if len(sound_group_percents) != NUM_SOUND_GROUP_PERCENTS:
-        raise ValueError(f"{CFG_SOUND_GROUP_PERCENTS} must have exactly {NUM_SOUND_GROUP_PERCENTS} values (kicksnare:stab:acappella)")
-    require_sums_to_100(sound_group_percents, CFG_SOUND_GROUP_PERCENTS)
+    strings_volume_adjustment = raw.get(CFG_STRINGS_VOL_ADJUSTMENT, 0)
+    if not isinstance(strings_volume_adjustment, (int, float)):
+        raise ValueError(f"{CFG_STRINGS_VOL_ADJUSTMENT} must be a number (dB), got {strings_volume_adjustment!r}")
 
-    strings_volume_reduction = raw.get(CFG_STRINGS_VOL_REDUCTION, 0)
-    if not isinstance(strings_volume_reduction, int) or strings_volume_reduction < 0:
-        raise ValueError(f"{CFG_STRINGS_VOL_REDUCTION} must be a non-negative integer, got {strings_volume_reduction!r}")
+    acappella_volume_adjustment = raw.get(CFG_ACAPPELLA_VOL_ADJUSTMENT, 0)
+    if not isinstance(acappella_volume_adjustment, (int, float)):
+        raise ValueError(f"{CFG_ACAPPELLA_VOL_ADJUSTMENT} must be a number (dB), got {acappella_volume_adjustment!r}")
 
-    acappella_volume_reduction = raw.get(CFG_ACAPPELLA_VOL_REDUCTION, 0)
-    if not isinstance(acappella_volume_reduction, int) or acappella_volume_reduction < 0:
-        raise ValueError(f"{CFG_ACAPPELLA_VOL_REDUCTION} must be a non-negative integer, got {acappella_volume_reduction!r}")
+    sample_bias = parse_sample_bias(raw, sound_group_percents, num_audio_samples)
 
     return {
         "bpm_values": bpm_values,
@@ -110,8 +312,12 @@ def load() -> dict:
 
         "sound_group_percents": sound_group_percents,
 
-        "strings_volume_reduction": strings_volume_reduction,
-        "acappella_volume_reduction": acappella_volume_reduction,
+        "strings_volume_adjustment_db": strings_volume_adjustment,
+        "acappella_volume_adjustment_db": acappella_volume_adjustment,
+
+        "sample_bias": sample_bias,
+
+        "kick_snare_permutation_mode": kick_snare_permutation_mode,
 
         "raw": raw,
     }

@@ -10,23 +10,26 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
 from lib.constants import (
     STRINGS,
     SOUND_GROUP_NAMES, SOUND_GROUP_TYPES,
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_DUALPAN, PANNING_LEFT_OR_RIGHT,
     HARD_CENTER, HARD_LEFT, HARD_RIGHT, DIAGONAL_LEFT, DIAGONAL_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
-    LOUD, QUIET, SLOW,
     QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
+    EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM,
     RHYTHM_PATTERN_SEQUENCES,
-    SINGLE_RHYTHM, DOUBLE_RHYTHM,
+    QUARTER_RHYTHM, DOUBLE_RHYTHM,
     MUSICAL_PATTERNS, VOLUMES, BPMS, MUSIC_PATTERN_PERCENT,
     RHYTHM_PATTERNS, RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
+from lib.runtime_constants import LOUD, QUIET, SLOW
 from lib.sound_rules import rules_by_sound_type, derive_type, derive_panning_key
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.abspath(__file__))
 cfg_path = os.path.join(BASE, "input/config/config.json")
 input_audio_dir = os.path.join(BASE, "input/audio")
 rhythmicized_dir = os.path.join(BASE, "output/rhythmicized-audio")
@@ -35,14 +38,21 @@ with open(cfg_path) as f:
     cfg = json.load(f)
 
 cfg_sound_group_pcts = [int(x) for x in cfg.get('kicksnare_stab_acappella_percents', '').split(':')]
-cfg_num_unique = cfg.get('num_unique_samples', 0)
 _sil_ratio = [int(x) for x in cfg.get('samples_to_silence_percents', '100:0').split(':')]
 _samp_pct, _sil_pct = _sil_ratio[0], (_sil_ratio[1] if len(_sil_ratio) > 1 else 0)
+
+# Derive total counts from actual kicksnare input files (mirrors lib/config.py logic)
+_kicksnare_count = sum(
+    1 for f in os.listdir(input_audio_dir)
+    if f.endswith('_kick.wav') or f.endswith('_snare.wav')
+)
+_kicksnare_pct = cfg_sound_group_pcts[0] if cfg_sound_group_pcts else 50
+cfg_num_audio = round(_kicksnare_count * 100 / _kicksnare_pct) if _kicksnare_pct else 0
 if _sil_pct > 0:
-    _sil_frac = _sil_pct / _samp_pct
-    cfg_num_silence = round(cfg_num_unique * _sil_frac / (1.0 + _sil_frac))
+    cfg_num_silence = round(cfg_num_audio * _sil_pct / _samp_pct)
 else:
     cfg_num_silence = 0
+cfg_num_unique = cfg_num_audio + cfg_num_silence
 
 # ── Input file counts ─────────────────────────────────────────────────────────
 input_wav = [f for f in os.listdir(input_audio_dir) if f.endswith(".wav")]
@@ -70,6 +80,9 @@ def _is_strings_file(fname):
 _BEAT_NAMES = {
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    EIGHTH:            BEAT_NAME_EIGHTH,
+    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
 }
 SUFFIX_MAP = {
     '-'.join(_BEAT_NAMES[b] for b in beats): name
@@ -185,7 +198,7 @@ expected_pan = {
 }
 
 # ── Print table ───────────────────────────────────────────────────────────────
-_LOG_RHYTHMS = [SINGLE_RHYTHM, DOUBLE_RHYTHM]
+_LOG_RHYTHMS = [QUARTER_RHYTHM, DOUBLE_RHYTHM]
 
 def _status(actual, expected):
     if expected == 0:
@@ -255,6 +268,46 @@ for pat in _LOG_RHYTHMS:
 print()
 
 # ── Chart ─────────────────────────────────────────────────────────────────────
+out_dir = os.path.join(BASE, "output/analyze-ratios")
+os.makedirs(out_dir, exist_ok=True)
+
+_sidecar_path_early = os.path.join(out_dir, "last-run-resolved-bias.json")
+if os.path.exists(_sidecar_path_early):
+    with open(_sidecar_path_early) as _sf:
+        _early_bias = json.load(_sf)
+    _random_entries = [
+        (grp, entry)
+        for grp, entries in _early_bias.items()
+        for entry in entries
+        if entry.get('was_random')
+    ]
+    if _random_entries:
+        print("  SAMPLE BIAS  (randomly resolved):")
+        for _grp, _entry in _random_entries:
+            print(f"    {_grp:<14}  {_entry['biased_sample']}  ({_entry['biased_pool_pct']}%)")
+        print()
+
+out_dir = os.path.join(BASE, "output/analyze-ratios")
+os.makedirs(out_dir, exist_ok=True)
+
+# Read resolved-bias sidecar (written by step 1 when sample_bias is active)
+_sidecar_path = os.path.join(out_dir, "last-run-resolved-bias.json")
+_resolved_bias = None
+if os.path.exists(_sidecar_path):
+    with open(_sidecar_path) as _f:
+        _resolved_bias = json.load(_f)
+
+
+def _file_contains_sample(fname: str, sample_name: str) -> bool:
+    """True if an output filename was built from the given sample."""
+    name_part = fname.split('_vol-')[0] if '_vol-' in fname else fname
+    return (
+        name_part == sample_name
+        or name_part.startswith(sample_name + '_')
+        or name_part.endswith('_' + sample_name)
+    )
+
+
 DIMS = [
     {
         "title": "Sound Group",
@@ -282,22 +335,74 @@ DIMS = [
     },
     {
         "title": "Rhythm Pattern",
-        "labels": list(RHYTHM_PATTERN_SEQUENCES.keys()),
-        "counts": [rhy_counts.get(k, 0) for k in RHYTHM_PATTERN_SEQUENCES],
-        "expected": [round(expected_rhy.get(k, 0)) for k in RHYTHM_PATTERN_SEQUENCES],
+        "labels": [k for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
+        "counts": [rhy_counts.get(k, 0) for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
+        "expected": [round(expected_rhy.get(k, 0)) for k in RHYTHM_PATTERN_SEQUENCES if rhy_counts.get(k, 0) > 0 or expected_rhy.get(k, 0) > 0],
     },
 ]
 
+if _resolved_bias:
+    _all_biased_samples: list[str] = [
+        _e['biased_sample']
+        for _grp_entries in _resolved_bias.values()
+        for _e in _grp_entries
+        if 'biased_sample' in _e
+    ]
+    _total_biased_expected: int = sum(
+        round(round(N * (cfg_sound_group_pcts[SOUND_GROUP_NAMES.index(_g)] if _g in SOUND_GROUP_NAMES else 0) / 100) * _e['biased_pool_pct'] / 100)
+        for _g, _g_entries in _resolved_bias.items()
+        for _e in _g_entries
+        if 'biased_sample' in _e
+    )
+    _unbiased_added = False
+
+    _bias_labels: list[str] = []
+    _bias_counts: list[int] = []
+    _bias_expected: list[int] = []
+    _bias_was_random: list[bool] = []
+    for _grp, _entries in _resolved_bias.items():
+        _grp_idx = SOUND_GROUP_NAMES.index(_grp) if _grp in SOUND_GROUP_NAMES else -1
+        _grp_pct = cfg_sound_group_pcts[_grp_idx] if _grp_idx >= 0 else 0
+        _grp_n = round(N * _grp_pct / 100)
+        for _entry in _entries:
+            if 'biased_sample' in _entry:
+                _sample = _entry['biased_sample']
+                _was_random = _entry.get('was_random', False)
+                _count = sum(1 for f in wav if _file_contains_sample(f, _sample))
+                _expected = round(_grp_n * _entry['biased_pool_pct'] / 100)
+                _word = _sample.split('_')[1] if '_' in _sample else _sample
+                _bias_labels.append(_word)
+                _bias_counts.append(_count)
+                _bias_expected.append(_expected)
+                _bias_was_random.append(_was_random)
+            elif 'unbiased_pool_pct' in _entry and not _unbiased_added:
+                _unbiased_added = True
+                _count = sum(1 for f in wav if not any(_file_contains_sample(f, s) for s in _all_biased_samples))
+                _expected = N - _total_biased_expected
+                _bias_labels.append('unbiased')
+                _bias_counts.append(_count)
+                _bias_expected.append(_expected)
+                _bias_was_random.append(False)
+    if _bias_labels:
+        DIMS.append({
+            "title": "Biased Samples",
+            "labels": _bias_labels,
+            "counts": _bias_counts,
+            "expected": _bias_expected,
+            "bar_colors": ["#C0392B" if r else "#2166AC" for r in _bias_was_random],
+        })
+
+COLOR = "#2166AC"
+
 fig, axes = plt.subplots(1, len(DIMS), figsize=(4 * len(DIMS), 6))
 fig.suptitle(f"Rhythmicized Output  (total={N_total}/{cfg_num_unique}  N_non-strings_non-silence={N})", fontsize=14, fontweight="bold", y=1.01)
-
-COLOR = "#762A83"
 
 for ax, dim in zip(axes, DIMS):
     labels = dim["labels"]
     counts = dim["counts"]
     x = np.arange(len(labels))
-    bars = ax.bar(x, counts, color=COLOR, alpha=0.85)
+    bar_colors = dim.get("bar_colors") or [COLOR] * len(labels)
+    bars = ax.bar(x, counts, color=bar_colors, alpha=0.85)
     ax.axhline(0, color="black", linewidth=0.6)
     ax.set_title(dim["title"], fontweight="bold")
     ax.set_xticks(x)
@@ -312,8 +417,6 @@ for ax, dim in zip(axes, DIMS):
                 label, ha="center", va="bottom", fontsize=8)
 
 plt.tight_layout()
-out_dir = os.path.join(BASE, "output/analyze-ratios")
-os.makedirs(out_dir, exist_ok=True)
 out_path = os.path.join(out_dir, "rhythmicized-ratios.png")
 plt.savefig(out_path, dpi=140, bbox_inches="tight")
 print(f"Chart saved → {out_path}")

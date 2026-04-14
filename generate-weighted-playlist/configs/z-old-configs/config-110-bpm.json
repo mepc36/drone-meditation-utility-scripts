@@ -1,6 +1,5 @@
 {
   "bpm": 110,
-  "num_unique_samples": 90,
   "center_to_noncenter_to_dualpan_percents": "20:40:40",
   "samples_to_silence_percents": "99:1",
   "loud_quiet_values": "0:-10",

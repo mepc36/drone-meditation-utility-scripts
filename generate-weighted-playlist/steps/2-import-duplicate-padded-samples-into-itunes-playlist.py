@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import io
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -16,6 +17,24 @@ import lib.config as cfg
 
 
 SOURCE_AUDIO_DIR = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
+
+MUSIC_GROUPS = {'strings', 'kick', 'snare', 'kickstab', 'snarestab', 'acappella'}
+
+
+def truncate_filename(path_str: str) -> str:
+    """Return artist_sample_group.wav, stripping everything after the music group.
+    For dualpan files, returns both sample names joined by ' + '."""
+    name = Path(path_str).stem
+    parts = name.split('_')
+    group_indices = [i for i, part in enumerate(parts) if part in MUSIC_GROUPS]
+    if len(group_indices) >= 2:
+        first = '_'.join(parts[:group_indices[0] + 1])
+        second = '_'.join(parts[group_indices[0] + 1:group_indices[1] + 1])
+        return first + ' + ' + second
+    for i, part in enumerate(parts):
+        if part in MUSIC_GROUPS:
+            return '_'.join(parts[:i + 1]) + '.wav'
+    return Path(path_str).name  # silence files and unknowns — show basename as-is
 
 # Output locations
 OUTPUT_DIR = Path("./output")
@@ -80,10 +99,22 @@ def main() -> None:
     print(f"Playlist written to: {PLAYLIST_PATH.resolve()}\n")
 
     print("\nStarting playback with mpv (Ctrl+C to stop)...\n")
-    subprocess.run(
+    proc = subprocess.Popen(
         ["mpv", "--no-video", "--gapless-audio=yes", "--loop-playlist=inf", "--shuffle",
          str(PLAYLIST_PATH.resolve())],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
+    for line in io.TextIOWrapper(proc.stdout.detach(), errors='replace'):
+        line = line.rstrip('\n')
+        if line.startswith('Playing: '):
+            print(f'\n{Path(truncate_filename(line[len("Playing: "):])).stem}')
+        elif line.startswith('A:') or line.startswith('AO:') or line.startswith(' (+) ') or line.strip().startswith('●'):
+            pass  # suppress progress and codec info lines
+        else:
+            print(line)
+    proc.wait()
 
 
 if __name__ == "__main__":
