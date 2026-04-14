@@ -133,7 +133,7 @@ BEAT_NAME_SIXTEENTH         = 'sixteenth'
 BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
 
 # ── Operational limits ────────────────────────────────────────────────────────
-MAX_DRAW_RETRIES = 20
+MAX_DRAW_RETRIES = 200
 
 # ── Permutation mode combo counts ────────────────────────────────────────────
 # Total (musical_pattern × rhythm) slots generated per input sample in each

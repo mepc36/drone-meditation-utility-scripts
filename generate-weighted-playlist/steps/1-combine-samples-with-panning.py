@@ -19,7 +19,7 @@ import numpy as np
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
-from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_draw_multipliers
+from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_beat_multipliers
 from lib.sample_queue import (
     build_biased_reservations,
     create_shuffled_sample_queue,
@@ -216,7 +216,7 @@ def resolve_slot(
             raise ValueError(f"Unhandled panning value: {slot.panning!r}")
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        if is_biased or combo_key not in seen_combinations:
+        if is_biased or slot.sound_group != KICKSNARE or combo_key not in seen_combinations:
             volume_db = volume_levels_db[loudest_idx if slot.volume_label == LOUD else quietest_idx]
             volume_idx = loudest_idx if slot.volume_label == LOUD else quietest_idx
             bpm_idx = slowest_idx if slot.bpm_label == SLOW else fastest_idx
@@ -268,13 +268,15 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
         print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
 
 
-def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict) -> None:
-    print(f"\nSound Group Distribution:")
-    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}")
+def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict, beat_multipliers: dict[str, float]) -> None:
+    print(f"\nSound Group Distribution (beat-weighted, target {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}):")
+    group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
+    total_beats = sum(group_beats.values())
     for group, target_pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
         count = group_appearances[group]
-        realized_pct = (count / non_strings_created * 100) if non_strings_created > 0 else 0
-        print(f"  {group}: {count} files ({realized_pct:.1f}%, target {target_pct}%)")
+        beats = group_beats[group]
+        realized_pct = (beats / total_beats * 100) if total_beats > 0 else 0
+        print(f"  {group}: {count} files / {beats:.0f} beats ({realized_pct:.1f}%, target {target_pct}%)")
 
 
 def print_biased_sample_report(
@@ -361,31 +363,29 @@ def main() -> None:
             f"Reduce the number of strings input files to at most {conf['num_audio_samples']}."
         )
     num_strings_samples = num_pass_through
-    num_non_strings_samples = conf['num_audio_samples'] - num_strings_samples
-
-    # Adjust slot allocations so the configured ratio applies to actual sample draws,
-    # not just output file count.  Groups whose rhythm patterns include SampleRole.NEW
-    # beats draw extra samples per slot; we reduce their file-count allocation
-    # proportionally so the total draw counts honour the configured percentages.
-    draw_multipliers = compute_group_draw_multipliers()
-    _adj_weights = {
-        group: pct / draw_multipliers[group]
-        for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents'])
-    }
-    _total_adj_weight = sum(_adj_weights.values()) or 1.0
-    group_targets = {
-        group: int(num_non_strings_samples * w / _total_adj_weight)
-        for group, w in _adj_weights.items()
-    }
-    group_total = sum(group_targets.values())
-    if group_total < num_non_strings_samples:
-        largest_group = max(group_targets, key=group_targets.get)
-        group_targets[largest_group] += num_non_strings_samples - group_total
-    if any(m > 1.0 for m in draw_multipliers.values()):
-        print(f"  Multi-sample rhythm adjustment (draw multipliers: "
-              + ", ".join(f"{g}={m:.4f}" for g, m in draw_multipliers.items()) + ")")
-        print(f"  Adjusted file-count targets: "
-              + ", ".join(f"{g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    # Anchor to kicksnare: every KS file appears exactly once.
+    # Other groups scaled so total beats heard match the configured ratio.
+    beat_multipliers = compute_group_beat_multipliers()
+    ks_slot_count = sum(len(samples_by_type.get(t, [])) for t in SOUND_GROUP_TYPES[KICKSNARE])
+    ks_pct = conf['sound_group_percents'][SOUND_GROUP_NAMES.index(KICKSNARE)]
+    ks_beats = ks_slot_count * beat_multipliers[KICKSNARE]
+    group_targets: dict[str, int] = {}
+    for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
+        if group == KICKSNARE:
+            group_targets[group] = ks_slot_count
+        else:
+            group_targets[group] = round(ks_beats * pct / ks_pct / beat_multipliers[group])
+    print(f"  Beat-anchor multipliers: "
+          + ", ".join(f"{g}={beat_multipliers[g]:.2f}" for g in SOUND_GROUP_NAMES))
+    print(f"  File-count targets: "
+          + ", ".join(f"{g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    # Recompute silence count based on beat-anchored total (may differ from config estimate).
+    _audio_total = sum(group_targets.values()) + num_strings_samples
+    conf['num_silence_files'] = (
+        round(_audio_total * conf['silence_percent'] / conf['samples_percent'])
+        if conf['samples_percent'] > 0 and conf['silence_percent'] > 0
+        else 0
+    )
 
     # Derive panning quotas, bpm targets, and volume targets from sound_rules.
     # In permutation mode, kick/snare slots are handled separately and excluded here.
@@ -531,7 +531,7 @@ def main() -> None:
         sample_names, pan_assignments, volume_db, volume_idx, bpm_idx = resolved
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        if forced_primary is None:
+        if forced_primary is None and slot.sound_group == KICKSNARE:
             seen_combinations.add(combo_key)
         for name in sample_names:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
@@ -660,7 +660,7 @@ def main() -> None:
         print(f"  All {num_strings_samples} strings sample(s) added exactly once (no duplicates).")
         print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
 
-    print_sound_group_report(group_appearances, non_strings_created, conf)
+    print_sound_group_report(group_appearances, non_strings_created, conf, beat_multipliers)
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
     print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
