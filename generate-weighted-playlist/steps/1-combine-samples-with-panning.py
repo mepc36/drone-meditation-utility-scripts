@@ -225,58 +225,68 @@ def resolve_slot(
     return None
 
 
-def print_sample_usage_report(sample_usage_count: dict[str, int], all_samples: list[str]) -> None:
-    usage_values = list(sample_usage_count.values())
-    min_uses, max_uses = min(usage_values), max(usage_values)
-    avg_uses = sum(usage_values) / len(usage_values)
-    print(f"\nSample Usage Distribution (round-robin):")
-    print(f"  Total input samples: {len(all_samples)}")
-    print(f"  Min uses: {min_uses}  Max uses: {max_uses}  Avg: {avg_uses:.2f}")
-    if max_uses - min_uses <= 1:
-        print(f"  ✓ Perfectly even — all samples used {min_uses}–{max_uses} times")
-    else:
-        print(f"  ⚠  Spread of {max_uses - min_uses} ({sum(1 for c in usage_values if c == max_uses)} sample(s) at max)")
-
-
 def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_left: int, hard_right: int, conf: dict) -> None:
     diagonal = left + right
     leftorright = hard_left + hard_right
     total = center + diagonal + dualpan + leftorright
-    print(f"\nPanning Distribution:")
-    if total > 0:
-        print(f"  center:    {center}  ({center/total*100:.1f}%)")
-        print(f"  diagonal:  {diagonal}  ({diagonal/total*100:.1f}%)")
-        print(f"  dualpan:   {dualpan}  ({dualpan/total*100:.1f}%)")
-        print(f"  leftright: {leftorright}  ({leftorright/total*100:.1f}%)")
+    if total == 0:
+        return
+    SEP = '=' * 60
+    col_w = 10
+    entries = [("center", center), ("dualpan", dualpan), ("L/R", leftorright)]
     if diagonal > 0:
-        print(f"\nDiagonal Left/Right Distribution:")
-        print(f"  Realized: {left}:{right} = {left/diagonal*100:.1f}% : {right/diagonal*100:.1f}%")
-    if leftorright > 0:
-        print(f"\nHard Left/Right Distribution:")
-        print(f"  Realized: {hard_left}:{hard_right} = {hard_left/leftorright*100:.1f}% : {hard_right/leftorright*100:.1f}%")
+        entries.append(("diag", diagonal))
+    header = "".join(f"{name} #".ljust(col_w) + f"{name} %".ljust(col_w) for name, _ in entries)
+    data   = "".join(str(count).ljust(col_w) + f"{count/total*100:.0f}%".ljust(col_w) for _, count in entries)
+    print(f"{SEP}\nPANNING")
+    print(f"  {header}")
+    print(f"  {data}")
 
 
 def print_volume_report(volume_counts: list[int], total_created: int, conf: dict) -> None:
     volume_levels_db = conf['volume_levels_db']
-    non_zero = [c for c in volume_counts if c > 0]
+    active = [(db, count) for db, count in zip(volume_levels_db, volume_counts) if count > 0]
+    total_v = sum(c for _, c in active)
+    non_zero = [c for _, c in active]
     vol_gcd = gcd_of(*non_zero) if len(non_zero) > 1 else (non_zero[0] if non_zero else 1)
-    realized_ratio = ':'.join(str(c // vol_gcd) for c in volume_counts)
-    print(f"\nVolume Distribution:")
-    print(f"  Realized ratio: {realized_ratio}")
-    for db_val, count in zip(volume_levels_db, volume_counts):
-        pct = (count / total_created * 100) if total_created > 0 else 0
-        print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
+    realized_ratio = ':'.join(str(c // vol_gcd) for _, c in active)
+    SEP = '=' * 60
+    col_w = 10
+    header = "".join(f"{db:+.0f}dB #".ljust(col_w) + f"{db:+.0f}dB %".ljust(col_w) for db, _ in active) + "ratio"
+    data   = "".join(str(count).ljust(col_w) + f"{count/total_v*100:.0f}%".ljust(col_w) for _, count in active) + realized_ratio
+    print(f"{SEP}\nVOLUME")
+    print(f"  {header}")
+    print(f"  {data}")
 
 
 def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict, beat_multipliers: dict[str, float]) -> None:
-    print(f"\nSound Group Distribution (beat-weighted, target {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}):")
     group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
     total_beats = sum(group_beats.values())
-    for group, target_pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
+    target_percents = conf['sound_group_percents']
+    TOLERANCE = 3.0
+    lines = []
+    any_bad = False
+    for group, target_pct in zip(SOUND_GROUP_NAMES, target_percents):
         count = group_appearances[group]
         beats = group_beats[group]
         realized_pct = (beats / total_beats * 100) if total_beats > 0 else 0
-        print(f"  {group}: {count} files / {beats:.0f} beats ({realized_pct:.1f}%, target {target_pct}%)")
+        off = abs(realized_pct - target_pct)
+        flag = "⚠ " if off > TOLERANCE else "✓"
+        if off > TOLERANCE:
+            any_bad = True
+        lines.append(f"  {flag} {group:<10} {count:>4} files  {beats:>5.0f} beats  {realized_pct:>5.1f}%  (target {target_pct}%)")
+    target_str = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
+    header = f"{'='*60}\nBEAT RATIO CHECK  (target {target_str}, tolerance \u00b1{TOLERANCE:.0f}%)"
+    print(header)
+    for line in lines:
+        print(line)
+    num_silence = conf.get('num_silence_files', 0)
+    if num_silence > 0:
+        sil_pct = conf.get('silence_percent', 0)
+        print(f"  \u2713 {'silence':<10} {num_silence:>4} files  {num_silence:>5} beats  {sil_pct:>5}%  (target {sil_pct}%)")
+    if any_bad:
+        print(f"  ⚠  RATIO OUTSIDE TOLERANCE — check beat_multipliers or input sample counts")
+    print('='*60)
 
 
 def print_biased_sample_report(
@@ -341,16 +351,12 @@ def main() -> None:
     rhythmicized_output_dir = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
-    print(f"\nCombine Samples with Random Panning\n")
-    print(f"BPMs: {bpms_str}")
 
     samples_by_type = load_samples_grouped_by_type(input_audio_dir)
     total_sample_count = sum(len(s) for s in samples_by_type.values())
-    print(f"Found {total_sample_count} sample(s) in {len(samples_by_type)} sound type(s):")
+    print(f"Found {total_sample_count} samples in ./{input_audio_dir}:")
     for sound_type, samples in sorted(samples_by_type.items()):
-        print(f"  {sound_type}: {len(samples)} samples")
-        for sample in sorted(samples):
-            print(f"    - {sample}")
+        print(f"  {sound_type}: {len(samples)}")
     print()
 
     clear_output_directory(output_dir)
@@ -514,7 +520,6 @@ def main() -> None:
     render_executor = ThreadPoolExecutor(max_workers=_RENDER_WORKERS)
     _write_sem = Semaphore(_MAX_PENDING_WRITES)
     write_executor = ThreadPoolExecutor(max_workers=_WRITE_WORKERS)
-    print(f"  Rendering with {_RENDER_WORKERS} worker(s), writing with {_WRITE_WORKERS} worker(s)")
 
     for slot in full_deck:
         # In permutation mode, kick/snare slots carry a forced_sample assigned at
@@ -631,39 +636,30 @@ def main() -> None:
         )
 
         if created_count % _print_interval == 0 or created_count == conf['num_audio_samples']:
-            print(f"  Created {created_count}/{conf['num_audio_samples']} samples...")
+            print(f"  - Created {created_count}/{conf['num_audio_samples']} samples...")
 
     render_executor.shutdown(wait=True)
     write_executor.shutdown(wait=True)
 
-    if created_count < conf['num_audio_samples']:
-        print(f"\nWarning: Only created {created_count} audio samples (expected {conf['num_audio_samples']}).")
-        print("  Some deck slots were skipped because no unique (sample + pan) combination could be")
-        print("  found within the retry limit. Try adding more input samples or adjusting the kicksnare percents.")
-    else:
-        print(f"\nComplete! Created {created_count} audio samples.")
-    print(f"  Output: {output_dir.resolve()}")
+    SEP = '=' * 60
+    num_silence_out = conf.get('num_silence_files', 0)
+    if conf['silence_percent'] > 0 and num_silence_out > 0:
+        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
 
-    print_sample_usage_report(sample_usage_count, all_samples)
+    warn = f"\n⚠  Only created {created_count}/{conf['num_audio_samples']} audio samples — some slots skipped.\n" if created_count < conf['num_audio_samples'] else ""
+    output_lines = [f"  - {created_count} samples"]
+    if num_silence_out > 0:
+        output_lines.append(f"  - {num_silence_out} silence")
+        output_lines.append(f"  - = {created_count + num_silence_out} total output files")
+    print(f"\n{warn}{SEP}\n  Output: → ./{output_dir}")
+    for line in output_lines:
+        print(line)
     print_panning_report(center_count, left_count, right_count, dualpan_count, hard_left_count, hard_right_count, conf)
     print_volume_report(volume_counts, created_count, conf)
-
-    if conf['silence_percent'] > 0 and conf['num_silence_files'] > 0:
-        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
-        total = created_count + conf['num_silence_files']
-        print(f"\nTotal files created: {total} ({created_count} samples + {conf['num_silence_files']} silence)")
-
-    if num_strings_samples > 0:
-        strings_pct = strings_created / created_count * 100 if created_count else 0
-        non_strings_pct = non_strings_created / created_count * 100 if created_count else 0
-        print(f"\nStrings Distribution:")
-        print(f"  All {num_strings_samples} strings sample(s) added exactly once (no duplicates).")
-        print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
-
-    print_sound_group_report(group_appearances, non_strings_created, conf, beat_multipliers)
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
-    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
+
+    print_sound_group_report(group_appearances, non_strings_created, conf, beat_multipliers)
 
 
 if __name__ == "__main__":

@@ -300,7 +300,11 @@ def plan_output_files(
         print(f"  ⚠  Panning overflow: {overflow} slot(s) redistributed among uncapped groups")
     for group in SOUND_GROUP_NAMES:
         if group in allocation:
-            print(f"    {group}: {sum(allocation[group].values())} files — {dict(allocation[group])}")
+            left  = allocation[group].get(HARD_LEFT, 0) + allocation[group].get(DIAGONAL_LEFT, 0)
+            right = allocation[group].get(HARD_RIGHT, 0) + allocation[group].get(DIAGONAL_RIGHT, 0)
+            total_g = sum(allocation[group].values())
+            lr = f"  L:{left}  R:{right}" if left or right else ""
+            print(f"    {group}: {total_g} files{lr}")
 
     deck = _assign_volume_and_bpm(
         allocation,
@@ -353,9 +357,6 @@ def plan_output_files(
     if secondary_usage:
         for pan, count in secondary_usage.items():
             available_slots[pan] = available_slots.get(pan, 0) - count
-        over = {pan: -cnt for pan, cnt in available_slots.items() if cnt < 0}
-        if over:
-            print(f"  ⚠  Secondary beat quota exceeded: {over} extra use(s)")
 
     missing = [s for s in deck if not s.rhythm]
     if missing:
