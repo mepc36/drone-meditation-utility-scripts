@@ -295,7 +295,6 @@ def plan_output_files(
     allocation, overflow = _allocate_panning_slots(group_targets, available_slots)
 
     total_slots = sum(sum(v.values()) for v in allocation.values())
-    print(f"  Deck: {total_slots} non-strings slots")
     if overflow > 0:
         print(f"  ⚠  Panning overflow: {overflow} slot(s) redistributed among uncapped groups")
     for group in SOUND_GROUP_NAMES:
@@ -303,8 +302,6 @@ def plan_output_files(
             left  = allocation[group].get(HARD_LEFT, 0) + allocation[group].get(DIAGONAL_LEFT, 0)
             right = allocation[group].get(HARD_RIGHT, 0) + allocation[group].get(DIAGONAL_RIGHT, 0)
             total_g = sum(allocation[group].values())
-            lr = f"  L:{left}  R:{right}" if left or right else ""
-            print(f"    {group}: {total_g} files{lr}")
 
     deck = _assign_volume_and_bpm(
         allocation,

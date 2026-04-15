@@ -356,7 +356,7 @@ def main() -> None:
     total_sample_count = sum(len(s) for s in samples_by_type.values())
     print(f"Found {total_sample_count} samples in ./{input_audio_dir}:")
     for sound_type, samples in sorted(samples_by_type.items()):
-        print(f"  {sound_type}: {len(samples)}")
+        print(f"  - {sound_type}: {len(samples)}")
     print()
 
     clear_output_directory(output_dir)
@@ -383,8 +383,8 @@ def main() -> None:
             group_targets[group] = round(ks_beats * pct / ks_pct / beat_multipliers[group])
     print(f"  Beat-anchor multipliers: "
           + ", ".join(f"{g}={beat_multipliers[g]:.2f}" for g in SOUND_GROUP_NAMES))
-    print(f"  File-count targets: "
-          + ", ".join(f"{g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    print(f"  \nFile-count targets: "
+          + "".join(f"\n   - {g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
     # Recompute silence count based on beat-anchored total (may differ from config estimate).
     _audio_total = sum(group_targets.values()) + num_strings_samples
     conf['num_silence_files'] = (
@@ -469,7 +469,7 @@ def main() -> None:
 
     total_slots = len(full_deck)
     _print_interval = max(100, total_slots // 200)
-    print(f"\n  Total samples to generate: {total_slots}")
+    print(f"\n  Total samples to generate: {total_slots}\n")
     if conf['kick_snare_permutation_mode'] and sys.stdin.isatty():
         answer = input("  Proceed? [Y/n] ").strip().lower()
         if answer and answer not in ('y', 'yes'):
