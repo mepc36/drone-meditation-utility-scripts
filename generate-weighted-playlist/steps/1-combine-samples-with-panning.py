@@ -259,7 +259,7 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     print(f"  {data}")
 
 
-def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict, beat_multipliers: dict[str, float]) -> None:
+def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float]) -> None:
     group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
     total_beats = sum(group_beats.values())
     target_percents = conf['sound_group_percents']
@@ -280,6 +280,8 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
     print(header)
     for line in lines:
         print(line)
+    strings_pct = (strings_created / (total_beats + strings_created) * 100) if (total_beats + strings_created) > 0 else 0
+    print(f"  \u2713 {'strings':<10} {strings_created:>4} files  {strings_created:>5} beats  {strings_pct:>5.1f}%  (target N/A%)")
     num_silence = conf.get('num_silence_files', 0)
     if num_silence > 0:
         sil_pct = conf.get('silence_percent', 0)
@@ -659,7 +661,7 @@ def main() -> None:
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
 
-    print_sound_group_report(group_appearances, non_strings_created, conf, beat_multipliers)
+    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers)
 
 
 if __name__ == "__main__":
