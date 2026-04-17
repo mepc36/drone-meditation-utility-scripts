@@ -4,7 +4,7 @@
   "loud_quiet_values": "0:-32",
   "silence_lengths_millisec": "1760",
   "silence_lengths_percents": "100",
-  "kicksnare_stab_acappella_percents": "40:40:20",
+  "kicksnare_stab_acappella_percents": "25:55:20",
   "strings_volume_adjustment_db": 0,
   "acappella_volume_adjustment_db": 0,
   "kick_snare_permutation_mode": false
