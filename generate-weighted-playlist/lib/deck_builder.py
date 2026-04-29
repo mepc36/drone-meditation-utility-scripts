@@ -499,52 +499,49 @@ def balance_permutation_decks(
     group_percents: list[int],
 ) -> list[SlotSpec]:
     """Replicate each group's pre-built permutation deck so the final combined
-    deck honours the kicksnare_stab_acappella_percents ratio.
+    deck approximately honours the kicksnare_stab_acappella_percents ratio.
 
-    Algorithm (LCM-based minimum replication):
-      Let r_g = pct_g / gcd(all pcts).  For each group with raw > 0:
-        multiplier_g = C * r_g / raw_g
-      where C = LCM of (raw_g / gcd(raw_g, r_g)) for all active groups.
-    This guarantees all multipliers are positive integers and the totals
-    are exactly proportional to the requested percents.
+    Algorithm (anchor-based rounding):
+      KICKSNARE is the anchor — its deck is used as-is with no duplication.
+      All other groups derive a target count from the ratio relative to
+      kicksnare's total, then replicate round(target / unique) times.
+      Fractions are rounded rather than resolved exactly via LCM, so the
+      ratio is approximate but the total stays manageable.
 
-    Groups with 0 raw slots (no input samples) are silently skipped; their
-    percent share is ignored and the remaining groups keep their relative ratio.
+    Groups with 0 raw slots (no input samples) are silently skipped.
     """
-    from math import gcd
-
-    active: list[tuple[str, int, int]] = []  # (group, raw_count, pct)
-    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
-        raw = len(decks_by_group.get(group, []))
-        if raw > 0 and pct > 0:
-            active.append((group, raw, pct))
-
-    if not active:
-        return []
-
-    if len(active) == 1:
-        result = decks_by_group[active[0][0]][:]
-        random.shuffle(result)
-        return result
-
-    # Reduce percents to simplest integer ratio
-    pct_gcd = active[0][2]
-    for _, _, pct in active[1:]:
-        pct_gcd = gcd(pct_gcd, pct)
-
-    # C = LCM of all reduced denominators
-    C = 1
-    for _, raw, pct in active:
-        r = pct // pct_gcd
-        d = raw // gcd(raw, r)
-        C = C * d // gcd(C, d)
+    anchor_group = KICKSNARE
+    anchor_deck = decks_by_group.get(anchor_group, [])
+    anchor_raw = len(anchor_deck)
+    anchor_pct = group_percents[SOUND_GROUP_NAMES.index(anchor_group)]
 
     combined: list[SlotSpec] = []
-    for group, raw, pct in active:
-        m = C * (pct // pct_gcd) // raw  # always an integer by construction
-        deck = decks_by_group[group]
-        combined.extend(deck * m)
-        print(f"  Permutation deck: {group} — {raw} raw slots × {m} = {raw * m} total")
+
+    if anchor_raw == 0:
+        # No kicksnare samples — fall back to first non-empty group as anchor
+        for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
+            deck = decks_by_group.get(group, [])
+            if deck:
+                combined.extend(deck)
+                print(f"  Permutation deck: {group} — {len(deck)} raw slots × 1 = {len(deck)} total")
+        random.shuffle(combined)
+        return combined
+
+    # Anchor: kicksnare, no duplication
+    combined.extend(anchor_deck)
+    print(f"  Permutation deck: {anchor_group} — {anchor_raw} raw slots × 1 = {anchor_raw} total")
+
+    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
+        if group == anchor_group:
+            continue
+        deck = decks_by_group.get(group, [])
+        unique = len(deck)
+        if unique == 0 or pct == 0 or anchor_pct == 0:
+            continue
+        target = round(anchor_raw * pct / anchor_pct)
+        multiplier = max(1, round(target / unique))
+        combined.extend(deck * multiplier)
+        print(f"  Permutation deck: {group} — {unique} raw slots × {multiplier} = {unique * multiplier} total")
 
     random.shuffle(combined)
     return combined

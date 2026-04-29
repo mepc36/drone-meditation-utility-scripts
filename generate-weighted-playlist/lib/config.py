@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-from math import gcd
 from .constants import SOUND_GROUP_NAMES, KICKSNARE, STAB, ACAPPELLA, PERMUTATION_COMBOS_PER_SAMPLE
 
 
@@ -35,34 +34,32 @@ def _compute_balanced_permutation_total(
     raw_counts: dict[str, int],
     group_percents: list[int],
 ) -> int:
-    """Return total slot count after LCM-based replication that restores
-    the kicksnare_stab_acappella_percents ratio across all non-empty groups.
+    """Return estimated total slot count using anchor-based rounding.
 
-    For each active group g: total_g = C * (pct_g / pct_gcd)
-    where C = LCM of (raw_g / gcd(raw_g, pct_g / pct_gcd)) for all active g.
+    KICKSNARE is the anchor — used as-is with no duplication.
+    All other groups are replicated round(target / unique) times,
+    where target = round(anchor_raw * group_pct / anchor_pct).
     """
-    active: list[tuple[str, int, int]] = []
+    anchor_group = KICKSNARE
+    anchor_idx = SOUND_GROUP_NAMES.index(anchor_group)
+    anchor_raw = raw_counts.get(anchor_group, 0)
+    anchor_pct = group_percents[anchor_idx]
+
+    if anchor_raw == 0 or anchor_pct == 0:
+        return sum(raw_counts.get(g, 0) for g in SOUND_GROUP_NAMES)
+
+    total = anchor_raw
     for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
-        raw = raw_counts.get(group, 0)
-        if raw > 0 and pct > 0:
-            active.append((group, raw, pct))
+        if group == anchor_group:
+            continue
+        unique = raw_counts.get(group, 0)
+        if unique == 0 or pct == 0:
+            continue
+        target = round(anchor_raw * pct / anchor_pct)
+        multiplier = max(1, round(target / unique))
+        total += unique * multiplier
 
-    if not active:
-        return 0
-
-    # Reduce percents to simplest integer ratio
-    pct_gcd = active[0][2]
-    for _, _, pct in active[1:]:
-        pct_gcd = gcd(pct_gcd, pct)
-
-    # Minimum C = LCM of all (raw_g / gcd(raw_g, reduced_ratio_g))
-    C = 1
-    for _, raw, pct in active:
-        r = pct // pct_gcd
-        d = raw // gcd(raw, r)
-        C = C * d // gcd(C, d)
-
-    return sum(C * (pct // pct_gcd) for _, _, pct in active)
+    return total
 
 
 def parse_colon_ints(raw: str) -> list[int]:

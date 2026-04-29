@@ -177,41 +177,37 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 50,
+                RHYTHM_PERCENT: 54,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 9,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 9,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 8,
+                RHYTHM_PERCENT: 9,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 8,
+                RHYTHM_PERCENT: 9,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
                 RHYTHM_PERCENT: 8,
             },
-            {
-                RHYTHM_PATTERN: with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER), (SampleRole.SAME, SampleRole.NEW, SampleRole.SAME)),
-                RHYTHM_PERCENT: 8
-            }
         ],
     }
 ]
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
-        {
+    {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 25,
+        MUSIC_PATTERN_PERCENT: 50,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
@@ -231,7 +227,7 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 25,
+        MUSIC_PATTERN_PERCENT: 50,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
@@ -247,17 +243,6 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
             },
         ]
 
-    },
-    {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 50,
-        RHYTHM_PATTERNS: [
-            {
-                RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
-                RHYTHM_PERCENT: 100,
-            },
-        ],
     },
 ]
 
@@ -316,12 +301,12 @@ _SOUND_TYPE_RULES: list[dict] = [
     },
     {
         MUSICAL_GROUPING: KICKSTAB,
-        DUALPAN_PARTNERS: [KICKSTAB],
+        DUALPAN_PARTNERS: [],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: SNARESTAB,
-        DUALPAN_PARTNERS: [SNARESTAB],
+        DUALPAN_PARTNERS: [],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
