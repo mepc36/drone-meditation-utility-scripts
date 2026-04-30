@@ -211,15 +211,15 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 50,
+                RHYTHM_PERCENT: 70,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 15,
             },
             {
                 RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 15,
             },
         ]
 
@@ -231,15 +231,15 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 50,
+                RHYTHM_PERCENT: 70,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 15,
             },
             {
                 RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 25,
+                RHYTHM_PERCENT: 15,
             },
         ]
 
