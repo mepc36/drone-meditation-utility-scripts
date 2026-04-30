@@ -177,27 +177,27 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 54,
+                RHYTHM_PERCENT: 75,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 10,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 10,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 9,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 9,
+                RHYTHM_PERCENT: 5,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 8,
+                RHYTHM_PERCENT: 5,
             },
         ],
     }
@@ -211,15 +211,15 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 70,
+                RHYTHM_PERCENT: 80,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 15,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 15,
+                RHYTHM_PERCENT: 10,
             },
         ]
 
@@ -231,15 +231,15 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 70,
+                RHYTHM_PERCENT: 80,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 15,
+                RHYTHM_PERCENT: 10,
             },
             {
                 RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 15,
+                RHYTHM_PERCENT: 10,
             },
         ]
 

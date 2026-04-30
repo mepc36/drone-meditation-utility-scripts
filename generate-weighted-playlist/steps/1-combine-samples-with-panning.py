@@ -263,7 +263,7 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
     group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
     total_beats = sum(group_beats.values())
     target_percents = conf['sound_group_percents']
-    TOLERANCE = 3.0
+    TOLERANCE = conf.get('permutation_tolerance_pct', 3.0) if conf.get('kick_snare_permutation_mode') else 3.0
     lines = []
     any_bad = False
     for group, target_pct in zip(SOUND_GROUP_NAMES, target_percents):
