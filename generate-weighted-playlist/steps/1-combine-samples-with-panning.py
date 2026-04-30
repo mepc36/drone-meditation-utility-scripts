@@ -259,7 +259,7 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     print(f"  {data}")
 
 
-def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float], perm_multipliers: dict[str, int] | None = None) -> None:
+def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float], perm_multipliers: dict[str, int] | None = None, removed_counts: dict[str, int] | None = None) -> None:
     group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
     total_beats = sum(group_beats.values())
     target_percents = conf['sound_group_percents']
@@ -275,8 +275,10 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
             any_bad = True
         mult = perm_multipliers.get(group, 1) if perm_multipliers else 1
         delta = abs(realized_pct - target_pct)
+        rm = removed_counts.get(group, 0) if removed_counts is not None else 'N/A'
+        rm_str = f"{rm:>4}"
         lines.append(
-            f"  {group:<10}  {count:>5} files  {beats:>7.0f} beats  {realized_pct:>5.1f}%  (target {target_pct:>4}%)  ×{mult:<3}  Δ{delta:.1f}%"
+            f"  {group:<10}  {count:>5} files  {rm_str} removed  {beats:>7.0f} beats  {realized_pct:>5.1f}%  (target {target_pct:>4}%)  ×{mult:<3}  Δ{delta:.1f}%"
         )
     target_str = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
     header = f"{'='*60}\nBEAT RATIO CHECK  (target {target_str}, tolerance \u00b1{TOLERANCE:.0f}%)"
@@ -284,11 +286,11 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
     for line in lines:
         print(line)
     strings_pct = (strings_created / (total_beats + strings_created) * 100) if (total_beats + strings_created) > 0 else 0
-    print(f"  {'strings':<10}  {strings_created:>5} files  {strings_created:>7} beats  {strings_pct:>5.1f}%  (target  N/A%)  N/A  N/A")
+    print(f"  {'strings':<10}  {strings_created:>5} files   N/A removed  {strings_created:>7} beats  {strings_pct:>5.1f}%  (target  N/A%)  N/A  N/A")
     num_silence = conf.get('num_silence_files', 0)
     if num_silence > 0:
         sil_pct = conf.get('silence_percent', 0)
-        print(f"  {'silence':<10}  {num_silence:>5} files  {num_silence:>7} beats  {sil_pct:>5}%  (target {sil_pct:>4}%)  N/A  N/A")
+        print(f"  {'silence':<10}  {num_silence:>5} files   N/A removed  {num_silence:>7} beats  {sil_pct:>5}%  (target {sil_pct:>4}%)  N/A  N/A")
     if any_bad:
         print(f"  \u26a0  RATIO OUTSIDE TOLERANCE — check beat_multipliers or input sample counts")
     print('='*60)
@@ -474,6 +476,7 @@ def main() -> None:
             remaining -= share
 
     perm_multipliers: dict[str, int] = {}
+    removed_counts: dict[str, int] | None = None
 
     if conf['kick_snare_permutation_mode']:
         trimmed_samples, m_stab, m_acap, diag = plan_permutation_trimming(
@@ -581,6 +584,11 @@ def main() -> None:
                 sys.exit(0)
         elif not sys.stdin.isatty():
             print("  (Non-interactive mode — proceeding automatically)")
+
+        removed_counts = {
+            g: sum(1 for _, st, _, _ in ignored_slots if st in SOUND_GROUP_TYPES[g])
+            for g in SOUND_GROUP_NAMES
+        }
 
         # Rebuild deck using trimmed samples and pre-computed multipliers
         ks_deck   = build_permutation_kick_snare_deck(trimmed_samples)
@@ -794,7 +802,7 @@ def main() -> None:
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
 
-    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers, perm_multipliers)
+    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers, perm_multipliers, removed_counts)
 
 
 if __name__ == "__main__":
