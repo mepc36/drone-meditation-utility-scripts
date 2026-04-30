@@ -257,28 +257,31 @@ def load() -> dict:
             )
     known_descriptors = {f.stem.split('_')[1] for f in strings_files}
 
-    # Validate any keys that are present in the config
-    for key in strings_duplication_subgroups:
-        if key not in known_descriptors:
-            raise ValueError(
-                f"{CFG_STRINGS_DUPLICATION_SUBGROUPS}: key {key!r} does not match any strings "
-                f"file descriptor (2nd filename element). "
-                f"Available: {sorted(known_descriptors)}"
-            )
+    # Remove any keys not found in input/audio
+    stale_descriptors = set(strings_duplication_subgroups) - known_descriptors
+    if stale_descriptors:
+        for desc in stale_descriptors:
+            del strings_duplication_subgroups[desc]
+        print(
+            f"  [config] Removed {len(stale_descriptors)} stale strings descriptor(s) from config.json "
+            f"not found in input/audio: {sorted(stale_descriptors)}"
+        )
 
     # Auto-add any descriptors found in input but missing from the config (default 0)
     missing_descriptors = known_descriptors - set(strings_duplication_subgroups)
     if missing_descriptors:
         for desc in sorted(missing_descriptors):
             strings_duplication_subgroups[desc] = 0
-        raw[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
-        with open(CONFIG_PATH, 'w') as _cfg_f:
-            json.dump(raw, _cfg_f, indent=2)
-            _cfg_f.write('\n')
         print(
             f"  [config] Added {len(missing_descriptors)} missing strings descriptor(s) to config.json "
             f"with default value 0: {sorted(missing_descriptors)}"
         )
+
+    if stale_descriptors or missing_descriptors:
+        raw[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
+        with open(CONFIG_PATH, 'w') as _cfg_f:
+            json.dump(raw, _cfg_f, indent=2)
+            _cfg_f.write('\n')
         strings_duplication_subgroups = raw[CFG_STRINGS_DUPLICATION_SUBGROUPS]
 
     num_strings_slots = sum(
