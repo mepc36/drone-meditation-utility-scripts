@@ -34,32 +34,23 @@ def _compute_balanced_permutation_total(
     raw_counts: dict[str, int],
     group_percents: list[int],
 ) -> int:
-    """Return estimated total slot count using anchor-based rounding.
+    """Return estimated total slot count using the beat-aware trimming planner.
 
-    KICKSNARE is the anchor — used as-is with no duplication.
-    All other groups are replicated round(target / unique) times,
-    where target = round(anchor_raw * group_pct / anchor_pct).
+    Delegates to plan_permutation_trimming for an accurate estimate; falls back
+    to a simple sum if the planner raises (e.g. no KS samples on disk yet).
     """
-    anchor_group = KICKSNARE
-    anchor_idx = SOUND_GROUP_NAMES.index(anchor_group)
-    anchor_raw = raw_counts.get(anchor_group, 0)
-    anchor_pct = group_percents[anchor_idx]
-
-    if anchor_raw == 0 or anchor_pct == 0:
-        return sum(raw_counts.get(g, 0) for g in SOUND_GROUP_NAMES)
-
-    total = anchor_raw
-    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
-        if group == anchor_group:
-            continue
-        unique = raw_counts.get(group, 0)
-        if unique == 0 or pct == 0:
-            continue
-        target = round(anchor_raw * pct / anchor_pct)
-        multiplier = max(1, round(target / unique))
-        total += unique * multiplier
-
-    return total
+    # Lazy import to avoid circular dependency
+    try:
+        from .deck_builder import plan_permutation_trimming
+        from .sample_queue import load_samples_grouped_by_type
+        samples_by_type = load_samples_grouped_by_type(INPUT_AUDIO_DIR)
+        _, m_stab, m_acap, diag = plan_permutation_trimming(
+            samples_by_type, group_percents, max_files=20_000
+        )
+        return diag['total_files']
+    except Exception:
+        # Fallback: sum raw permutation slot counts as a rough estimate
+        return sum(raw_counts.values())
 
 
 def parse_colon_ints(raw: str) -> list[int]:

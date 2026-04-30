@@ -7,5 +7,5 @@
   "kicksnare_stab_acappella_percents": "25:55:20",
   "strings_volume_adjustment_db": 0,
   "acappella_volume_adjustment_db": 0,
-  "kick_snare_permutation_mode": false
+  "kick_snare_permutation_mode": true
 }

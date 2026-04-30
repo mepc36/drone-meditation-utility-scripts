@@ -494,54 +494,240 @@ def build_permutation_acappella_deck(
     return slots
 
 
+def _exact_beats_per_file(pattern_list: list) -> int:
+    """Return the total number of beats across all rhythm entries in all musical pattern groups.
+
+    In permutation mode every sample is paired with every rhythm entry exactly once,
+    so the total beats contributed per input file = sum of len(rhythm) for every
+    rhythm entry across every musical pattern group.
+    """
+    total = 0
+    for pattern_group in pattern_list:
+        for entry in pattern_group[RHYTHM_PATTERNS]:
+            total += len(entry[RHYTHM_PATTERN])
+    return total
+
+
+def _exact_slots_per_file(pattern_list: list) -> int:
+    """Return the number of output files produced per input sample in permutation mode.
+
+    Each (sample × rhythm_entry) pair becomes one output file, so this equals
+    the total number of rhythm entries across all musical pattern groups.
+    """
+    total = 0
+    for pattern_group in pattern_list:
+        total += len(pattern_group[RHYTHM_PATTERNS])
+    return total
+
+
+def plan_permutation_trimming(
+    samples_by_type: dict[str, list[str]],
+    group_percents: list[int],
+    max_files: int = 20_000,
+    cap_pct: float = 0.10,
+    tolerance: float = 3.0,
+    seed: int = 42,
+) -> tuple[dict[str, list[str]], int, int, dict]:
+    """Determine how many input samples to use per group and how many times to
+    replicate stab/acappella decks in order to match the target beat ratio.
+
+    Returns
+    -------
+    trimmed_samples_by_type : dict
+        Input sample lists with low-priority samples removed (seeded shuffle).
+    m_stab : int
+        Multiplier to apply to the full stab deck.
+    m_acap : int
+        Multiplier to apply to the full acappella deck.
+    diagnostics : dict
+        Keys: ignored_by_type, k_ks, m_stab, m_acap, beat_pcts, total_files, within_tolerance.
+    """
+    from math import ceil
+    from .constants import KICK, SNARE, KICKSTAB, SNARESTAB
+
+    p_ks, p_stab, p_acap = [group_percents[SOUND_GROUP_NAMES.index(g)] for g in (KICKSNARE, STAB, ACAPPELLA)]
+
+    bps_ks   = _exact_beats_per_file(KICK_SNARE_MUSICAL_PATTERNS)
+    bps_stab = _exact_beats_per_file(KICKSTAB_SNARESTAB_MUSICAL_PATTERNS)
+    bps_acap = _exact_beats_per_file(ACAPPELLA_MUSICAL_PATTERNS)
+
+    # Files per input sample in permutation mode (= rhythm-entry count, not beat count)
+    spf_ks   = _exact_slots_per_file(KICK_SNARE_MUSICAL_PATTERNS)
+    spf_stab = _exact_slots_per_file(KICKSTAB_SNARESTAB_MUSICAL_PATTERNS)
+    spf_acap = _exact_slots_per_file(ACAPPELLA_MUSICAL_PATTERNS)
+
+    # Stable shuffle so excluded samples are deterministic
+    rng = random.Random(seed)
+
+    def shuffle_copy(lst: list[str]) -> list[str]:
+        c = list(lst)
+        rng.shuffle(c)
+        return c
+
+    kicks_all   = shuffle_copy(samples_by_type.get(KICK, []))
+    snares_all  = shuffle_copy(samples_by_type.get(SNARE, []))
+    kstabs_all  = shuffle_copy(samples_by_type.get(KICKSTAB, []))
+    sstabs_all  = shuffle_copy(samples_by_type.get(SNARESTAB, []))
+    acaps_all   = shuffle_copy(samples_by_type.get(ACAPPELLA, []))
+
+    available_ks   = len(kicks_all) + len(snares_all)
+    available_stab = len(kstabs_all) + len(sstabs_all)
+    available_acap = len(acaps_all)
+
+    if available_ks == 0:
+        raise ValueError(
+            "No kicksnare samples found in input/audio. "
+            "At least one kick or snare sample is required in permutation mode."
+        )
+
+    min_ks = ceil(available_ks * (1 - cap_pct))  # never trim more than cap_pct
+
+    def compute_beat_pcts(k_ks: int, r_stab: int, m_stab: int, r_acap: int, m_acap: int) -> tuple[float, float, float]:
+        b_ks   = k_ks   * bps_ks
+        b_stab = r_stab * m_stab * bps_stab
+        b_acap = r_acap * m_acap * bps_acap
+        total  = b_ks + b_stab + b_acap
+        if total == 0:
+            return 0.0, 0.0, 0.0
+        return b_ks / total * 100, b_stab / total * 100, b_acap / total * 100
+
+    def total_files(k_ks: int, m_stab: int, m_acap: int) -> int:
+        return k_ks * spf_ks + available_stab * m_stab * spf_stab + available_acap * m_acap * spf_acap
+
+    def within_tol(pcts: tuple[float, float, float], targets: tuple[int, int, int]) -> bool:
+        return all(abs(p - t) <= tolerance for p, t in zip(pcts, targets))
+
+    best: tuple | None = None  # (k_ks, m_stab, m_acap, pcts)
+
+    # Phase 1: sweep k_ks from available down to min_ks
+    for k_ks in range(available_ks, min_ks - 1, -1):
+        if k_ks == 0:
+            continue
+        # Derive multipliers from beat-ratio formula
+        m_stab = max(1, round(k_ks * bps_ks * p_stab / (p_ks * available_stab * bps_stab))) if available_stab > 0 else 0
+        m_acap = max(1, round(k_ks * bps_ks * p_acap / (p_ks * available_acap * bps_acap))) if available_acap > 0 else 0
+        tf = total_files(k_ks, m_stab, m_acap)
+        if tf > max_files:
+            continue
+        pcts = compute_beat_pcts(k_ks, available_stab, m_stab, available_acap, m_acap)
+        if within_tol(pcts, (p_ks, p_stab, p_acap)):
+            best = (k_ks, m_stab, m_acap, pcts)
+            break
+
+    # Phase 2: fix k_ks = min_ks, grid search (m_stab, m_acap)
+    if best is None:
+        k_ks_fixed = min_ks
+
+        def max_m_for(group_files: int, spf: int) -> int:
+            if group_files == 0:
+                return 0
+            remaining = max_files - k_ks_fixed * spf_ks
+            return max(1, remaining // (group_files * spf)) if remaining > 0 else 1
+
+        max_m_stab = max_m_for(available_stab, spf_stab)
+        max_m_acap = max_m_for(available_acap, spf_acap)
+
+        best_dist = float('inf')
+        for ms in range(1, max_m_stab + 1):
+            for ma in range(1, max_m_acap + 1):
+                if total_files(k_ks_fixed, ms, ma) > max_files:
+                    continue
+                pcts = compute_beat_pcts(k_ks_fixed, available_stab, ms, available_acap, ma)
+                dist = sum(abs(p - t) for p, t in zip(pcts, (p_ks, p_stab, p_acap)))
+                if dist < best_dist:
+                    best_dist = dist
+                    best = (k_ks_fixed, ms, ma, pcts)
+
+    if best is None:
+        raise ValueError(
+            f"Cannot fit any valid combination within {max_files} total files. "
+            "Reduce input samples or increase max_files."
+        )
+
+    k_ks, m_stab, m_acap, pcts = best
+
+    # Build trimmed sample lists.
+    # Splits drops evenly between the two sub-types of each group.
+    # The first sub-type (kick / kickstab) takes the ceiling when total_drop is odd;
+    # the second (snare / snarestab) takes the floor.
+    # Remainders are redistributed if one group runs out of samples to drop.
+    def _even_split_keep(a_count: int, b_count: int, total_keep: int) -> tuple[int, int]:
+        total_drop = (a_count + b_count) - total_keep
+        if total_drop <= 0:
+            return a_count, b_count
+        a_drop = min((total_drop + 1) // 2, a_count)   # ceiling → a takes extra
+        b_drop = min(total_drop // 2, b_count)          # floor
+        deficit = total_drop - (a_drop + b_drop)
+        if deficit > 0:
+            b_drop = min(b_drop + deficit, b_count)
+            deficit = total_drop - (a_drop + b_drop)
+        if deficit > 0:
+            a_drop = min(a_drop + deficit, a_count)
+        return a_count - a_drop, b_count - b_drop
+
+    kick_keep, snare_keep = _even_split_keep(len(kicks_all), len(snares_all), k_ks)
+    # Stab/acap use the full set replicated via multiplier; no trimming today.
+    # If stab ever needs trimming, use _even_split_keep(kickstabs, snarestabs, k_stab).
+
+    trimmed: dict[str, list[str]] = dict(samples_by_type)
+    trimmed[KICK]      = kicks_all[:kick_keep]
+    trimmed[SNARE]     = snares_all[:snare_keep]
+    trimmed[KICKSTAB]  = kstabs_all
+    trimmed[SNARESTAB] = sstabs_all
+    trimmed[ACAPPELLA] = acaps_all
+
+    ignored_by_type: dict[str, list[str]] = {}
+    if kick_keep < len(kicks_all):
+        ignored_by_type[KICK]  = kicks_all[kick_keep:]
+    if snare_keep < len(snares_all):
+        ignored_by_type[SNARE] = snares_all[snare_keep:]
+
+    within_tolerance = within_tol(pcts, (p_ks, p_stab, p_acap))
+    total_f = total_files(k_ks, m_stab, m_acap)
+
+    diagnostics = {
+        'ignored_by_type': ignored_by_type,
+        'k_ks':  k_ks,
+        'm_stab': m_stab,
+        'm_acap': m_acap,
+        'beat_pcts': pcts,
+        'total_files': total_f,
+        'within_tolerance': within_tolerance,
+        'bps_ks': bps_ks,
+        'bps_stab': bps_stab,
+        'bps_acap': bps_acap,
+        # Exact beats-per-output-file for each group in permutation mode
+        # (= total beats per sample / number of rhythm entries per sample)
+        'perm_beat_multipliers': {
+            KICKSNARE: bps_ks / spf_ks,
+            STAB:      bps_stab / spf_stab,
+            ACAPPELLA: bps_acap / spf_acap,
+        },
+    }
+    return trimmed, m_stab, m_acap, diagnostics
+
+
 def balance_permutation_decks(
     decks_by_group: dict[str, list[SlotSpec]],
     group_percents: list[int],
+    m_stab: int = 1,
+    m_acap: int = 1,
 ) -> list[SlotSpec]:
-    """Replicate each group's pre-built permutation deck so the final combined
-    deck approximately honours the kicksnare_stab_acappella_percents ratio.
+    """Combine pre-built permutation decks using pre-computed multipliers.
 
-    Algorithm (anchor-based rounding):
-      KICKSNARE is the anchor — its deck is used as-is with no duplication.
-      All other groups derive a target count from the ratio relative to
-      kicksnare's total, then replicate round(target / unique) times.
-      Fractions are rounded rather than resolved exactly via LCM, so the
-      ratio is approximate but the total stays manageable.
-
-    Groups with 0 raw slots (no input samples) are silently skipped.
+    KICKSNARE is used as-is (multiplier = 1, already trimmed by plan_permutation_trimming).
+    STAB is replicated m_stab times; ACAPPELLA is replicated m_acap times.
     """
-    anchor_group = KICKSNARE
-    anchor_deck = decks_by_group.get(anchor_group, [])
-    anchor_raw = len(anchor_deck)
-    anchor_pct = group_percents[SOUND_GROUP_NAMES.index(anchor_group)]
-
     combined: list[SlotSpec] = []
+    multipliers = {KICKSNARE: 1, STAB: m_stab, ACAPPELLA: m_acap}
 
-    if anchor_raw == 0:
-        # No kicksnare samples — fall back to first non-empty group as anchor
-        for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
-            deck = decks_by_group.get(group, [])
-            if deck:
-                combined.extend(deck)
-                print(f"  Permutation deck: {group} — {len(deck)} raw slots × 1 = {len(deck)} total")
-        random.shuffle(combined)
-        return combined
-
-    # Anchor: kicksnare, no duplication
-    combined.extend(anchor_deck)
-    print(f"  Permutation deck: {anchor_group} — {anchor_raw} raw slots × 1 = {anchor_raw} total")
-
-    for group, pct in zip(SOUND_GROUP_NAMES, group_percents):
-        if group == anchor_group:
-            continue
+    for group in SOUND_GROUP_NAMES:
         deck = decks_by_group.get(group, [])
-        unique = len(deck)
-        if unique == 0 or pct == 0 or anchor_pct == 0:
+        if not deck:
             continue
-        target = round(anchor_raw * pct / anchor_pct)
-        multiplier = max(1, round(target / unique))
-        combined.extend(deck * multiplier)
-        print(f"  Permutation deck: {group} — {unique} raw slots × {multiplier} = {unique * multiplier} total")
+        m = multipliers.get(group, 1)
+        combined.extend(deck * m)
+        print(f"  Permutation deck: {group} — {len(deck)} raw slots × {m} = {len(deck) * m} total")
 
     random.shuffle(combined)
     return combined

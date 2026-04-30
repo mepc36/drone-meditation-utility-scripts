@@ -19,7 +19,7 @@ import numpy as np
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
-from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_beat_multipliers
+from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_beat_multipliers, plan_permutation_trimming
 from lib.sample_queue import (
     build_biased_reservations,
     create_shuffled_sample_queue,
@@ -452,13 +452,126 @@ def main() -> None:
             remaining -= share
 
     if conf['kick_snare_permutation_mode']:
-        ks_deck   = build_permutation_kick_snare_deck(samples_by_type)
-        stab_deck = build_permutation_stab_deck(samples_by_type)
-        acap_deck = build_permutation_acappella_deck(samples_by_type)
+        trimmed_samples, m_stab, m_acap, diag = plan_permutation_trimming(
+            samples_by_type,
+            conf['sound_group_percents'],
+            max_files=20_000,
+        )
+
+        # Print ignored-samples report and allow interactive swaps
+        ignored = diag['ignored_by_type']
+        p_ks, p_stab, p_acap = diag['beat_pcts']
+        target_str_perm = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
+        SEP60 = '=' * 60
+
+        # Build a stable flat list of ignored slots: (number, sound_type, current_name, original_name)
+        # Each slot is identified by a 1-based index that never changes.
+        ignored_slots: list[list] = []  # [idx, sound_type, current_name, original_name]
+        for sound_type, names in ignored.items():
+            for name in sorted(names):
+                ignored_slots.append([len(ignored_slots) + 1, sound_type, name, name])
+
+        # Build a per-sound-type pool of available (kept) samples for swapping
+        # kept = all samples of that type that are NOT currently ignored
+        def _kept_pool(sound_type: str) -> list[str]:
+            currently_ignored = {s[2] for s in ignored_slots if s[1] == sound_type}
+            return [s for s in samples_by_type.get(sound_type, []) if s not in currently_ignored]
+
+        def _print_trim_report() -> None:
+            print(f"\n{SEP60}")
+            print(f"PERMUTATION TRIM  (target {target_str_perm})")
+            if ignored_slots:
+                total_ignored = len(ignored_slots)
+                print(f"  {total_ignored} sample(s) will be ignored to improve beat ratio:")
+                for idx, sound_type, current, original in ignored_slots:
+                    if current != original:
+                        print(f"    [{idx}] [{sound_type}]  {current}  <--- CHANGED FROM {original}")
+                    else:
+                        print(f"    [{idx}] [{sound_type}]  {current}")
+            else:
+                print("  No samples ignored.")
+            print(f"\n  Multipliers: stab ×{m_stab}, acappella ×{m_acap}")
+            print(f"  Projected beat ratio: {p_ks:.1f}% KS / {p_stab:.1f}% stab / {p_acap:.1f}% acap"
+                  f"  (target {target_str_perm})")
+            print(f"  Projected total files: {diag['total_files']}")
+            if not diag['within_tolerance']:
+                print(f"  ⚠  Beat ratio is outside ±3% tolerance — best achievable given constraints.")
+
+        _print_trim_report()
+
+        if sys.stdin.isatty() and ignored_slots:
+            while True:
+                raw = input("\n  Enter a slot number to swap it out, 'n' to abort, or Enter to proceed: ").strip()
+                if not raw:
+                    break
+                if raw.lower() in ('n', 'no'):
+                    print("  Aborted.")
+                    sys.exit(0)
+                if not raw.isdigit():
+                    print("  Please enter a number.")
+                    continue
+                slot_num = int(raw)
+                matching = [s for s in ignored_slots if s[0] == slot_num]
+                if not matching:
+                    print(f"  No slot #{slot_num}. Valid numbers: {[s[0] for s in ignored_slots]}")
+                    continue
+                slot = matching[0]
+                sound_type = slot[1]
+                pool = _kept_pool(sound_type)
+                if not pool:
+                    print(f"  No kept {sound_type} samples available to swap in.")
+                    continue
+                replacement = random.choice(pool)
+                slot[2] = replacement  # update current name; original stays fixed
+                _print_trim_report()
+
+            # Apply any swaps back into trimmed_samples
+            for idx, sound_type, current, original in ignored_slots:
+                if current != original:
+                    # Remove original from trimmed set, add original back, remove current
+                    for typ in (sound_type,):
+                        lst = list(trimmed_samples.get(typ, []))
+                        if original in lst:
+                            lst.remove(original)  # original was kept (it's the replacement now)
+                        if current not in lst:
+                            lst.append(current)   # current replaces it in the ignored set
+                        trimmed_samples = {**trimmed_samples, typ: lst}
+
+            # Rebuild ignored_by_type from final slot state so the render loop is consistent
+            from collections import defaultdict as _dd
+            final_ignored: dict[str, list[str]] = _dd(list)
+            for idx, sound_type, current, original in ignored_slots:
+                final_ignored[sound_type].append(current)
+            # trimmed_samples must exclude all currently-ignored names
+            for sound_type, ignored_names in final_ignored.items():
+                ignored_set = set(ignored_names)
+                trimmed_samples = {
+                    **trimmed_samples,
+                    sound_type: [s for s in samples_by_type.get(sound_type, []) if s not in ignored_set],
+                }
+
+        if sys.stdin.isatty() and not ignored_slots:
+            answer = input("\n  Proceed? [Y/n] ").strip().lower()
+            if answer and answer not in ('y', 'yes'):
+                print("  Aborted.")
+                sys.exit(0)
+        elif not sys.stdin.isatty():
+            print("  (Non-interactive mode — proceeding automatically)")
+
+        # Rebuild deck using trimmed samples and pre-computed multipliers
+        ks_deck   = build_permutation_kick_snare_deck(trimmed_samples)
+        stab_deck = build_permutation_stab_deck(trimmed_samples)
+        acap_deck = build_permutation_acappella_deck(trimmed_samples)
         non_strings_deck = balance_permutation_decks(
             {KICKSNARE: ks_deck, STAB: stab_deck, ACAPPELLA: acap_deck},
             conf['sound_group_percents'],
+            m_stab=m_stab,
+            m_acap=m_acap,
         )
+        # Update samples_by_type so the render loop and queue use trimmed sets
+        samples_by_type = trimmed_samples
+        # Use exact beats-per-output-file for the post-run sound group report
+        beat_multipliers = diag['perm_beat_multipliers']
     else:
         non_strings_deck = plan_output_files(
             group_targets, panning_quotas, bpm_targets, vol_targets,
@@ -472,13 +585,8 @@ def main() -> None:
     total_slots = len(full_deck)
     _print_interval = max(100, total_slots // 200)
     print(f"\n  Total samples to generate: {total_slots}\n")
-    if conf['kick_snare_permutation_mode'] and sys.stdin.isatty():
-        answer = input("  Proceed? [Y/n] ").strip().lower()
-        if answer and answer not in ('y', 'yes'):
-            print("  Aborted.")
-            sys.exit(0)
-    elif conf['kick_snare_permutation_mode']:
-        print("  (Non-interactive mode — proceeding automatically)")
+    if conf['kick_snare_permutation_mode'] and not sys.stdin.isatty():
+        pass  # prompt already handled above
 
     sample_queue, all_samples = create_shuffled_sample_queue(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_samples}
