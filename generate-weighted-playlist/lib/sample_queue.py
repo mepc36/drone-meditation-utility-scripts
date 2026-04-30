@@ -43,12 +43,12 @@ def _draw_from_queue_with_filter(queue: deque, all_samples: list[str], predicate
     for _ in range(2):
         if not queue:
             _refill_queue(queue, all_samples)
-        _refill_queue(queue, all_samples)
         for i in range(len(queue)):
             if predicate(queue[i]):
                 sample = queue[i]
                 del queue[i]
                 return sample
+        _refill_queue(queue, all_samples)
     return None
 
 

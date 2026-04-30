@@ -1,6 +1,5 @@
 """Count input files by sound type, then count output file attributes."""
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -20,31 +19,31 @@ from lib.constants import (
     QUARTER_NOTE, QUARTER_NOTE_REST, BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
     EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
-    EIGHTH_EIGHTH_RHYTHM, SIXTEENTH_DOTTEDEIGHTH_RHYTHM,
     RHYTHM_PATTERN_SEQUENCES,
     QUARTER_RHYTHM, DOUBLE_RHYTHM,
     MUSICAL_PATTERNS, VOLUMES, BPMS, MUSIC_PATTERN_PERCENT,
     RHYTHM_PATTERNS, RHYTHM_PATTERN, RHYTHM_PERCENT,
 )
 from lib.runtime_constants import LOUD, QUIET, SLOW
-from lib.sound_rules import rules_by_sound_type, derive_type, derive_panning_key
+from lib.sound_rules import rules_by_sound_type, derive_type, derive_panning_key, sound_type_of
+from lib.config import CFG_SOUND_GROUP_PERCENTS, CFG_SILENCE_RATIO, CFG_BPMS
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-cfg_path = os.path.join(BASE, "input/config/config.json")
-input_audio_dir = os.path.join(BASE, "input/audio")
-rhythmicized_dir = os.path.join(BASE, "output/rhythmicized-audio")
+BASE = Path(__file__).parent
+cfg_path = BASE / "input/config/config.json"
+input_audio_dir = BASE / "input/audio"
+rhythmicized_dir = BASE / "output/rhythmicized-audio"
 
 with open(cfg_path) as f:
     cfg = json.load(f)
 
-cfg_sound_group_pcts = [int(x) for x in cfg.get('kicksnare_stab_acappella_percents', '').split(':')]
-_sil_ratio = [int(x) for x in cfg.get('samples_to_silence_percents', '100:0').split(':')]
+cfg_sound_group_pcts = [int(x) for x in cfg.get(CFG_SOUND_GROUP_PERCENTS, '').split(':')]
+_sil_ratio = [int(x) for x in cfg.get(CFG_SILENCE_RATIO, '100:0').split(':')]
 _samp_pct, _sil_pct = _sil_ratio[0], (_sil_ratio[1] if len(_sil_ratio) > 1 else 0)
 
 # Derive total counts from actual kicksnare input files (mirrors lib/config.py logic)
 _kicksnare_count = sum(
-    1 for f in os.listdir(input_audio_dir)
-    if f.endswith('_kick.wav') or f.endswith('_snare.wav')
+    1 for f in input_audio_dir.iterdir()
+    if f.name.endswith('_kick.wav') or f.name.endswith('_snare.wav')
 )
 _kicksnare_pct = cfg_sound_group_pcts[0] if cfg_sound_group_pcts else 50
 cfg_num_audio = round(_kicksnare_count * 100 / _kicksnare_pct) if _kicksnare_pct else 0
@@ -55,12 +54,7 @@ else:
 cfg_num_unique = cfg_num_audio + cfg_num_silence
 
 # ── Input file counts ─────────────────────────────────────────────────────────
-input_wav = [f for f in os.listdir(input_audio_dir) if f.endswith(".wav")]
-
-def sound_type_of(fname):
-    stem = fname[:-4] if fname.endswith(".wav") else fname
-    parts = stem.split("_")
-    return parts[2].split(".")[0].lower() if len(parts) >= 3 else ""
+input_wav = [f.name for f in input_audio_dir.glob("*.wav")]
 
 input_type_counts = Counter(sound_type_of(f) for f in input_wav)
 
@@ -72,11 +66,6 @@ for t, n in input_type_counts.items():
 
 
 # ── Output file counts ────────────────────────────────────────────────────────
-def _is_strings_file(fname):
-    stem = fname[:-4] if fname.endswith(".wav") else fname
-    parts = stem.split("_")
-    return len(parts) >= 3 and parts[2].split(".")[0].lower() == STRINGS
-
 _BEAT_NAMES = {
     QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
     QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
@@ -89,10 +78,10 @@ SUFFIX_MAP = {
     for name, beats in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
-all_wav = [f for f in os.listdir(rhythmicized_dir) if f.endswith(".wav")]
+all_wav = [f.name for f in rhythmicized_dir.glob("*.wav")]
 silence_wav = [f for f in all_wav if f.startswith("silence_")]
-strings_wav = [f for f in all_wav if _is_strings_file(f) and not f.startswith("silence_")]
-wav = [f for f in all_wav if not _is_strings_file(f) and not f.startswith("silence_")]
+strings_wav = [f for f in all_wav if sound_type_of(f) == STRINGS and not f.startswith("silence_")]
+wav = [f for f in all_wav if sound_type_of(f) != STRINGS and not f.startswith("silence_")]
 N = len(wav)  # non-strings musical files
 N_strings = len(strings_wav)
 N_total = len(all_wav)
@@ -144,7 +133,7 @@ bpms = sorted(bpm_counts.keys())
 _non_strings_N = N  # use actual N of non-strings musical files
 group_n = [round(_non_strings_N * pct / 100) for pct in cfg_sound_group_pcts]
 
-_cfg_bpms = sorted(float(x) for x in cfg.get('bpms', '').split(':'))
+_cfg_bpms = sorted(float(x) for x in cfg.get(CFG_BPMS, '').split(':'))
 _slow_bpm = min(_cfg_bpms) if _cfg_bpms else None
 _fast_bpm = max(_cfg_bpms) if _cfg_bpms else None
 _single_bpm = _slow_bpm == _fast_bpm
@@ -268,16 +257,20 @@ for pat in _LOG_RHYTHMS:
 print()
 
 # ── Chart ─────────────────────────────────────────────────────────────────────
-out_dir = os.path.join(BASE, "output/analyze-ratios")
-os.makedirs(out_dir, exist_ok=True)
+out_dir = BASE / "output/analyze-ratios"
+out_dir.mkdir(parents=True, exist_ok=True)
 
-_sidecar_path_early = os.path.join(out_dir, "last-run-resolved-bias.json")
-if os.path.exists(_sidecar_path_early):
-    with open(_sidecar_path_early) as _sf:
-        _early_bias = json.load(_sf)
+_sidecar_path = out_dir / "last-run-resolved-bias.json"
+_resolved_bias = None
+if _sidecar_path.exists():
+    with open(_sidecar_path) as _f:
+        _resolved_bias = json.load(_f)
+
+# Print any randomly-resolved sample bias entries from the last run
+if _resolved_bias:
     _random_entries = [
         (grp, entry)
-        for grp, entries in _early_bias.items()
+        for grp, entries in _resolved_bias.items()
         for entry in entries
         if entry.get('was_random')
     ]
@@ -286,16 +279,6 @@ if os.path.exists(_sidecar_path_early):
         for _grp, _entry in _random_entries:
             print(f"    {_grp:<14}  {_entry['biased_sample']}  ({_entry['biased_pool_pct']}%)")
         print()
-
-out_dir = os.path.join(BASE, "output/analyze-ratios")
-os.makedirs(out_dir, exist_ok=True)
-
-# Read resolved-bias sidecar (written by step 1 when sample_bias is active)
-_sidecar_path = os.path.join(out_dir, "last-run-resolved-bias.json")
-_resolved_bias = None
-if os.path.exists(_sidecar_path):
-    with open(_sidecar_path) as _f:
-        _resolved_bias = json.load(_f)
 
 
 def _file_contains_sample(fname: str, sample_name: str) -> bool:
@@ -417,6 +400,6 @@ for ax, dim in zip(axes, DIMS):
                 label, ha="center", va="bottom", fontsize=8)
 
 plt.tight_layout()
-out_path = os.path.join(out_dir, "rhythmicized-ratios.png")
+out_path = out_dir / "rhythmicized-ratios.png"
 plt.savefig(out_path, dpi=140, bbox_inches="tight")
 print(f"Chart saved → {out_path}")

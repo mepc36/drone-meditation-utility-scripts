@@ -15,10 +15,11 @@ from threading import Semaphore
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import soundfile as sf
+import numpy as np
 
 import lib.config as cfg
 from lib.audio_processing import apply_rhythm_pattern, load_audio, load_and_prepare_sample, mix_samples_into_stereo_clip, reduce_volume_by_db, write_silence_file
-from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_draw_multipliers
+from lib.deck_builder import SlotSpec, plan_output_files, build_permutation_kick_snare_deck, build_permutation_stab_deck, build_permutation_acappella_deck, balance_permutation_decks, compute_group_beat_multipliers, plan_permutation_trimming
 from lib.sample_queue import (
     build_biased_reservations,
     create_shuffled_sample_queue,
@@ -215,7 +216,7 @@ def resolve_slot(
             raise ValueError(f"Unhandled panning value: {slot.panning!r}")
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        if is_biased or combo_key not in seen_combinations:
+        if is_biased or slot.sound_group != KICKSNARE or combo_key not in seen_combinations:
             volume_db = volume_levels_db[loudest_idx if slot.volume_label == LOUD else quietest_idx]
             volume_idx = loudest_idx if slot.volume_label == LOUD else quietest_idx
             bpm_idx = slowest_idx if slot.bpm_label == SLOW else fastest_idx
@@ -224,56 +225,95 @@ def resolve_slot(
     return None
 
 
-def print_sample_usage_report(sample_usage_count: dict[str, int], all_samples: list[str]) -> None:
-    usage_values = list(sample_usage_count.values())
-    min_uses, max_uses = min(usage_values), max(usage_values)
-    avg_uses = sum(usage_values) / len(usage_values)
-    print(f"\nSample Usage Distribution (round-robin):")
-    print(f"  Total input samples: {len(all_samples)}")
-    print(f"  Min uses: {min_uses}  Max uses: {max_uses}  Avg: {avg_uses:.2f}")
-    if max_uses - min_uses <= 1:
-        print(f"  ✓ Perfectly even — all samples used {min_uses}–{max_uses} times")
-    else:
-        print(f"  ⚠  Spread of {max_uses - min_uses} ({sum(1 for c in usage_values if c == max_uses)} sample(s) at max)")
-
-
 def print_panning_report(center: int, left: int, right: int, dualpan: int, hard_left: int, hard_right: int, conf: dict) -> None:
     diagonal = left + right
     leftorright = hard_left + hard_right
     total = center + diagonal + dualpan + leftorright
-    print(f"\nPanning Distribution:")
-    if total > 0:
-        print(f"  center:    {center}  ({center/total*100:.1f}%)")
-        print(f"  diagonal:  {diagonal}  ({diagonal/total*100:.1f}%)")
-        print(f"  dualpan:   {dualpan}  ({dualpan/total*100:.1f}%)")
-        print(f"  leftright: {leftorright}  ({leftorright/total*100:.1f}%)")
+    if total == 0:
+        return
+    SEP = '=' * 60
+    col_w = 10
+    entries = [("center", center), ("dualpan", dualpan), ("L/R", leftorright)]
     if diagonal > 0:
-        print(f"\nDiagonal Left/Right Distribution:")
-        print(f"  Realized: {left}:{right} = {left/diagonal*100:.1f}% : {right/diagonal*100:.1f}%")
-    if leftorright > 0:
-        print(f"\nHard Left/Right Distribution:")
-        print(f"  Realized: {hard_left}:{hard_right} = {hard_left/leftorright*100:.1f}% : {hard_right/leftorright*100:.1f}%")
+        entries.append(("diag", diagonal))
+    header = "".join(f"{name} #".ljust(col_w) + f"{name} %".ljust(col_w) for name, _ in entries)
+    data   = "".join(str(count).ljust(col_w) + f"{count/total*100:.0f}%".ljust(col_w) for _, count in entries)
+    print(f"{SEP}\nPANNING")
+    print(f"  {header}")
+    print(f"  {data}")
 
 
 def print_volume_report(volume_counts: list[int], total_created: int, conf: dict) -> None:
     volume_levels_db = conf['volume_levels_db']
-    non_zero = [c for c in volume_counts if c > 0]
+    active = [(db, count) for db, count in zip(volume_levels_db, volume_counts) if count > 0]
+    total_v = sum(c for _, c in active)
+    non_zero = [c for _, c in active]
     vol_gcd = gcd_of(*non_zero) if len(non_zero) > 1 else (non_zero[0] if non_zero else 1)
-    realized_ratio = ':'.join(str(c // vol_gcd) for c in volume_counts)
-    print(f"\nVolume Distribution:")
-    print(f"  Realized ratio: {realized_ratio}")
-    for db_val, count in zip(volume_levels_db, volume_counts):
-        pct = (count / total_created * 100) if total_created > 0 else 0
-        print(f"    {db_val:+.1f} dB: {count} samples ({pct:.1f}%)")
+    realized_ratio = ':'.join(str(c // vol_gcd) for _, c in active)
+    SEP = '=' * 60
+    col_w = 10
+    header = "".join(f"{db:+.0f}dB #".ljust(col_w) + f"{db:+.0f}dB %".ljust(col_w) for db, _ in active) + "ratio"
+    data   = "".join(str(count).ljust(col_w) + f"{count/total_v*100:.0f}%".ljust(col_w) for _, count in active) + realized_ratio
+    print(f"{SEP}\nVOLUME")
+    print(f"  {header}")
+    print(f"  {data}")
 
 
-def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, conf: dict) -> None:
-    print(f"\nSound Group Distribution:")
-    print(f"  Config: kicksnare_stab_acappella_percents = {conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]}")
-    for group, target_pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
+def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float], perm_multipliers: dict[str, int] | None = None, removed_counts: dict[str, int] | None = None, input_counts: dict[str, int] | None = None) -> None:
+    group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
+    total_beats = sum(group_beats.values())
+    target_percents = conf['sound_group_percents']
+    TOLERANCE = conf.get('permutation_tolerance_pct', 3.0) if conf.get('kick_snare_permutation_mode') else 3.0
+    W_INP, W_DUP, W_OUT, W_BEAT, W_IGN, W_PCT, W_TGT, W_DEL = 15, 14, 16, 9, 11, 17, 17, 16
+
+    def _row(group_name, inp, dup, out, beat, ign, pct_s, tgt_s, del_s):
+        return (
+            f"  {group_name:<10}"
+            f"  {str(inp):>{W_INP}}"
+            f"  {str(dup):>{W_DUP}}"
+            f"  {str(out):>{W_OUT}}"
+            f"  {str(beat):>{W_BEAT}}"
+            f"  {str(ign):>{W_IGN}}"
+            f"  {str(pct_s):>{W_PCT}}"
+            f"  {str(tgt_s):>{W_TGT}}"
+            f"  {str(del_s):>{W_DEL}}"
+        )
+
+    header_row = _row('', 'num_input_files', 'num_duplicates', 'num_output_files', 'num_beats', 'num_ignored', 'actual_output_pct', 'target_output_pct', 'output_delta_pct')
+    SEP = '=' * len(header_row)
+    lines = []
+    any_bad = False
+    for group, target_pct in zip(SOUND_GROUP_NAMES, target_percents):
         count = group_appearances[group]
-        realized_pct = (count / non_strings_created * 100) if non_strings_created > 0 else 0
-        print(f"  {group}: {count} files ({realized_pct:.1f}%, target {target_pct}%)")
+        beats = group_beats[group]
+        realized_pct = (beats / total_beats * 100) if total_beats > 0 else 0
+        off = abs(realized_pct - target_pct)
+        if off > TOLERANCE:
+            any_bad = True
+        delta = abs(realized_pct - target_pct)
+        rm = removed_counts.get(group, 0) if removed_counts is not None else 'N/A'
+        inp = input_counts.get(group, 'N/A') if input_counts is not None else 'N/A'
+        rm_int = rm if isinstance(rm, int) else 0
+        inp_int = inp if isinstance(inp, int) else 0
+        effective_inp = inp_int - rm_int
+        dup = round(count / effective_inp) if effective_inp > 0 else 'N/A'
+        lines.append(_row(group, inp, dup, count, int(beats), rm, f"{realized_pct:.1f}%", f"{target_pct}%", f"Δ{delta:.1f}%"))
+    target_str = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
+    print(SEP)
+    print(f"BEAT RATIO CHECK  (target {target_str}, tolerance \u00b1{TOLERANCE:.0f}%)")
+    print(header_row)
+    for line in lines:
+        print(line)
+    strings_pct = (strings_created / (total_beats + strings_created) * 100) if (total_beats + strings_created) > 0 else 0
+    strings_inp = input_counts.get(STRINGS, 'N/A') if input_counts is not None else 'N/A'
+    print(_row('strings', strings_inp, 'N/A', strings_created, strings_created, 'N/A', f"{strings_pct:.1f}%", 'N/A%', 'N/A'))
+    num_silence = conf.get('num_silence_files', 0)
+    if num_silence > 0:
+        sil_pct = conf.get('silence_percent', 0)
+        print(_row('silence', 'N/A', 'N/A', num_silence, num_silence, 'N/A', f"{sil_pct}%", f"{sil_pct}%", 'N/A'))
+    if any_bad:
+        print(f"  \u26a0  RATIO OUTSIDE TOLERANCE — check beat_multipliers or input sample counts")
+    print(SEP)
 
 
 def print_biased_sample_report(
@@ -338,53 +378,74 @@ def main() -> None:
     rhythmicized_output_dir = cfg.OUTPUT_RHYTHMICIZED_AUDIO_DIR
 
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
-    print(f"\nCombine Samples with Random Panning\n")
-    print(f"BPMs: {bpms_str}")
 
     samples_by_type = load_samples_grouped_by_type(input_audio_dir)
+    _raw_input_counts: dict[str, int] = {
+        g: sum(len(samples_by_type.get(t, [])) for t in SOUND_GROUP_TYPES[g])
+        for g in SOUND_GROUP_NAMES
+    }
+    _raw_input_counts[STRINGS] = len(samples_by_type.get(STRINGS, []))
     total_sample_count = sum(len(s) for s in samples_by_type.values())
-    print(f"Found {total_sample_count} sample(s) in {len(samples_by_type)} sound type(s):")
+    print(f"Found {total_sample_count} samples in ./{input_audio_dir}:")
     for sound_type, samples in sorted(samples_by_type.items()):
-        print(f"  {sound_type}: {len(samples)} samples")
-        for sample in sorted(samples):
-            print(f"    - {sample}")
+        print(f"  - {sound_type}: {len(samples)}")
     print()
 
     clear_output_directory(output_dir)
     clear_output_directory(rhythmicized_output_dir)
 
-    num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
-    if num_pass_through > conf['num_audio_samples']:
-        raise ValueError(
-            f"{num_pass_through} strings samples found but total audio slots is {conf['num_audio_samples']}. "
-            f"Reduce the number of strings input files to at most {conf['num_audio_samples']}."
-        )
-    num_strings_samples = num_pass_through
-    num_non_strings_samples = conf['num_audio_samples'] - num_strings_samples
+    # Expand strings sample list according to per-subgroup duplication counts.
+    # The descriptor is the 2nd underscore-separated element of the filename stem.
+    # e.g. "kaleidoscope_exposition-kontakt_strings" → descriptor "exposition-kontakt"
+    _dup_subgroups = conf['strings_duplication_subgroups']
+    _all_string_descs = [name.split('_')[1] for name in samples_by_type.get(STRINGS, [])]
+    _unenumerated = [d for d in _all_string_descs if d not in _dup_subgroups]
+    if _unenumerated:
+        print("\n  NOTE: The following strings subgroups are not listed in")
+        print("  num_times_strings_duplication_subgroups and will not be duplicated:")
+        for _d in sorted(set(_unenumerated)):
+            _count = _unenumerated.count(_d)
+            print(f"    - {_d} ({_count} file{'s' if _count != 1 else ''})")
+    if _dup_subgroups:
+        _expanded_strings: list[str] = []
+        for name in samples_by_type.get(STRINGS, []):
+            desc = name.split('_')[1]
+            _expanded_strings.extend([name] * (1 + _dup_subgroups.get(desc, 0)))
+        samples_by_type = {**samples_by_type, STRINGS: _expanded_strings}
 
-    # Adjust slot allocations so the configured ratio applies to actual sample draws,
-    # not just output file count.  Groups whose rhythm patterns include SampleRole.NEW
-    # beats draw extra samples per slot; we reduce their file-count allocation
-    # proportionally so the total draw counts honour the configured percentages.
-    draw_multipliers = compute_group_draw_multipliers()
-    _adj_weights = {
-        group: pct / draw_multipliers[group]
-        for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents'])
-    }
-    _total_adj_weight = sum(_adj_weights.values()) or 1.0
-    group_targets = {
-        group: int(num_non_strings_samples * w / _total_adj_weight)
-        for group, w in _adj_weights.items()
-    }
-    group_total = sum(group_targets.values())
-    if group_total < num_non_strings_samples:
-        largest_group = max(group_targets, key=group_targets.get)
-        group_targets[largest_group] += num_non_strings_samples - group_total
-    if any(m > 1.0 for m in draw_multipliers.values()):
-        print(f"  Multi-sample rhythm adjustment (draw multipliers: "
-              + ", ".join(f"{g}={m:.4f}" for g, m in draw_multipliers.items()) + ")")
-        print(f"  Adjusted file-count targets: "
-              + ", ".join(f"{g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
+    num_strings_samples = num_pass_through
+    if num_strings_samples > conf['num_audio_samples']:
+        raise ValueError(
+            f"{num_strings_samples} strings slots exceeds total audio slots {conf['num_audio_samples']}. "
+            f"Reduce num_times_strings_duplication_subgroups counts or the number of strings input files."
+        )
+    # Anchor to kicksnare: every KS file appears exactly once.
+    # Other groups scaled so total beats heard match the configured ratio.
+    beat_multipliers = compute_group_beat_multipliers()
+    ks_slot_count = sum(len(samples_by_type.get(t, [])) for t in SOUND_GROUP_TYPES[KICKSNARE])
+    ks_pct = conf['sound_group_percents'][SOUND_GROUP_NAMES.index(KICKSNARE)]
+    ks_beats = ks_slot_count * beat_multipliers[KICKSNARE]
+    group_targets: dict[str, int] = {}
+    for group, pct in zip(SOUND_GROUP_NAMES, conf['sound_group_percents']):
+        if group == KICKSNARE:
+            group_targets[group] = ks_slot_count
+        else:
+            group_targets[group] = round(ks_beats * pct / ks_pct / beat_multipliers[group])
+    print(f"  Beat-anchor multipliers: "
+          + ", ".join(f"{g}={beat_multipliers[g]:.2f}" for g in SOUND_GROUP_NAMES))
+    print(f"  \nFile-count targets: "
+          + "".join(f"\n   - {g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    # Recompute silence count based on beat-anchored total (may differ from config estimate).
+    # In permutation mode, cfg.load() already computed the correct value from the actual
+    # permutation deck size; group_targets here reflects raw input counts, not output files.
+    if not conf['kick_snare_permutation_mode']:
+        _audio_total = sum(group_targets.values()) + num_strings_samples
+        conf['num_silence_files'] = (
+            round(_audio_total * conf['silence_percent'] / conf['samples_percent'])
+            if conf['samples_percent'] > 0 and conf['silence_percent'] > 0
+            else 0
+        )
 
     # Derive panning quotas, bpm targets, and volume targets from sound_rules.
     # In permutation mode, kick/snare slots are handled separately and excluded here.
@@ -442,14 +503,177 @@ def main() -> None:
                 panning_quotas[PANNING_RIGHT] += share
             remaining -= share
 
+    perm_multipliers: dict[str, int] = {}
+    removed_counts: dict[str, int] | None = None
+
     if conf['kick_snare_permutation_mode']:
-        ks_deck   = build_permutation_kick_snare_deck(samples_by_type)
-        stab_deck = build_permutation_stab_deck(samples_by_type)
-        acap_deck = build_permutation_acappella_deck(samples_by_type)
+        while True:
+            try:
+                trimmed_samples, m_stab, m_acap, diag = plan_permutation_trimming(
+                    samples_by_type,
+                    conf['sound_group_percents'],
+                    max_files=conf['permutation_max_files'],
+                    tolerance=conf['permutation_tolerance_pct'],
+                    ks_ignored_cap=conf['kicksnare_ignored_cap'],
+                )
+                break
+            except ValueError as _trim_err:
+                if not sys.stdin.isatty():
+                    raise
+                print(f"\n  {'=' * 60}")
+                print(f"\n  ✗  {_trim_err}")
+                print(f"\n  Current values:")
+                print(f"    permutation_tolerance_pct : {conf['permutation_tolerance_pct']}")
+                print(f"    permutation_max_files     : {conf['permutation_max_files']}")
+                print(f"\n  Enter new values (or press Enter to keep current, 'n' to abort):")
+                _raw_tol = input(f"    permutation_tolerance_pct [{conf['permutation_tolerance_pct']}]: ").strip()
+                _raw_max = input(f"    permutation_max_files [{conf['permutation_max_files']}]: ").strip()
+                if _raw_tol.lower() in ('n', 'no') or _raw_max.lower() in ('n', 'no'):
+                    print("  Aborted.")
+                    sys.exit(0)
+                try:
+                    if _raw_tol:
+                        _new_tol = float(_raw_tol)
+                        if _new_tol <= 0:
+                            raise ValueError("must be positive")
+                        conf['permutation_tolerance_pct'] = _new_tol
+                    if _raw_max:
+                        _new_max = int(_raw_max)
+                        if _new_max <= 0:
+                            raise ValueError("must be positive")
+                        conf['permutation_max_files'] = _new_max
+                except ValueError as _ve:
+                    print(f"  Invalid input ({_ve}), try again.")
+                    continue
+                # Persist updated values back to config.json
+                _raw_cfg = conf['raw']
+                _raw_cfg[cfg.CFG_PERMUTATION_TOLERANCE] = conf['permutation_tolerance_pct']
+                _raw_cfg[cfg.CFG_PERMUTATION_MAX_FILES] = conf['permutation_max_files']
+                with open(cfg.CONFIG_PATH, 'w') as _cfg_f:
+                    json.dump(_raw_cfg, _cfg_f, indent=2)
+                    _cfg_f.write('\n')
+                print(f"  ✓  config.json updated. Retrying...")
+
+        # Print ignored-samples report and allow interactive swaps
+        ignored = diag['ignored_by_type']
+        p_ks, p_stab, p_acap = diag['beat_pcts']
+        target_str_perm = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
+        SEP60 = '=' * 60
+
+        # Build a stable flat list of ignored slots: (number, sound_type, current_name, original_name)
+        # Each slot is identified by a 1-based index that never changes.
+        ignored_slots: list[list] = []  # [idx, sound_type, current_name, original_name]
+        for sound_type, names in ignored.items():
+            for name in sorted(names):
+                ignored_slots.append([len(ignored_slots) + 1, sound_type, name, name])
+
+        # Build a per-sound-type pool of available (kept) samples for swapping
+        # kept = all samples of that type that are NOT currently ignored
+        def _kept_pool(sound_type: str) -> list[str]:
+            currently_ignored = {s[2] for s in ignored_slots if s[1] == sound_type}
+            return [s for s in samples_by_type.get(sound_type, []) if s not in currently_ignored]
+
+        def _print_trim_report() -> None:
+            print(f"\n{SEP60}")
+            print(f"PERMUTATION TRIM  (target {target_str_perm})")
+            if ignored_slots:
+                total_ignored = len(ignored_slots)
+                print(f"  {total_ignored} sample(s) will be ignored to improve beat ratio:")
+                for idx, sound_type, current, original in ignored_slots:
+                    if current != original:
+                        print(f"    [{idx}] [{sound_type}]  {current}  <--- CHANGED FROM {original}")
+                    else:
+                        print(f"    [{idx}] [{sound_type}]  {current}")
+            else:
+                print("  No samples ignored.")
+            print(f"\n  Multipliers: stab ×{m_stab}, acappella ×{m_acap}")
+            print(f"  Projected beat ratio: {p_ks:.1f}% KS / {p_stab:.1f}% stab / {p_acap:.1f}% acap"
+                  f"  (target {target_str_perm})")
+            print(f"  Projected total files: {diag['total_files']}")
+            if not diag['within_tolerance']:
+                print(f"  ⚠  Beat ratio is outside ±3% tolerance — best achievable given constraints.")
+
+        _print_trim_report()
+
+        if sys.stdin.isatty() and ignored_slots:
+            while True:
+                raw = input("\n  Enter a slot number to swap it out, 'n' to abort, or Enter to proceed: ").strip()
+                if not raw:
+                    break
+                if raw.lower() in ('n', 'no'):
+                    print("  Aborted.")
+                    sys.exit(0)
+                if not raw.isdigit():
+                    print("  Please enter a number.")
+                    continue
+                slot_num = int(raw)
+                matching = [s for s in ignored_slots if s[0] == slot_num]
+                if not matching:
+                    print(f"  No slot #{slot_num}. Valid numbers: {[s[0] for s in ignored_slots]}")
+                    continue
+                slot = matching[0]
+                sound_type = slot[1]
+                pool = _kept_pool(sound_type)
+                if not pool:
+                    print(f"  No kept {sound_type} samples available to swap in.")
+                    continue
+                replacement = random.choice(pool)
+                slot[2] = replacement  # update current name; original stays fixed
+                _print_trim_report()
+
+            # Apply any swaps back into trimmed_samples
+            for idx, sound_type, current, original in ignored_slots:
+                if current != original:
+                    # Remove original from trimmed set, add original back, remove current
+                    for typ in (sound_type,):
+                        lst = list(trimmed_samples.get(typ, []))
+                        if original in lst:
+                            lst.remove(original)  # original was kept (it's the replacement now)
+                        if current not in lst:
+                            lst.append(current)   # current replaces it in the ignored set
+                        trimmed_samples = {**trimmed_samples, typ: lst}
+
+            # Rebuild ignored_by_type from final slot state so the render loop is consistent
+            from collections import defaultdict as _dd
+            final_ignored: dict[str, list[str]] = _dd(list)
+            for idx, sound_type, current, original in ignored_slots:
+                final_ignored[sound_type].append(current)
+            # trimmed_samples must exclude all currently-ignored names
+            for sound_type, ignored_names in final_ignored.items():
+                ignored_set = set(ignored_names)
+                trimmed_samples = {
+                    **trimmed_samples,
+                    sound_type: [s for s in samples_by_type.get(sound_type, []) if s not in ignored_set],
+                }
+
+        if sys.stdin.isatty() and not ignored_slots:
+            answer = input("\n  Proceed? [Y/n] ").strip().lower()
+            if answer and answer not in ('y', 'yes'):
+                print("  Aborted.")
+                sys.exit(0)
+        elif not sys.stdin.isatty():
+            print("  (Non-interactive mode — proceeding automatically)")
+
+        removed_counts = {
+            g: sum(1 for _, st, _, _ in ignored_slots if st in SOUND_GROUP_TYPES[g])
+            for g in SOUND_GROUP_NAMES
+        }
+
+        # Rebuild deck using trimmed samples and pre-computed multipliers
+        ks_deck   = build_permutation_kick_snare_deck(trimmed_samples)
+        stab_deck = build_permutation_stab_deck(trimmed_samples)
+        acap_deck = build_permutation_acappella_deck(trimmed_samples)
         non_strings_deck = balance_permutation_decks(
             {KICKSNARE: ks_deck, STAB: stab_deck, ACAPPELLA: acap_deck},
             conf['sound_group_percents'],
+            m_stab=m_stab,
+            m_acap=m_acap,
         )
+        # Update samples_by_type so the render loop and queue use trimmed sets
+        samples_by_type = trimmed_samples
+        # Use exact beats-per-output-file for the post-run sound group report
+        beat_multipliers = diag['perm_beat_multipliers']
+        perm_multipliers = {KICKSNARE: 1, STAB: m_stab, ACAPPELLA: m_acap}
     else:
         non_strings_deck = plan_output_files(
             group_targets, panning_quotas, bpm_targets, vol_targets,
@@ -462,14 +686,9 @@ def main() -> None:
 
     total_slots = len(full_deck)
     _print_interval = max(100, total_slots // 200)
-    print(f"\n  Total samples to generate: {total_slots}")
-    if conf['kick_snare_permutation_mode'] and sys.stdin.isatty():
-        answer = input("  Proceed? [Y/n] ").strip().lower()
-        if answer and answer not in ('y', 'yes'):
-            print("  Aborted.")
-            sys.exit(0)
-    elif conf['kick_snare_permutation_mode']:
-        print("  (Non-interactive mode — proceeding automatically)")
+    print(f"\n  Total samples to generate: {total_slots}\n")
+    if conf['kick_snare_permutation_mode'] and not sys.stdin.isatty():
+        pass  # prompt already handled above
 
     sample_queue, all_samples = create_shuffled_sample_queue(samples_by_type)
     sample_usage_count: dict[str, int] = {s: 0 for s in all_samples}
@@ -513,7 +732,6 @@ def main() -> None:
     render_executor = ThreadPoolExecutor(max_workers=_RENDER_WORKERS)
     _write_sem = Semaphore(_MAX_PENDING_WRITES)
     write_executor = ThreadPoolExecutor(max_workers=_WRITE_WORKERS)
-    print(f"  Rendering with {_RENDER_WORKERS} worker(s), writing with {_WRITE_WORKERS} worker(s)")
 
     for slot in full_deck:
         # In permutation mode, kick/snare slots carry a forced_sample assigned at
@@ -530,7 +748,7 @@ def main() -> None:
         sample_names, pan_assignments, volume_db, volume_idx, bpm_idx = resolved
 
         combo_key = tuple(sorted(f"{n}:{pan_assignments[n]}" for n in sample_names))
-        if forced_primary is None:
+        if forced_primary is None and slot.sound_group == KICKSNARE:
             seen_combinations.add(combo_key)
         for name in sample_names:
             sample_usage_count[name] = sample_usage_count.get(name, 0) + 1
@@ -629,40 +847,31 @@ def main() -> None:
             per_beat_audio_list,
         )
 
-        if created_count % _print_interval == 0 or created_count == conf['num_audio_samples']:
-            print(f"  Created {created_count}/{conf['num_audio_samples']} samples...")
+        if created_count % _print_interval == 0 or created_count == total_slots:
+            print(f"  - Created {created_count}/{total_slots} samples...")
 
     render_executor.shutdown(wait=True)
     write_executor.shutdown(wait=True)
 
-    if created_count < conf['num_audio_samples']:
-        print(f"\nWarning: Only created {created_count} audio samples (expected {conf['num_audio_samples']}).")
-        print("  Some deck slots were skipped because no unique (sample + pan) combination could be")
-        print("  found within the retry limit. Try adding more input samples or adjusting the kicksnare percents.")
-    else:
-        print(f"\nComplete! Created {created_count} audio samples.")
-    print(f"  Output: {output_dir.resolve()}")
+    SEP = '=' * 60
+    num_silence_out = conf.get('num_silence_files', 0)
+    if conf['silence_percent'] > 0 and num_silence_out > 0:
+        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
 
-    print_sample_usage_report(sample_usage_count, all_samples)
+    warn = f"\n⚠  Only created {created_count}/{conf['num_audio_samples']} audio samples — some slots skipped.\n" if created_count < conf['num_audio_samples'] else ""
+    output_lines = [f"  - {created_count} samples"]
+    if num_silence_out > 0:
+        output_lines.append(f"  - {num_silence_out} silence")
+        output_lines.append(f"  - = {created_count + num_silence_out} total output files")
+    print(f"\n{warn}{SEP}\n  Output: → ./{output_dir}")
+    for line in output_lines:
+        print(line)
     print_panning_report(center_count, left_count, right_count, dualpan_count, hard_left_count, hard_right_count, conf)
     print_volume_report(volume_counts, created_count, conf)
-
-    if conf['silence_percent'] > 0 and conf['num_silence_files'] > 0:
-        generate_silence_files(output_dir, rhythmicized_output_dir, sample_rate, conf, starting_index=1)
-        total = created_count + conf['num_silence_files']
-        print(f"\nTotal files created: {total} ({created_count} samples + {conf['num_silence_files']} silence)")
-
-    if num_strings_samples > 0:
-        strings_pct = strings_created / created_count * 100 if created_count else 0
-        non_strings_pct = non_strings_created / created_count * 100 if created_count else 0
-        print(f"\nStrings Distribution:")
-        print(f"  All {num_strings_samples} strings sample(s) added exactly once (no duplicates).")
-        print(f"  Realized: {non_strings_created} non-strings ({non_strings_pct:.1f}%) / {strings_created} strings ({strings_pct:.1f}%)")
-
-    print_sound_group_report(group_appearances, non_strings_created, conf)
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
-    print(f"\nNext: Run 2-import-duplicate-padded-samples-into-itunes-playlist.py (builds playlist and plays via mpv)\n")
+
+    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers, perm_multipliers, removed_counts, _raw_input_counts)
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ DIAGONAL_PAN = 0.38
 HARD_CENTER  =  0.0
 HARD_LEFT    = -1.0
 HARD_RIGHT   =  1.0
-DIAGONAL_LEFT  = DIAGONAL_PAN * -1
-DIAGONAL_RIGHT = DIAGONAL_PAN * 1
+DIAGONAL_LEFT  = -DIAGONAL_PAN
+DIAGONAL_RIGHT =  DIAGONAL_PAN
 
 # Sound types (individual sample categories)
 KICK      = 'kick'
@@ -133,7 +133,7 @@ BEAT_NAME_SIXTEENTH         = 'sixteenth'
 BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
 
 # ── Operational limits ────────────────────────────────────────────────────────
-MAX_DRAW_RETRIES = 20
+MAX_DRAW_RETRIES = 200
 
 # ── Permutation mode combo counts ────────────────────────────────────────────
 # Total (musical_pattern × rhythm) slots generated per input sample in each
@@ -141,7 +141,7 @@ MAX_DRAW_RETRIES = 20
 # sums in sound_rules.py — a startup check there raises ValueError if they
 # diverge.
 PERMUTATION_COMBOS_PER_SAMPLE: dict[str, int] = {
-    KICKSNARE: 7,   # KICK_SNARE_MUSICAL_PATTERNS: 1 pattern × 6 rhythms
-    STAB:      7,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 3 patterns × 3+3+1 rhythms
+    KICKSNARE: 6,   # KICK_SNARE_MUSICAL_PATTERNS: 1 pattern × 6 rhythms
+    STAB:      6,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 2 patterns × 3+3 rhythms
     ACAPPELLA: 2,   # ACAPPELLA_MUSICAL_PATTERNS: 2 patterns × 1+1 rhythms
 }

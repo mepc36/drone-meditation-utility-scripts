@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import io
+import wave
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -89,16 +90,21 @@ def main() -> None:
 
     # Get all source files
     source_files = sorted(SOURCE_AUDIO_DIR.glob("*.wav"))
-    print(f"Found {len(source_files)} file(s) in {SOURCE_AUDIO_DIR}")
 
     # Write M3U pointing directly to source files
     abs_tracks = [f.resolve() for f in source_files]
     write_m3u(abs_tracks)
 
-    print(f"Total tracks in playlist: {len(abs_tracks)}\n")
-    print(f"Playlist written to: {PLAYLIST_PATH.resolve()}\n")
+    print(f"Total tracks in playlist: {len(abs_tracks)}")
+    print(f"Playlist created.")
 
-    print("\nStarting playback with mpv (Ctrl+C to stop)...\n")
+    total_seconds = 0
+    for track in abs_tracks:
+        with wave.open(str(track), 'rb') as wf:
+            total_seconds += wf.getnframes() / wf.getframerate()
+    mins, secs = divmod(int(total_seconds), 60)
+    print(f"Total listen-once duration (mins:seconds): {mins}:{secs:02d}\n")
+
     proc = subprocess.Popen(
         ["mpv", "--no-video", "--gapless-audio=yes", "--loop-playlist=inf", "--shuffle",
          str(PLAYLIST_PATH.resolve())],

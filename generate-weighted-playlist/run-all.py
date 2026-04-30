@@ -28,7 +28,7 @@ def run_script(script_name: str, description: str) -> bool:
             check=True,
             text=True
         )
-        print(f"\n✓ {description} completed successfully")
+        print()
         return True
     except subprocess.CalledProcessError as e:
         print(f"\n✗ {description} failed with error code {e.returncode}")
