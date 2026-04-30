@@ -21,6 +21,9 @@ CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
 CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
 CFG_SAMPLE_BIAS             = 'sample_bias'
 CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
+CFG_PERMUTATION_TOLERANCE   = 'permutation_tolerance_pct'
+CFG_PERMUTATION_MAX_FILES   = 'permutation_max_files'
+CFG_KS_IGNORED_CAP          = 'kicksnare_ignored_cap'
 CFG_STRINGS_DUPLICATION_SUBGROUPS = 'num_times_strings_duplication_subgroups'
 
 # ── Sample-bias helpers ─────────────────────────────────────────────────────────
@@ -34,6 +37,9 @@ NUM_VOLUME_VALUES        = 2
 def _compute_balanced_permutation_total(
     raw_counts: dict[str, int],
     group_percents: list[int],
+    tolerance: float,
+    max_files: int,
+    ks_ignored_cap: int = 0,
 ) -> int:
     """Return estimated total slot count using the beat-aware trimming planner.
 
@@ -46,7 +52,8 @@ def _compute_balanced_permutation_total(
         from .sample_queue import load_samples_grouped_by_type
         samples_by_type = load_samples_grouped_by_type(INPUT_AUDIO_DIR)
         _, m_stab, m_acap, diag = plan_permutation_trimming(
-            samples_by_type, group_percents, max_files=20_000
+            samples_by_type, group_percents, max_files=max_files,
+            tolerance=tolerance, ks_ignored_cap=ks_ignored_cap,
         )
         return diag['total_files']
     except Exception:
@@ -279,6 +286,22 @@ def load() -> dict:
         for f in strings_files
     )
 
+    if CFG_PERMUTATION_TOLERANCE not in raw:
+        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} is required in config.json")
+    if CFG_PERMUTATION_MAX_FILES not in raw:
+        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} is required in config.json")
+    if CFG_KS_IGNORED_CAP not in raw:
+        raise ValueError(f"{CFG_KS_IGNORED_CAP} is required in config.json")
+    permutation_tolerance = float(raw[CFG_PERMUTATION_TOLERANCE])
+    permutation_max_files = int(raw[CFG_PERMUTATION_MAX_FILES])
+    ks_ignored_cap        = int(raw[CFG_KS_IGNORED_CAP])
+    if permutation_tolerance <= 0:
+        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} must be a positive number, got {permutation_tolerance}")
+    if permutation_max_files <= 0:
+        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} must be a positive integer, got {permutation_max_files}")
+    if ks_ignored_cap < 0:
+        raise ValueError(f"{CFG_KS_IGNORED_CAP} must be 0 or a positive integer, got {ks_ignored_cap}")
+
     kick_snare_permutation_mode = bool(raw.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
     if kick_snare_permutation_mode:
         stab_count = len(
@@ -292,7 +315,9 @@ def load() -> dict:
             ACAPPELLA: acap_count      * PERMUTATION_COMBOS_PER_SAMPLE[ACAPPELLA],
         }
         permutation_non_strings_samples = _compute_balanced_permutation_total(
-            raw_perm_counts, sound_group_percents
+            raw_perm_counts, sound_group_percents,
+            tolerance=permutation_tolerance, max_files=permutation_max_files,
+            ks_ignored_cap=ks_ignored_cap,
         )
         num_audio_samples = permutation_non_strings_samples + num_strings_slots
     else:
@@ -351,6 +376,9 @@ def load() -> dict:
         "sample_bias": sample_bias,
 
         "kick_snare_permutation_mode": kick_snare_permutation_mode,
+        "permutation_tolerance_pct": permutation_tolerance,
+        "permutation_max_files": permutation_max_files,
+        "kicksnare_ignored_cap": ks_ignored_cap,
         "strings_duplication_subgroups": strings_duplication_subgroups,
 
         "raw": raw,

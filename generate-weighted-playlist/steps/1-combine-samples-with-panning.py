@@ -479,11 +479,52 @@ def main() -> None:
     removed_counts: dict[str, int] | None = None
 
     if conf['kick_snare_permutation_mode']:
-        trimmed_samples, m_stab, m_acap, diag = plan_permutation_trimming(
-            samples_by_type,
-            conf['sound_group_percents'],
-            max_files=20_000,
-        )
+        while True:
+            try:
+                trimmed_samples, m_stab, m_acap, diag = plan_permutation_trimming(
+                    samples_by_type,
+                    conf['sound_group_percents'],
+                    max_files=conf['permutation_max_files'],
+                    tolerance=conf['permutation_tolerance_pct'],
+                    ks_ignored_cap=conf['kicksnare_ignored_cap'],
+                )
+                break
+            except ValueError as _trim_err:
+                if not sys.stdin.isatty():
+                    raise
+                print(f"\n  {'=' * 60}")
+                print(f"\n  ✗  {_trim_err}")
+                print(f"\n  Current values:")
+                print(f"    permutation_tolerance_pct : {conf['permutation_tolerance_pct']}")
+                print(f"    permutation_max_files     : {conf['permutation_max_files']}")
+                print(f"\n  Enter new values (or press Enter to keep current, 'n' to abort):")
+                _raw_tol = input(f"    permutation_tolerance_pct [{conf['permutation_tolerance_pct']}]: ").strip()
+                _raw_max = input(f"    permutation_max_files [{conf['permutation_max_files']}]: ").strip()
+                if _raw_tol.lower() in ('n', 'no') or _raw_max.lower() in ('n', 'no'):
+                    print("  Aborted.")
+                    sys.exit(0)
+                try:
+                    if _raw_tol:
+                        _new_tol = float(_raw_tol)
+                        if _new_tol <= 0:
+                            raise ValueError("must be positive")
+                        conf['permutation_tolerance_pct'] = _new_tol
+                    if _raw_max:
+                        _new_max = int(_raw_max)
+                        if _new_max <= 0:
+                            raise ValueError("must be positive")
+                        conf['permutation_max_files'] = _new_max
+                except ValueError as _ve:
+                    print(f"  Invalid input ({_ve}), try again.")
+                    continue
+                # Persist updated values back to config.json
+                _raw_cfg = conf['raw']
+                _raw_cfg[cfg.CFG_PERMUTATION_TOLERANCE] = conf['permutation_tolerance_pct']
+                _raw_cfg[cfg.CFG_PERMUTATION_MAX_FILES] = conf['permutation_max_files']
+                with open(cfg.CONFIG_PATH, 'w') as _cfg_f:
+                    json.dump(_raw_cfg, _cfg_f, indent=2)
+                    _cfg_f.write('\n')
+                print(f"  ✓  config.json updated. Retrying...")
 
         # Print ignored-samples report and allow interactive swaps
         ignored = diag['ignored_by_type']
@@ -778,8 +819,8 @@ def main() -> None:
             per_beat_audio_list,
         )
 
-        if created_count % _print_interval == 0 or created_count == conf['num_audio_samples']:
-            print(f"  - Created {created_count}/{conf['num_audio_samples']} samples...")
+        if created_count % _print_interval == 0 or created_count == total_slots:
+            print(f"  - Created {created_count}/{total_slots} samples...")
 
     render_executor.shutdown(wait=True)
     write_executor.shutdown(wait=True)

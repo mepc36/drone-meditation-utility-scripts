@@ -523,13 +523,21 @@ def _exact_slots_per_file(pattern_list: list) -> int:
 def plan_permutation_trimming(
     samples_by_type: dict[str, list[str]],
     group_percents: list[int],
-    max_files: int = 20_000,
-    cap_pct: float = 0.10,
-    tolerance: float = 3.0,
+    max_files: int,
+    tolerance: float,
+    ks_ignored_cap: int = 0,
     seed: int = 42,
 ) -> tuple[dict[str, list[str]], int, int, dict]:
     """Determine how many input samples to use per group and how many times to
     replicate stab/acappella decks in order to match the target beat ratio.
+
+    Trimming priority: stab first (typically most files), then kicksnare,
+    then acappella. Replication is used when a group is under-represented;
+    trimming when over-represented.
+
+    Raises ValueError if the target cannot be reached within tolerance without
+    exceeding max_files. Adjust permutation_tolerance_pct or
+    permutation_max_files in config.json to loosen the constraints.
 
     Returns
     -------
@@ -540,7 +548,8 @@ def plan_permutation_trimming(
     m_acap : int
         Multiplier to apply to the full acappella deck.
     diagnostics : dict
-        Keys: ignored_by_type, k_ks, m_stab, m_acap, beat_pcts, total_files, within_tolerance.
+        Keys: ignored_by_type, k_ks, k_stab, k_acap, m_stab, m_acap,
+              beat_pcts, total_files, within_tolerance.
     """
     from math import ceil
     from .constants import KICK, SNARE, KICKSTAB, SNARESTAB
@@ -580,77 +589,109 @@ def plan_permutation_trimming(
             "At least one kick or snare sample is required in permutation mode."
         )
 
-    min_ks = ceil(available_ks * (1 - cap_pct))  # never trim more than cap_pct
+    def resolve_group(ideal_slots: float, available: int) -> tuple[int, int]:
+        """Return (k_samples, m_multiplier) for a group.
 
-    def compute_beat_pcts(k_ks: int, r_stab: int, m_stab: int, r_acap: int, m_acap: int) -> tuple[float, float, float]:
+        If the ideal total beat-slot count exceeds available samples, replicate
+        (m > 1, use all samples). If it is below available, trim to ideal.
+        m_multiplier is always ≥ 1.
+        """
+        if available == 0:
+            return 0, 0
+        if ideal_slots >= available:
+            return available, max(1, round(ideal_slots / available))
+        else:
+            return max(1, round(ideal_slots)), 1
+
+    def compute_beat_pcts(k_ks: int, k_stab: int, m_stab: int, k_acap: int, m_acap: int) -> tuple[float, float, float]:
         b_ks   = k_ks   * bps_ks
-        b_stab = r_stab * m_stab * bps_stab
-        b_acap = r_acap * m_acap * bps_acap
+        b_stab = k_stab * m_stab * bps_stab
+        b_acap = k_acap * m_acap * bps_acap
         total  = b_ks + b_stab + b_acap
         if total == 0:
             return 0.0, 0.0, 0.0
         return b_ks / total * 100, b_stab / total * 100, b_acap / total * 100
 
-    def total_files(k_ks: int, m_stab: int, m_acap: int) -> int:
-        return k_ks * spf_ks + available_stab * m_stab * spf_stab + available_acap * m_acap * spf_acap
+    def total_files(k_ks: int, k_stab: int, m_stab: int, k_acap: int, m_acap: int) -> int:
+        return k_ks * spf_ks + k_stab * m_stab * spf_stab + k_acap * m_acap * spf_acap
 
     def within_tol(pcts: tuple[float, float, float], targets: tuple[int, int, int]) -> bool:
         return all(abs(p - t) <= tolerance for p, t in zip(pcts, targets))
 
-    best: tuple | None = None  # (k_ks, m_stab, m_acap, pcts)
+    best: tuple | None = None  # (k_ks, k_stab, m_stab, k_acap, m_acap, pcts)
 
-    # Phase 1: sweep k_ks from available down to min_ks
+    # Sweep keep-count from all kicksnare files down to the cap floor.
+    # ks_ignored_cap=0 means never remove any kicksnare samples (sweep stays at available_ks).
+    # For each candidate, stab and acappella counts are derived analytically —
+    # trimming when over-represented, replicating when under-represented.
+    # This keeps the search 1-dimensional while honouring the priority:
+    # stab is trimmed/replicated freely for every kicksnare count, kicksnare
+    # only shrinks when stab/acappella adjustment alone is insufficient,
+    # acappella is adjusted last.
+    min_ks = max(1, available_ks - ks_ignored_cap)
     for k_ks in range(available_ks, min_ks - 1, -1):
         if k_ks == 0:
             continue
-        # Derive multipliers from beat-ratio formula
-        m_stab = max(1, round(k_ks * bps_ks * p_stab / (p_ks * available_stab * bps_stab))) if available_stab > 0 else 0
-        m_acap = max(1, round(k_ks * bps_ks * p_acap / (p_ks * available_acap * bps_acap))) if available_acap > 0 else 0
-        tf = total_files(k_ks, m_stab, m_acap)
+        if p_stab > 0 and available_stab > 0:
+            ideal_stab = k_ks * bps_ks * p_stab / (p_ks * bps_stab)
+            k_stab, m_stab = resolve_group(ideal_stab, available_stab)
+        else:
+            k_stab, m_stab = available_stab, 0
+        if p_acap > 0 and available_acap > 0:
+            ideal_acap = k_ks * bps_ks * p_acap / (p_ks * bps_acap)
+            k_acap, m_acap = resolve_group(ideal_acap, available_acap)
+        else:
+            k_acap, m_acap = available_acap, 0
+        tf = total_files(k_ks, k_stab, m_stab, k_acap, m_acap)
         if tf > max_files:
             continue
-        pcts = compute_beat_pcts(k_ks, available_stab, m_stab, available_acap, m_acap)
+        pcts = compute_beat_pcts(k_ks, k_stab, m_stab, k_acap, m_acap)
         if within_tol(pcts, (p_ks, p_stab, p_acap)):
-            best = (k_ks, m_stab, m_acap, pcts)
+            best = (k_ks, k_stab, m_stab, k_acap, m_acap, pcts)
             break
 
-    # Phase 2: fix k_ks = min_ks, grid search (m_stab, m_acap)
     if best is None:
-        k_ks_fixed = min_ks
-
-        def max_m_for(group_files: int, spf: int) -> int:
-            if group_files == 0:
-                return 0
-            remaining = max_files - k_ks_fixed * spf_ks
-            return max(1, remaining // (group_files * spf)) if remaining > 0 else 1
-
-        max_m_stab = max_m_for(available_stab, spf_stab)
-        max_m_acap = max_m_for(available_acap, spf_acap)
-
-        best_dist = float('inf')
-        for ms in range(1, max_m_stab + 1):
-            for ma in range(1, max_m_acap + 1):
-                if total_files(k_ks_fixed, ms, ma) > max_files:
-                    continue
-                pcts = compute_beat_pcts(k_ks_fixed, available_stab, ms, available_acap, ma)
-                dist = sum(abs(p - t) for p, t in zip(pcts, (p_ks, p_stab, p_acap)))
-                if dist < best_dist:
-                    best_dist = dist
-                    best = (k_ks_fixed, ms, ma, pcts)
-
-    if best is None:
+        # Find the minimum achievable tolerance given max_files and ks_ignored_cap.
+        min_deviation = float('inf')
+        for k_ks in range(available_ks, min_ks - 1, -1):
+            if k_ks == 0:
+                continue
+            if p_stab > 0 and available_stab > 0:
+                ideal_stab = k_ks * bps_ks * p_stab / (p_ks * bps_stab)
+                k_stab_c, m_stab_c = resolve_group(ideal_stab, available_stab)
+            else:
+                k_stab_c, m_stab_c = available_stab, 0
+            if p_acap > 0 and available_acap > 0:
+                ideal_acap = k_ks * bps_ks * p_acap / (p_ks * bps_acap)
+                k_acap_c, m_acap_c = resolve_group(ideal_acap, available_acap)
+            else:
+                k_acap_c, m_acap_c = available_acap, 0
+            if total_files(k_ks, k_stab_c, m_stab_c, k_acap_c, m_acap_c) > max_files:
+                continue
+            pcts_c = compute_beat_pcts(k_ks, k_stab_c, m_stab_c, k_acap_c, m_acap_c)
+            deviation = max(abs(p - t) for p, t in zip(pcts_c, (p_ks, p_stab, p_acap)))
+            if deviation < min_deviation:
+                min_deviation = deviation
+        if min_deviation == float('inf'):
+            achievable_str = "none (all configurations exceed max_files)"
+        else:
+            achievable_str = f"±{min_deviation:.1f}%"
         raise ValueError(
-            f"Cannot fit any valid combination within {max_files} total files. "
-            "Reduce input samples or increase max_files."
+            f"Cannot achieve target beat ratio {':'.join(map(str, group_percents))} "
+            f"within ±{tolerance}% tolerance without exceeding {max_files} total output files "
+            f"(kicksnare removal capped at {ks_ignored_cap}). "
+            f"Best achievable tolerance with current permutation_max_files / kicksnare_ignored_cap / "
+            f"kicksnare_stab_acappella_percents:\n\n{achievable_str}.\n\n"
+            f"Increase permutation_tolerance_pct, permutation_max_files, or kicksnare_ignored_cap "
+            f"in config.json, or adjust kicksnare_stab_acappella_percents."
         )
 
-    k_ks, m_stab, m_acap, pcts = best
+    k_ks, k_stab, m_stab, k_acap, m_acap, pcts = best
 
-    # Build trimmed sample lists.
-    # Splits drops evenly between the two sub-types of each group.
+    # Build trimmed sample lists, splitting drops evenly between sub-types.
     # The first sub-type (kick / kickstab) takes the ceiling when total_drop is odd;
     # the second (snare / snarestab) takes the floor.
-    # Remainders are redistributed if one group runs out of samples to drop.
+    # Remainders are redistributed if one sub-type runs out of samples to drop.
     def _even_split_keep(a_count: int, b_count: int, total_keep: int) -> tuple[int, int]:
         total_drop = (a_count + b_count) - total_keep
         if total_drop <= 0:
@@ -665,29 +706,31 @@ def plan_permutation_trimming(
             a_drop = min(a_drop + deficit, a_count)
         return a_count - a_drop, b_count - b_drop
 
-    kick_keep, snare_keep = _even_split_keep(len(kicks_all), len(snares_all), k_ks)
-    # Stab/acap use the full set replicated via multiplier; no trimming today.
-    # If stab ever needs trimming, use _even_split_keep(kickstabs, snarestabs, k_stab).
+    kick_keep,  snare_keep  = _even_split_keep(len(kicks_all),  len(snares_all),  k_ks)
+    kstab_keep, sstab_keep  = _even_split_keep(len(kstabs_all), len(sstabs_all),  k_stab)
 
     trimmed: dict[str, list[str]] = dict(samples_by_type)
     trimmed[KICK]      = kicks_all[:kick_keep]
     trimmed[SNARE]     = snares_all[:snare_keep]
-    trimmed[KICKSTAB]  = kstabs_all
-    trimmed[SNARESTAB] = sstabs_all
-    trimmed[ACAPPELLA] = acaps_all
+    trimmed[KICKSTAB]  = kstabs_all[:kstab_keep]
+    trimmed[SNARESTAB] = sstabs_all[:sstab_keep]
+    trimmed[ACAPPELLA] = acaps_all[:k_acap]
 
     ignored_by_type: dict[str, list[str]] = {}
-    if kick_keep < len(kicks_all):
-        ignored_by_type[KICK]  = kicks_all[kick_keep:]
-    if snare_keep < len(snares_all):
-        ignored_by_type[SNARE] = snares_all[snare_keep:]
+    if kick_keep  < len(kicks_all):   ignored_by_type[KICK]      = kicks_all[kick_keep:]
+    if snare_keep < len(snares_all):  ignored_by_type[SNARE]     = snares_all[snare_keep:]
+    if kstab_keep < len(kstabs_all):  ignored_by_type[KICKSTAB]  = kstabs_all[kstab_keep:]
+    if sstab_keep < len(sstabs_all):  ignored_by_type[SNARESTAB] = sstabs_all[sstab_keep:]
+    if k_acap     < len(acaps_all):   ignored_by_type[ACAPPELLA] = acaps_all[k_acap:]
 
     within_tolerance = within_tol(pcts, (p_ks, p_stab, p_acap))
-    total_f = total_files(k_ks, m_stab, m_acap)
+    total_f = total_files(k_ks, k_stab, m_stab, k_acap, m_acap)
 
     diagnostics = {
         'ignored_by_type': ignored_by_type,
-        'k_ks':  k_ks,
+        'k_ks':   k_ks,
+        'k_stab': k_stab,
+        'k_acap': k_acap,
         'm_stab': m_stab,
         'm_acap': m_acap,
         'beat_pcts': pcts,

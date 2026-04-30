@@ -8,6 +8,9 @@
   "strings_volume_adjustment_db": 0,
   "acappella_volume_adjustment_db": 0,
   "kick_snare_permutation_mode": true,
+  "permutation_tolerance_pct": 6.2,
+  "permutation_max_files": 20000,
+  "kicksnare_ignored_cap": 0,
   "num_times_strings_duplication_subgroups": {
     "cello-ostinato-kontakt": 0,
     "climax-kontakt": 0,
