@@ -21,6 +21,7 @@ CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
 CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
 CFG_SAMPLE_BIAS             = 'sample_bias'
 CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
+CFG_STRINGS_DUPLICATION_SUBGROUPS = 'num_times_strings_duplication_subgroups'
 
 # ── Sample-bias helpers ─────────────────────────────────────────────────────────
 _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
@@ -234,6 +235,35 @@ def load() -> dict:
         raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
+
+    strings_duplication_subgroups = raw.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
+    if not isinstance(strings_duplication_subgroups, dict):
+        raise ValueError(
+            f"{CFG_STRINGS_DUPLICATION_SUBGROUPS} must be a JSON object mapping descriptor → count, "
+            f"got {strings_duplication_subgroups!r}"
+        )
+    for key, val in strings_duplication_subgroups.items():
+        if not isinstance(val, int) or val < 0:
+            raise ValueError(
+                f"{CFG_STRINGS_DUPLICATION_SUBGROUPS}: value for {key!r} must be 0 or a positive integer "
+                f"(0 = no duplication, 1 = duplicate once = 2× total), got {val!r}"
+            )
+    if strings_duplication_subgroups:
+        known_descriptors = {f.stem.split('_')[1] for f in strings_files}
+        for key in strings_duplication_subgroups:
+            if key not in known_descriptors:
+                raise ValueError(
+                    f"{CFG_STRINGS_DUPLICATION_SUBGROUPS}: key {key!r} does not match any strings "
+                    f"file descriptor (2nd filename element). "
+                    f"Available: {sorted(known_descriptors)}"
+                )
+        num_strings_slots = sum(
+            strings_duplication_subgroups.get(f.stem.split('_')[1], 1)
+            for f in strings_files
+        )
+    else:
+        num_strings_slots = strings_count
+
     kick_snare_permutation_mode = bool(raw.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
     if kick_snare_permutation_mode:
         stab_count = len(
@@ -249,7 +279,7 @@ def load() -> dict:
         permutation_non_strings_samples = _compute_balanced_permutation_total(
             raw_perm_counts, sound_group_percents
         )
-        num_audio_samples = permutation_non_strings_samples + strings_count
+        num_audio_samples = permutation_non_strings_samples + num_strings_slots
     else:
         num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
 
@@ -306,6 +336,7 @@ def load() -> dict:
         "sample_bias": sample_bias,
 
         "kick_snare_permutation_mode": kick_snare_permutation_mode,
+        "strings_duplication_subgroups": strings_duplication_subgroups,
 
         "raw": raw,
     }
