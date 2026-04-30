@@ -259,11 +259,28 @@ def print_volume_report(volume_counts: list[int], total_created: int, conf: dict
     print(f"  {data}")
 
 
-def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float], perm_multipliers: dict[str, int] | None = None, removed_counts: dict[str, int] | None = None) -> None:
+def print_sound_group_report(group_appearances: dict[str, int], non_strings_created: int, strings_created: int, conf: dict, beat_multipliers: dict[str, float], perm_multipliers: dict[str, int] | None = None, removed_counts: dict[str, int] | None = None, input_counts: dict[str, int] | None = None) -> None:
     group_beats = {g: group_appearances[g] * beat_multipliers.get(g, 1.0) for g in SOUND_GROUP_NAMES}
     total_beats = sum(group_beats.values())
     target_percents = conf['sound_group_percents']
     TOLERANCE = conf.get('permutation_tolerance_pct', 3.0) if conf.get('kick_snare_permutation_mode') else 3.0
+    W_INP, W_DUP, W_OUT, W_BEAT, W_IGN, W_PCT, W_TGT, W_DEL = 15, 14, 16, 9, 11, 17, 17, 16
+
+    def _row(group_name, inp, dup, out, beat, ign, pct_s, tgt_s, del_s):
+        return (
+            f"  {group_name:<10}"
+            f"  {str(inp):>{W_INP}}"
+            f"  {str(dup):>{W_DUP}}"
+            f"  {str(out):>{W_OUT}}"
+            f"  {str(beat):>{W_BEAT}}"
+            f"  {str(ign):>{W_IGN}}"
+            f"  {str(pct_s):>{W_PCT}}"
+            f"  {str(tgt_s):>{W_TGT}}"
+            f"  {str(del_s):>{W_DEL}}"
+        )
+
+    header_row = _row('', 'num_input_files', 'num_duplicates', 'num_output_files', 'num_beats', 'num_ignored', 'actual_output_pct', 'target_output_pct', 'output_delta_pct')
+    SEP = '=' * len(header_row)
     lines = []
     any_bad = False
     for group, target_pct in zip(SOUND_GROUP_NAMES, target_percents):
@@ -273,27 +290,30 @@ def print_sound_group_report(group_appearances: dict[str, int], non_strings_crea
         off = abs(realized_pct - target_pct)
         if off > TOLERANCE:
             any_bad = True
-        mult = perm_multipliers.get(group, 1) if perm_multipliers else 1
         delta = abs(realized_pct - target_pct)
         rm = removed_counts.get(group, 0) if removed_counts is not None else 'N/A'
-        rm_str = f"{rm:>4}"
-        lines.append(
-            f"  {group:<10}  {count:>5} files  {rm_str} ignored {beats:>7.0f} beats  {realized_pct:>5.1f}%  (target {target_pct:>4}%)  ×{mult:<3}  Δ{delta:.1f}%"
-        )
+        inp = input_counts.get(group, 'N/A') if input_counts is not None else 'N/A'
+        rm_int = rm if isinstance(rm, int) else 0
+        inp_int = inp if isinstance(inp, int) else 0
+        effective_inp = inp_int - rm_int
+        dup = round(count / effective_inp) if effective_inp > 0 else 'N/A'
+        lines.append(_row(group, inp, dup, count, int(beats), rm, f"{realized_pct:.1f}%", f"{target_pct}%", f"Δ{delta:.1f}%"))
     target_str = conf['raw'][cfg.CFG_SOUND_GROUP_PERCENTS]
-    header = f"{'='*60}\nBEAT RATIO CHECK  (target {target_str}, tolerance \u00b1{TOLERANCE:.0f}%)"
-    print(header)
+    print(SEP)
+    print(f"BEAT RATIO CHECK  (target {target_str}, tolerance \u00b1{TOLERANCE:.0f}%)")
+    print(header_row)
     for line in lines:
         print(line)
     strings_pct = (strings_created / (total_beats + strings_created) * 100) if (total_beats + strings_created) > 0 else 0
-    print(f"  {'strings':<10}  {strings_created:>5} files   N/A ignored {strings_created:>7} beats  {strings_pct:>5.1f}%  (target  N/A%)  N/A  N/A")
+    strings_inp = input_counts.get(STRINGS, 'N/A') if input_counts is not None else 'N/A'
+    print(_row('strings', strings_inp, 'N/A', strings_created, strings_created, 'N/A', f"{strings_pct:.1f}%", 'N/A%', 'N/A'))
     num_silence = conf.get('num_silence_files', 0)
     if num_silence > 0:
         sil_pct = conf.get('silence_percent', 0)
-        print(f"  {'silence':<10}  {num_silence:>5} files   N/A ignored {num_silence:>7} beats  {sil_pct:>5}%  (target {sil_pct:>4}%)  N/A  N/A")
+        print(_row('silence', 'N/A', 'N/A', num_silence, num_silence, 'N/A', f"{sil_pct}%", f"{sil_pct}%", 'N/A'))
     if any_bad:
         print(f"  \u26a0  RATIO OUTSIDE TOLERANCE — check beat_multipliers or input sample counts")
-    print('='*60)
+    print(SEP)
 
 
 def print_biased_sample_report(
@@ -360,6 +380,11 @@ def main() -> None:
     bpms_str = ':'.join(str(b) for b in conf['bpm_values'])
 
     samples_by_type = load_samples_grouped_by_type(input_audio_dir)
+    _raw_input_counts: dict[str, int] = {
+        g: sum(len(samples_by_type.get(t, [])) for t in SOUND_GROUP_TYPES[g])
+        for g in SOUND_GROUP_NAMES
+    }
+    _raw_input_counts[STRINGS] = len(samples_by_type.get(STRINGS, []))
     total_sample_count = sum(len(s) for s in samples_by_type.values())
     print(f"Found {total_sample_count} samples in ./{input_audio_dir}:")
     for sound_type, samples in sorted(samples_by_type.items()):
@@ -846,7 +871,7 @@ def main() -> None:
     if resolved_bias:
         print_biased_sample_report(resolved_bias, sample_usage_count, group_targets)
 
-    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers, perm_multipliers, removed_counts)
+    print_sound_group_report(group_appearances, non_strings_created, strings_created, conf, beat_multipliers, perm_multipliers, removed_counts, _raw_input_counts)
 
 
 if __name__ == "__main__":
