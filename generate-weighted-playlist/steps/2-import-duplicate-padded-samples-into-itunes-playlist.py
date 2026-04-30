@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import io
+import wave
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -95,7 +96,14 @@ def main() -> None:
     write_m3u(abs_tracks)
 
     print(f"Total tracks in playlist: {len(abs_tracks)}")
-    print(f"Playlist created.\n")
+    print(f"Playlist created.")
+
+    total_seconds = 0
+    for track in abs_tracks:
+        with wave.open(str(track), 'rb') as wf:
+            total_seconds += wf.getnframes() / wf.getframerate()
+    mins, secs = divmod(int(total_seconds), 60)
+    print(f"Total listen-once duration (mins:seconds): {mins}:{secs:02d}\n")
 
     proc = subprocess.Popen(
         ["mpv", "--no-video", "--gapless-audio=yes", "--loop-playlist=inf", "--shuffle",
