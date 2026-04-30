@@ -2,12 +2,12 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
-    KICKSNARE, STAB, SampleRole,
+    KICKSNARE, STAB,
     SOUND_GROUP_TYPES,
     PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     RHYTHM_PATTERN_SEQUENCES,
-    MUSICAL_DURATION, POSSIBLE_PANNINGS, SAMPLE_ROLE, RHYTHM_PATTERNS, VOLUMES, BPMS,
+    MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
@@ -38,59 +38,6 @@ def derive_panning_key(entry: dict):
         return UNTOUCHED
     return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
 
-
-def with_roles(beats: list, roles: tuple) -> list:
-    """Attach SampleRole labels to beats, enabling different samples per beat position.
-
-    Example — A/B/A pattern on a triple rhythm:
-        with_roles(triple_rhythm(panning), (SampleRole.SAME, SampleRole.NEW, SampleRole.SAME))
-
-    SampleRole.SAME  — reuse the primary sample drawn for this slot
-    SampleRole.NEW   — draw a fresh different sample for this beat
-    None             — no role constraint; draw freely (same behavior as today)
-    """
-    if len(beats) < 2:
-        raise ValueError(
-            f"with_roles: needs at least 2 beats to be meaningful (got {len(beats)}). "
-            f"Use the plain rhythm function for single-beat patterns."
-        )
-    if len(roles) != len(beats):
-        raise ValueError(
-            f"with_roles: roles length ({len(roles)}) does not match beats length ({len(beats)}). "
-            f"roles={roles!r}"
-        )
-    for i, role in enumerate(roles):
-        if role is not None and not isinstance(role, SampleRole):
-            raise TypeError(
-                f"with_roles: roles[{i}]={role!r} is not a SampleRole or None. "
-                f"Use SampleRole.SAME, SampleRole.NEW, or None."
-            )
-    if roles[0] == SampleRole.NEW:
-        raise ValueError(
-            f"with_roles: roles[0] cannot be SampleRole.NEW — the first beat establishes "
-            f"the primary sample; there is nothing to be 'new' relative to. "
-            f"Use SampleRole.SAME or None for the first beat."
-        )
-    if not any(r == SampleRole.NEW for r in roles):
-        raise ValueError(
-            f"with_roles: no SampleRole.NEW found in roles={roles!r}. "
-            f"If every beat reuses the primary sample, with_roles is unnecessary — "
-            f"use the plain rhythm function instead."
-        )
-    for i in range(1, len(roles)):
-        if roles[i] == SampleRole.NEW and roles[i - 1] == SampleRole.NEW:
-            raise ValueError(
-                f"with_roles: roles[{i - 1}] and roles[{i}] are both SampleRole.NEW. "
-                f"Consecutive NEW beats would draw a third distinct sample, which is not supported. "
-                f"Separate NEW beats with at least one SAME or None beat."
-            )
-    result = []
-    for beat, role in zip(beats, roles):
-        if role is not None:
-            result.append({**beat, SAMPLE_ROLE: role})
-        else:
-            result.append(beat)
-    return result
 
 
 def _beat(duration: float, panning) -> dict:
@@ -133,7 +80,7 @@ def sixteenth_eighth_sixteenth_quarter_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning), _beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
 
 
-def sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(panning) -> list:
+def sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning)]
 
 
@@ -196,7 +143,7 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
                 RHYTHM_PERCENT: 5,
             },
             {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeight_rhythm(HARD_CENTER),
+                RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(HARD_CENTER),
                 RHYTHM_PERCENT: 5,
             },
         ],
@@ -259,7 +206,7 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
             },
         ],
     },
-        {
+    {
         VOLUMES: [LOUD],
         BPMS: [SLOW],
         MUSIC_PATTERN_PERCENT: 50,
