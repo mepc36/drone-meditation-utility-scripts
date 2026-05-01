@@ -89,6 +89,10 @@ def sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning) for _ in range(4)] + [_beat(QUARTER_NOTE, panning)]
 
 
+def sixteenth_sixteenth_sixteenth_sixteenth_rhythm(panning) -> list:
+    return [_beat(SIXTEENTH, panning) for _ in range(4)]
+
+
 def eighth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
     return [_beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
 
@@ -140,18 +144,20 @@ def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
 def variable_quarter_rhythm(panning, max_beats: int) -> list:
     """Build a rhythm with a random beat count in [1, max_beats].
     Each beat is independently either a quarter note or a rest,
-    with two constraints: the first beat is always a note, and
-    no two consecutive rests are allowed."""
+    with three constraints: the first beat is always a note,
+    no two consecutive rests are allowed, and the last beat is always a note."""
     if max_beats < 1:
         raise ValueError(f"max_beats must be 1 or greater, got {max_beats}")
     n = random.randint(1, max_beats)
     beats = []
     for i in range(n):
-        if i == 0 or beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
-            duration = QUARTER_NOTE
-        else:
-            duration = random.choice([QUARTER_NOTE, QUARTER_NOTE_REST])
+        # if i == 0 or beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
+        duration = QUARTER_NOTE
+        # else:
+            # duration = random.choice([QUARTER_NOTE, QUARTER_NOTE_REST])
         beats.append(_beat(duration, panning))
+    if beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
+        beats[-1] = _beat(QUARTER_NOTE, panning)
     return beats
 
 
@@ -161,22 +167,22 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
-            # {
-            #     RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-            #     RHYTHM_PERCENT: 70,
-            # },
-            # {
-            #     RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-            #     RHYTHM_PERCENT: 5,
-            # },
             {
-                RHYTHM_PATTERN: lambda: variable_quarter_rhythm(HARD_CENTER, 4),
-                RHYTHM_PERCENT: 100,
+                RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 70,
             },
-            # {
-            #     RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-            #     RHYTHM_PERCENT: 5,
-            # },
+            {
+                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 10,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 10,
+            },
+            {
+                RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 10,
+            },
             # {
             #     RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
             #     RHYTHM_PERCENT: 5,
@@ -184,6 +190,10 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
             # {
             #     RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(HARD_CENTER),
             #     RHYTHM_PERCENT: 5,
+            # },
+            #             {
+            #     RHYTHM_PATTERN: lambda: variable_quarter_rhythm(HARD_CENTER, 3),
+            #     RHYTHM_PERCENT: 100,
             # },
         ],
     }
@@ -243,11 +253,12 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
                 RHYTHM_PERCENT: 10,
             },
             {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
                 RHYTHM_PERCENT: 10,
             },
         ],
     },
+
     # FOR WHEN KICK_SNARE_PERMUTATION_MODE IN CONFIG IS FALSE:
     # {
     #     VOLUMES: [LOUD],

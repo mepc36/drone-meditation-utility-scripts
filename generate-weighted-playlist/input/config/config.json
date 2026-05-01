@@ -1,5 +1,5 @@
 {
-  "bpms": "20:120",
+  "bpms": "40:120",
   "samples_to_silence_percents": "80:20",
   "loud_quiet_values": "0:-32",
   "silence_lengths_millisec": "1760",
