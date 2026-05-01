@@ -334,12 +334,12 @@ _SOUND_TYPE_RULES: list[dict] = [
     },
     {
         MUSICAL_GROUPING: KICKSTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [SNARESTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: SNARESTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [KICKSTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
@@ -411,6 +411,10 @@ for _rule in _SOUND_TYPE_RULES:
     if DUALPAN_PARTNERS not in _rule:
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' is missing '{DUALPAN_PARTNERS}'. Use [] if no dualpan."
+        )
+    if not _rule[DUALPAN_PARTNERS] and any(derive_panning_key(e) in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) for e in _rule[MUSICAL_PATTERNS]):
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_name}' uses dualpan panning but dualpan_partners is empty."
         )
     if _rule[DUALPAN_PARTNERS] and not any(derive_panning_key(e) in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) for e in _rule[MUSICAL_PATTERNS]):
         raise ValueError(
