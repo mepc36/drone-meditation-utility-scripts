@@ -125,6 +125,11 @@ def _hashable_beat(b) -> tuple:
     return (float(b[MUSICAL_DURATION]), tuple(b[POSSIBLE_PANNINGS]), b.get(SAMPLE_ROLE))
 
 
+def _resolve_rp(raw) -> list:
+    """Resolve a RHYTHM_PATTERN value: call it if it's a factory callable, else return as-is."""
+    return raw() if callable(raw) else raw
+
+
 def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tuple]:
     """Split a raw (hashable) beat pattern into duration, panning, and role tuples.
 
@@ -250,7 +255,7 @@ def _rhythm_patterns_for_slot(slot: SlotSpec) -> list[tuple]:
                 if entry is UNTOUCHED:
                     pat = (UNTOUCHED,)
                 elif isinstance(entry, dict):
-                    beats = entry[RHYTHM_PATTERN]
+                    beats = _resolve_rp(entry[RHYTHM_PATTERN])
                     pat = (derive_type(beats), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in beats)
                 else:
                     raise TypeError(f"Unexpected rhythm_pattern entry: {entry!r}")
@@ -286,7 +291,7 @@ def compute_group_beat_multipliers() -> dict[str, float]:
                 continue
             for rp_entry in rp_list:
                 rp_weight = rp_entry[RHYTHM_PERCENT] / 100.0
-                beats = rp_entry[RHYTHM_PATTERN]
+                beats = _resolve_rp(rp_entry[RHYTHM_PATTERN])
                 total_beats += mp_weight * rp_weight * len(beats)
         multipliers[group] = total_beats if total_beats > 0 else 1.0
     return multipliers
@@ -392,17 +397,14 @@ def build_permutation_kick_snare_deck(
         list(samples_by_type.get(SNARE, []))
     )
 
-    # Pre-compute hashable pattern tuples once per pattern (not per sample).
-    # Pannings are resolved inside the slot comprehension so that RandomPan
-    # gets a fresh random value for every (sample × pattern) combination.
-    precomputed: list[tuple] = []  # (pat, vol_label, bpm_label)
+    # Collect entry templates; resolve RHYTHM_PATTERN per sample so that callable
+    # (variable) patterns produce a fresh random rhythm for every sample.
+    entry_templates: list[tuple] = []  # (entry, vol_label, bpm_label)
     for pattern_group in KICK_SNARE_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
         for entry in pattern_group[RHYTHM_PATTERNS]:
-            raw = entry[RHYTHM_PATTERN]
-            pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            precomputed.append((pat, vol_label, bpm_label))
+            entry_templates.append((entry, vol_label, bpm_label))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -416,7 +418,9 @@ def build_permutation_kick_snare_deck(
             forced_sample=sample,
         )
         for sample in kick_snare_samples
-        for pat, vol_label, bpm_label in precomputed
+        for entry, vol_label, bpm_label in entry_templates
+        for raw in [_resolve_rp(entry[RHYTHM_PATTERN])]
+        for pat in [(derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)]
         for rhythm, beat_pannings, beat_roles in [_extract_rhythm_and_pannings(pat)]
     ]
     random.shuffle(slots)
@@ -445,7 +449,7 @@ def build_permutation_stab_deck(
         bpm_label = pattern_group[BPMS][0]
         panning = derive_panning_key(pattern_group)
         for entry in pattern_group[RHYTHM_PATTERNS]:
-            raw = entry[RHYTHM_PATTERN]
+            raw = _resolve_rp(entry[RHYTHM_PATTERN])
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
             slot_templates.append((panning, pat, vol_label, bpm_label))
 
@@ -482,7 +486,7 @@ def build_permutation_acappella_deck(
         bpm_label = pattern_group[BPMS][0]
         panning = derive_panning_key(pattern_group)
         for entry in pattern_group[RHYTHM_PATTERNS]:
-            raw = entry[RHYTHM_PATTERN]
+            raw = _resolve_rp(entry[RHYTHM_PATTERN])
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
             slot_templates.append((panning, pat, vol_label, bpm_label))
 
@@ -515,7 +519,7 @@ def _exact_beats_per_file(pattern_list: list) -> int:
     total = 0
     for pattern_group in pattern_list:
         for entry in pattern_group[RHYTHM_PATTERNS]:
-            total += len(entry[RHYTHM_PATTERN])
+            total += len(_resolve_rp(entry[RHYTHM_PATTERN]))
     return total
 
 

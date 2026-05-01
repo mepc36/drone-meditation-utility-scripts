@@ -7,6 +7,8 @@ from .constants import (
     SOUND_GROUP_TYPES,
     PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
     RHYTHM_PATTERN_SEQUENCES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
@@ -24,23 +26,32 @@ _RHYTHM_BY_SEQUENCE: dict[tuple, str] = {
     seq: name for name, seq in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
+_BEAT_NAMES: dict[float, str] = {
+    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
+    EIGHTH:            BEAT_NAME_EIGHTH,
+    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
+}
+
 
 def derive_type(pattern: list) -> str:
     seq = tuple(beat[MUSICAL_DURATION] for beat in pattern)
     name = _RHYTHM_BY_SEQUENCE.get(seq)
     if name is not None:
         return name
-    raise ValueError(
-        f"Cannot derive rhythm type from duration sequence {seq!r}. "
-        f"Known patterns: {list(_RHYTHM_BY_SEQUENCE)}"
-    )
+    # Dynamic patterns (e.g. from variable_quarter_rhythm) have arbitrary sequences.
+    # Synthesize a name from beat names so they can be used as cache keys.
+    return '-'.join(_BEAT_NAMES.get(d, str(d)) for d in seq)
 
 
 def derive_panning_key(entry: dict):
     rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
-    first_pan = rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+    _rp0_raw = rp[0][RHYTHM_PATTERN]
+    _rp0_beats = _rp0_raw() if callable(_rp0_raw) else _rp0_raw
+    first_pan = _rp0_beats[0][POSSIBLE_PANNINGS][0]
     # RandomPan patterns participate in the center quota and match HARD_CENTER
     # slots for both permutation and non-permutation mode. The concrete random
     # value is resolved later in _extract_rhythm_and_pannings.
@@ -128,11 +139,20 @@ def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
 
 def variable_quarter_rhythm(panning, max_beats: int) -> list:
     """Build a rhythm with a random beat count in [1, max_beats].
-    Each beat is independently either a quarter note or a rest."""
+    Each beat is independently either a quarter note or a rest,
+    with two constraints: the first beat is always a note, and
+    no two consecutive rests are allowed."""
     if max_beats < 1:
         raise ValueError(f"max_beats must be 1 or greater, got {max_beats}")
     n = random.randint(1, max_beats)
-    return [_beat(random.choice([QUARTER_NOTE, QUARTER_NOTE_REST]), panning) for _ in range(n)]
+    beats = []
+    for i in range(n):
+        if i == 0 or beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
+            duration = QUARTER_NOTE
+        else:
+            duration = random.choice([QUARTER_NOTE, QUARTER_NOTE_REST])
+        beats.append(_beat(duration, panning))
+    return beats
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
@@ -141,17 +161,17 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         BPMS: [SLOW],
         MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
-            {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 70,
-            },
+            # {
+            #     RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
+            #     RHYTHM_PERCENT: 70,
+            # },
             # {
             #     RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
             #     RHYTHM_PERCENT: 5,
             # },
             {
-                RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 30,
+                RHYTHM_PATTERN: lambda: variable_quarter_rhythm(HARD_CENTER, 4),
+                RHYTHM_PERCENT: 100,
             },
             # {
             #     RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
@@ -353,9 +373,10 @@ for _rule in _SOUND_TYPE_RULES:
                 f"{_total_pct}, must be 100."
             )
         for _entry in _rp:
-            derive_type(_entry[RHYTHM_PATTERN])  # raises ValueError on invalid shape
+            _rp_raw = _entry[RHYTHM_PATTERN]() if callable(_entry[RHYTHM_PATTERN]) else _entry[RHYTHM_PATTERN]
+            derive_type(_rp_raw)  # raises ValueError on invalid shape
         _first_pannings = {
-            _entry[RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+            ((_entry[RHYTHM_PATTERN]() if callable(_entry[RHYTHM_PATTERN]) else _entry[RHYTHM_PATTERN])[0][POSSIBLE_PANNINGS][0])
             for _entry in _rp
         }
         if len(_first_pannings) > 1:
