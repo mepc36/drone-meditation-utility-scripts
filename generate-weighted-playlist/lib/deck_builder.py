@@ -136,6 +136,9 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
     durations: list = []
     pannings: list = []
     roles: list = []
+    # Resolve a single random pan value shared across all beats in this pattern,
+    # so that every beat with a RandomPan gets the same concrete position.
+    _resolved_random_pan: float | None = None
     for b in raw_pattern[2:]:  # skip type string at index 0 and percent at index 1
         if not (isinstance(b, tuple) and len(b) in (2, 3) and isinstance(b[1], tuple)):
             raise TypeError(f"Hashed beat must be a (duration, (pannings,...)[, role]) tuple, got {b!r}")
@@ -144,9 +147,11 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
         durations.append(float(duration))
         chosen = random.choice(pan_options) if pan_options else ''
         if isinstance(chosen, RandomPan):
-            side = random.choice([-1.0, 1.0])
-            magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
-            chosen = side * magnitude
+            if _resolved_random_pan is None:
+                side = random.choice([-1.0, 1.0])
+                magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
+                _resolved_random_pan = side * magnitude
+            chosen = _resolved_random_pan
         pannings.append(chosen)
         roles.append(role)
     return tuple(durations), tuple(pannings), tuple(roles)
@@ -387,18 +392,17 @@ def build_permutation_kick_snare_deck(
         list(samples_by_type.get(SNARE, []))
     )
 
-    # Pre-compute hashable rhythm tuples once (avoid re-deriving per sample).
-    # Iterate all musical pattern entries so that entries added beyond index 0
-    # (e.g. RandomPan patterns) are included in permutation mode.
-    precomputed: list[tuple] = []  # (rhythm, beat_pannings, beat_roles, vol_label, bpm_label)
+    # Pre-compute hashable pattern tuples once per pattern (not per sample).
+    # Pannings are resolved inside the slot comprehension so that RandomPan
+    # gets a fresh random value for every (sample × pattern) combination.
+    precomputed: list[tuple] = []  # (pat, vol_label, bpm_label)
     for pattern_group in KICK_SNARE_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
         for entry in pattern_group[RHYTHM_PATTERNS]:
             raw = entry[RHYTHM_PATTERN]
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
-            precomputed.append((rhythm, beat_pannings, beat_roles, vol_label, bpm_label))
+            precomputed.append((pat, vol_label, bpm_label))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -412,7 +416,8 @@ def build_permutation_kick_snare_deck(
             forced_sample=sample,
         )
         for sample in kick_snare_samples
-        for rhythm, beat_pannings, beat_roles, vol_label, bpm_label in precomputed
+        for pat, vol_label, bpm_label in precomputed
+        for rhythm, beat_pannings, beat_roles in [_extract_rhythm_and_pannings(pat)]
     ]
     random.shuffle(slots)
     return slots
@@ -434,7 +439,7 @@ def build_permutation_stab_deck(
     if not stab_samples:
         return []
 
-    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles)
+    slot_templates: list[tuple] = []  # (panning, pat, vol_label, bpm_label)
     for pattern_group in KICKSTAB_SNARESTAB_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
@@ -442,8 +447,7 @@ def build_permutation_stab_deck(
         for entry in pattern_group[RHYTHM_PATTERNS]:
             raw = entry[RHYTHM_PATTERN]
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
-            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles))
+            slot_templates.append((panning, pat, vol_label, bpm_label))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -457,7 +461,8 @@ def build_permutation_stab_deck(
             forced_sample=sample,
         )
         for sample in stab_samples
-        for panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles in slot_templates
+        for panning, pat, vol_label, bpm_label in slot_templates
+        for rhythm, beat_pannings, beat_roles in [_extract_rhythm_and_pannings(pat)]
     ]
     random.shuffle(slots)
     return slots
@@ -471,7 +476,7 @@ def build_permutation_acappella_deck(
     if not acap_samples:
         return []
 
-    slot_templates: list[tuple] = []  # (panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles)
+    slot_templates: list[tuple] = []  # (panning, pat, vol_label, bpm_label)
     for pattern_group in ACAPPELLA_MUSICAL_PATTERNS:
         vol_label = pattern_group[VOLUMES][0]
         bpm_label = pattern_group[BPMS][0]
@@ -479,8 +484,7 @@ def build_permutation_acappella_deck(
         for entry in pattern_group[RHYTHM_PATTERNS]:
             raw = entry[RHYTHM_PATTERN]
             pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
-            slot_templates.append((panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles))
+            slot_templates.append((panning, pat, vol_label, bpm_label))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -494,7 +498,8 @@ def build_permutation_acappella_deck(
             forced_sample=sample,
         )
         for sample in acap_samples
-        for panning, vol_label, bpm_label, rhythm, beat_pannings, beat_roles in slot_templates
+        for panning, pat, vol_label, bpm_label in slot_templates
+        for rhythm, beat_pannings, beat_roles in [_extract_rhythm_and_pannings(pat)]
     ]
     random.shuffle(slots)
     return slots

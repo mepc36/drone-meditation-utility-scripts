@@ -1,3 +1,4 @@
+import random
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
@@ -125,6 +126,15 @@ def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
     return [_beat(QUARTER_NOTE, panning) for _ in range(4)]
 
 
+def variable_quarter_rhythm(panning, max_beats: int) -> list:
+    """Build a rhythm with a random beat count in [1, max_beats].
+    Each beat is independently either a quarter note or a rest."""
+    if max_beats < 1:
+        raise ValueError(f"max_beats must be 1 or greater, got {max_beats}")
+    n = random.randint(1, max_beats)
+    return [_beat(random.choice([QUARTER_NOTE, QUARTER_NOTE_REST]), panning) for _ in range(n)]
+
+
 KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [QUIET],
@@ -133,28 +143,28 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 75,
+                RHYTHM_PERCENT: 70,
             },
-            {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
-            },
+            # {
+            #     RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
+            #     RHYTHM_PERCENT: 5,
+            # },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 30,
             },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
-            },
+            # {
+            #     RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
+            #     RHYTHM_PERCENT: 5,
+            # },
+            # {
+            #     RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
+            #     RHYTHM_PERCENT: 5,
+            # },
+            # {
+            #     RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(HARD_CENTER),
+            #     RHYTHM_PERCENT: 5,
+            # },
         ],
     }
 ]
@@ -200,13 +210,21 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     #     ]
     # },
     {
-        VOLUMES: [QUIET],
-        BPMS: [SLOW],
-        MUSIC_PATTERN_PERCENT: 100,  # e.g. 20% of slots use random pan
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 100,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
-                RHYTHM_PERCENT: 100,
+                RHYTHM_PERCENT: 80,
+            },
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 10,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 10,
             },
         ],
     },
