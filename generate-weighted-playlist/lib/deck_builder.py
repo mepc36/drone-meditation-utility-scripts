@@ -141,9 +141,11 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
     durations: list = []
     pannings: list = []
     roles: list = []
-    # Resolve a single random pan value shared across all beats in this pattern,
-    # so that every beat with a RandomPan gets the same concrete position.
-    _resolved_random_pan: float | None = None
+    # For RandomPan beats: beats 1 and 2 share the same resolved position so
+    # they feel like a pair, but beat 3 onwards each get an independent random
+    # position to add movement through the rhythm.
+    _shared_random_pan: float | None = None
+    _beat_index = 0
     for b in raw_pattern[2:]:  # skip type string at index 0 and percent at index 1
         if not (isinstance(b, tuple) and len(b) in (2, 3) and isinstance(b[1], tuple)):
             raise TypeError(f"Hashed beat must be a (duration, (pannings,...)[, role]) tuple, got {b!r}")
@@ -152,13 +154,21 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
         durations.append(float(duration))
         chosen = random.choice(pan_options) if pan_options else ''
         if isinstance(chosen, RandomPan):
-            if _resolved_random_pan is None:
+            if _beat_index < 2:
+                # Beats 1 & 2: resolve once and share the same position.
+                if _shared_random_pan is None:
+                    side = random.choice([-1.0, 1.0])
+                    magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
+                    _shared_random_pan = side * magnitude
+                chosen = _shared_random_pan
+            else:
+                # Beat 3+: each gets its own independent random position.
                 side = random.choice([-1.0, 1.0])
                 magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
-                _resolved_random_pan = side * magnitude
-            chosen = _resolved_random_pan
+                chosen = side * magnitude
         pannings.append(chosen)
         roles.append(role)
+        _beat_index += 1
     return tuple(durations), tuple(pannings), tuple(roles)
 
 
