@@ -547,8 +547,8 @@ def main() -> None:
                     continue
                 # Persist updated values back to config.json
                 _raw_cfg = conf['raw']
-                _raw_cfg[cfg.CFG_PERMUTATION_TOLERANCE] = conf['permutation_tolerance_pct']
-                _raw_cfg[cfg.CFG_PERMUTATION_MAX_FILES] = conf['permutation_max_files']
+                _raw_cfg[cfg.CFG_PERMUTATION_MODE][cfg.CFG_PERMUTATION_TOLERANCE] = conf['permutation_tolerance_pct']
+                _raw_cfg[cfg.CFG_PERMUTATION_MODE][cfg.CFG_PERMUTATION_MAX_FILES] = conf['permutation_max_files']
                 with open(cfg.CONFIG_PATH, 'w') as _cfg_f:
                     json.dump(_raw_cfg, _cfg_f, indent=2)
                     _cfg_f.write('\n')

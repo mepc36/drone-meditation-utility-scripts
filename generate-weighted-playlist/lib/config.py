@@ -20,6 +20,7 @@ CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
 CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
 CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
 CFG_SAMPLE_BIAS             = 'sample_bias'
+CFG_PERMUTATION_MODE        = 'permutation_mode'
 CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
 CFG_PERMUTATION_TOLERANCE   = 'permutation_tolerance_pct'
 CFG_PERMUTATION_MAX_FILES   = 'permutation_max_files'
@@ -219,6 +220,10 @@ def load() -> dict:
     if CFG_BPMS not in raw:
         raise ValueError(f"'{CFG_BPMS}' is required in config.json")
 
+    if CFG_PERMUTATION_MODE not in raw:
+        raise ValueError(f"'{CFG_PERMUTATION_MODE}' is required in config.json")
+    perm_cfg = raw[CFG_PERMUTATION_MODE]
+
     bpm_values = sorted(parse_colon_floats(raw[CFG_BPMS]))  # slow→fast
 
     silence_ratio = parse_colon_ints(raw.get(CFG_SILENCE_RATIO, "100:0"))
@@ -243,7 +248,7 @@ def load() -> dict:
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
 
-    strings_duplication_subgroups = raw.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
+    strings_duplication_subgroups = perm_cfg.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
     if not isinstance(strings_duplication_subgroups, dict):
         raise ValueError(
             f"{CFG_STRINGS_DUPLICATION_SUBGROUPS} must be a JSON object mapping descriptor → count, "
@@ -278,26 +283,26 @@ def load() -> dict:
         )
 
     if stale_descriptors or missing_descriptors:
-        raw[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
+        perm_cfg[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
         with open(CONFIG_PATH, 'w') as _cfg_f:
             json.dump(raw, _cfg_f, indent=2)
             _cfg_f.write('\n')
-        strings_duplication_subgroups = raw[CFG_STRINGS_DUPLICATION_SUBGROUPS]
+        strings_duplication_subgroups = perm_cfg[CFG_STRINGS_DUPLICATION_SUBGROUPS]
 
     num_strings_slots = sum(
         1 + strings_duplication_subgroups.get(f.stem.split('_')[1], 0)
         for f in strings_files
     )
 
-    if CFG_PERMUTATION_TOLERANCE not in raw:
-        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} is required in config.json")
-    if CFG_PERMUTATION_MAX_FILES not in raw:
-        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} is required in config.json")
-    if CFG_KS_IGNORED_CAP not in raw:
-        raise ValueError(f"{CFG_KS_IGNORED_CAP} is required in config.json")
-    permutation_tolerance = float(raw[CFG_PERMUTATION_TOLERANCE])
-    permutation_max_files = int(raw[CFG_PERMUTATION_MAX_FILES])
-    ks_ignored_cap        = int(raw[CFG_KS_IGNORED_CAP])
+    if CFG_PERMUTATION_TOLERANCE not in perm_cfg:
+        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} is required in config.json under {CFG_PERMUTATION_MODE}")
+    if CFG_PERMUTATION_MAX_FILES not in perm_cfg:
+        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} is required in config.json under {CFG_PERMUTATION_MODE}")
+    if CFG_KS_IGNORED_CAP not in perm_cfg:
+        raise ValueError(f"{CFG_KS_IGNORED_CAP} is required in config.json under {CFG_PERMUTATION_MODE}")
+    permutation_tolerance = float(perm_cfg[CFG_PERMUTATION_TOLERANCE])
+    permutation_max_files = int(perm_cfg[CFG_PERMUTATION_MAX_FILES])
+    ks_ignored_cap        = int(perm_cfg[CFG_KS_IGNORED_CAP])
     if permutation_tolerance <= 0:
         raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} must be a positive number, got {permutation_tolerance}")
     if permutation_max_files <= 0:
@@ -305,7 +310,7 @@ def load() -> dict:
     if ks_ignored_cap < 0:
         raise ValueError(f"{CFG_KS_IGNORED_CAP} must be 0 or a positive integer, got {ks_ignored_cap}")
 
-    kick_snare_permutation_mode = bool(raw.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
+    kick_snare_permutation_mode = bool(perm_cfg.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
     if kick_snare_permutation_mode:
         stab_count = len(
             list(INPUT_AUDIO_DIR.glob("*_kickstab.wav")) +
