@@ -168,7 +168,22 @@ generate-weighted-playlist/
 
 All settings live in `./input/config/config.json`. Required fields are marked **[required]**; all others are optional.
 
-> **Note:** The total number of output files (`num_unique_samples`) is no longer a config field. It is auto-derived from the number of kick/snare input files in `./input/audio/` and the `kicksnare_stab_acappella_percents` ratio: `round(kicksnare_file_count × 100 / kicksnare_pct)`.
+> **Note:** The total number of output files is auto-derived, not a config field. In **weighted draw mode** (`kick_snare_permutation_mode: false`, default) it is `round(kicksnare_count × 100 / kicksnare_pct)`. In **permutation mode** (`kick_snare_permutation_mode: true`) it is determined by `plan_permutation_trimming` and constrained by `permutation_tolerance_pct` and `permutation_max_files`.
+
+### Kick/snare output mode
+
+`kick_snare_permutation_mode` controls how kick/snare output files are generated.
+
+**`false` (default) — weighted draw mode**
+- Total slot count is derived from `round(kicksnare_count × 100 / kicksnare_pct)`.
+- Rhythm types are assigned to slots according to the `RHYTHM_PERCENT` weights in `sound_rules.py` (e.g. 75% quarter note, 5% each for the others). Not every sample gets every rhythm; samples are drawn from a rotating queue.
+
+**`true` — permutation mode**
+- Creates exactly one output file per (sample × rhythm entry) pair — every sample paired with every rhythm exactly once.
+- `RHYTHM_PERCENT` is **ignored**; each rhythm appears with equal frequency regardless of its configured weight.
+- `plan_permutation_trimming` searches for how many samples per group to use (and how many times to replicate stab/acappella decks) so the actual beat ratio matches `kicksnare_stab_acappella_percents` within `permutation_tolerance_pct`, without exceeding `permutation_max_files`. Stab is trimmed or replicated freely; kicksnare can be trimmed by up to `kicksnare_ignored_cap`; acappella is adjusted last.
+
+> **Tip:** Use permutation mode for exhaustive coverage (every sample in every rhythmic context). Use weighted draw mode when you want rhythm distribution to reflect the `RHYTHM_PERCENT` targets.
 
 ### Annotated example
 
@@ -212,6 +227,24 @@ All settings live in `./input/config/config.json`. Required fields are marked **
   // their assigned loud/quiet level. Must be a non-negative integer.
   // Default: 0
   "acappella_volume_reduction": 17,
+
+  // [optional] Enable permutation mode for kick/snare output (see "Kick/snare output mode" above).
+  // false: rhythms drawn by RHYTHM_PERCENT weight; true: every (sample × rhythm) pair produced once.
+  // Default: false
+  "kick_snare_permutation_mode": false,
+
+  // [required when kick_snare_permutation_mode is true, but must always be present]
+  // Maximum allowed deviation in percentage points between the actual beat ratio and
+  // kicksnare_stab_acappella_percents. Increase if the pipeline raises a tolerance error.
+  "permutation_tolerance_pct": 5.0,
+
+  // [required] Hard ceiling on total output file count. The trimming search skips any
+  // configuration that would exceed this value.
+  "permutation_max_files": 20000,
+
+  // [required] How many kicksnare input samples the trimming algorithm may drop when
+  // searching for a valid beat ratio. 0 = never drop any kicksnare samples.
+  "kicksnare_ignored_cap": 0,
 
   // [optional] Fine-grained control over how frequently specific samples or subsets are drawn.
   // When omitted or is_sample_bias_enabled is false, all samples in each group are drawn uniformly.
@@ -259,6 +292,10 @@ All settings live in `./input/config/config.json`. Required fields are marked **
 | `loud_quiet_values` | No | string | `"0:-26"` | Exactly two colon-separated dB values (loud:quiet). |
 | `strings_volume_reduction` | No | integer | `0` | Extra dB cut applied to strings samples (non-negative). |
 | `acappella_volume_reduction` | No | integer | `0` | Extra dB cut applied to acappella samples (non-negative). |
+| `kick_snare_permutation_mode` | No | boolean | `false` | `false`: rhythms assigned by `RHYTHM_PERCENT` weight. `true`: one file per (sample × rhythm) pair; `RHYTHM_PERCENT` ignored. |
+| `permutation_tolerance_pct` | Yes | float | — | Max allowed deviation (percentage points) between actual and target beat ratio. Must be positive. |
+| `permutation_max_files` | Yes | integer | — | Hard ceiling on total output file count across all groups. Must be positive. |
+| `kicksnare_ignored_cap` | Yes | integer | — | Max number of kicksnare samples that may be dropped during trimming. `0` = never drop any. |
 | `sample_bias` | No | object | none | Sample draw-weighting config. Omit to draw all samples uniformly. |
 
 ## Assumptions
