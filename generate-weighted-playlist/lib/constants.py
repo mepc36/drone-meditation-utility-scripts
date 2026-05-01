@@ -153,6 +153,6 @@ MAX_DRAW_RETRIES = 200
 # diverge.
 PERMUTATION_COMBOS_PER_SAMPLE: dict[str, int] = {
     KICKSNARE: 6,   # KICK_SNARE_MUSICAL_PATTERNS: 1 pattern × 6 rhythms
-    STAB:      7,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 2 patterns × 3+3 rhythms
+    STAB:      5,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 2 patterns × 3+3 rhythms
     ACAPPELLA: 2,   # ACAPPELLA_MUSICAL_PATTERNS: 2 patterns × 1+1 rhythms
 }

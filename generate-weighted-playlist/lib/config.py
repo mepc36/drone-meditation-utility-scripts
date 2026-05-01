@@ -248,7 +248,7 @@ def load() -> dict:
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
 
-    strings_duplication_subgroups = perm_cfg.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
+    strings_duplication_subgroups = raw.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
     if not isinstance(strings_duplication_subgroups, dict):
         raise ValueError(
             f"{CFG_STRINGS_DUPLICATION_SUBGROUPS} must be a JSON object mapping descriptor → count, "
@@ -283,11 +283,11 @@ def load() -> dict:
         )
 
     if stale_descriptors or missing_descriptors:
-        perm_cfg[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
+        raw[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
         with open(CONFIG_PATH, 'w') as _cfg_f:
             json.dump(raw, _cfg_f, indent=2)
             _cfg_f.write('\n')
-        strings_duplication_subgroups = perm_cfg[CFG_STRINGS_DUPLICATION_SUBGROUPS]
+        strings_duplication_subgroups = raw[CFG_STRINGS_DUPLICATION_SUBGROUPS]
 
     num_strings_slots = sum(
         1 + strings_duplication_subgroups.get(f.stem.split('_')[1], 0)

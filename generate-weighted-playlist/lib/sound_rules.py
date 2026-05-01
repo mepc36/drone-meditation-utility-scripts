@@ -230,39 +230,37 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 25,
+        MUSIC_PATTERN_PERCENT: 17,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 80,
-            },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
-            },
+                RHYTHM_PERCENT: 100,
+            }
         ]
-
     },
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 25,
+        MUSIC_PATTERN_PERCENT: 17,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 80,
+                RHYTHM_PERCENT: 100,
+            }
+        ]
+    },
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 16,
+        RHYTHM_PATTERNS: [
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 50,
             },
             {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 50,
             },
         ]
     },
