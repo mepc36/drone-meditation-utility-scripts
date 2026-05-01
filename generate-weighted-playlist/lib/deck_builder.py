@@ -10,6 +10,7 @@ from .constants import (
     PANNING_CENTER, PANNING_DIAGONAL, PANNING_LEFT, PANNING_RIGHT, PANNING_DUALPAN,
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE, SampleRole, MUSIC_PATTERN_PERCENT,
+    RandomPan,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
@@ -141,7 +142,12 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
         duration, pan_options = b[0], b[1]
         role = b[2] if len(b) == 3 else None
         durations.append(float(duration))
-        pannings.append(random.choice(pan_options) if pan_options else '')
+        chosen = random.choice(pan_options) if pan_options else ''
+        if isinstance(chosen, RandomPan):
+            side = random.choice([-1.0, 1.0])
+            magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
+            chosen = side * magnitude
+        pannings.append(chosen)
         roles.append(role)
     return tuple(durations), tuple(pannings), tuple(roles)
 
@@ -381,18 +387,18 @@ def build_permutation_kick_snare_deck(
         list(samples_by_type.get(SNARE, []))
     )
 
-    pattern_group = KICK_SNARE_MUSICAL_PATTERNS[0]
-    vol_label = pattern_group[VOLUMES][0]
-    bpm_label = pattern_group[BPMS][0]
-    rhythm_entries = pattern_group[RHYTHM_PATTERNS]
-
     # Pre-compute hashable rhythm tuples once (avoid re-deriving per sample).
-    precomputed: list[tuple[tuple, tuple, tuple]] = []
-    for entry in rhythm_entries:
-        raw = entry[RHYTHM_PATTERN]
-        pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
-        rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
-        precomputed.append((rhythm, beat_pannings, beat_roles))
+    # Iterate all musical pattern entries so that entries added beyond index 0
+    # (e.g. RandomPan patterns) are included in permutation mode.
+    precomputed: list[tuple] = []  # (rhythm, beat_pannings, beat_roles, vol_label, bpm_label)
+    for pattern_group in KICK_SNARE_MUSICAL_PATTERNS:
+        vol_label = pattern_group[VOLUMES][0]
+        bpm_label = pattern_group[BPMS][0]
+        for entry in pattern_group[RHYTHM_PATTERNS]:
+            raw = entry[RHYTHM_PATTERN]
+            pat = (derive_type(raw), entry[RHYTHM_PERCENT]) + tuple(_hashable_beat(b) for b in raw)
+            rhythm, beat_pannings, beat_roles = _extract_rhythm_and_pannings(pat)
+            precomputed.append((rhythm, beat_pannings, beat_roles, vol_label, bpm_label))
 
     slots: list[SlotSpec] = [
         SlotSpec(
@@ -406,7 +412,7 @@ def build_permutation_kick_snare_deck(
             forced_sample=sample,
         )
         for sample in kick_snare_samples
-        for rhythm, beat_pannings, beat_roles in precomputed
+        for rhythm, beat_pannings, beat_roles, vol_label, bpm_label in precomputed
     ]
     random.shuffle(slots)
     return slots

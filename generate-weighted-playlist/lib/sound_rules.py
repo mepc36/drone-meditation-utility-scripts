@@ -11,6 +11,9 @@ from .constants import (
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
+    RandomPan,
+    RANDOM_PAN_MIN,
+    RANDOM_PAN_MAX
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
@@ -36,7 +39,13 @@ def derive_panning_key(entry: dict):
     rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
-    return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+    first_pan = rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+    # RandomPan patterns participate in the center quota and match HARD_CENTER
+    # slots for both permutation and non-permutation mode. The concrete random
+    # value is resolved later in _extract_rhythm_and_pannings.
+    if isinstance(first_pan, RandomPan):
+        return HARD_CENTER
+    return first_pan
 
 
 
@@ -151,46 +160,68 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
 ]
 
 KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
+    # {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [FAST],
+    #     MUSIC_PATTERN_PERCENT: 50,
+    #     RHYTHM_PATTERNS: [
+    #         {
+    #             RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
+    #             RHYTHM_PERCENT: 80,
+    #         },
+    #         {
+    #             RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
+    #             RHYTHM_PERCENT: 10,
+    #         },
+    #         {
+    #             RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
+    #             RHYTHM_PERCENT: 10,
+    #         },
+    #     ]
+
+    # },
+    # {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [FAST],
+    #     MUSIC_PATTERN_PERCENT: 50,
+    #     RHYTHM_PATTERNS: [
+    #         {
+    #             RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
+    #             RHYTHM_PERCENT: 80,
+    #         },
+    #         {
+    #             RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
+    #             RHYTHM_PERCENT: 10,
+    #         },
+    #         {
+    #             RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
+    #             RHYTHM_PERCENT: 10,
+    #         },
+    #     ]
+    # },
     {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 50,
+        VOLUMES: [QUIET],
+        BPMS: [SLOW],
+        MUSIC_PATTERN_PERCENT: 100,  # e.g. 20% of slots use random pan
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 80,
+                RHYTHM_PATTERN: quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 100,
             },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
-            },
-        ]
-
+        ],
     },
-    {
-        VOLUMES: [LOUD],
-        BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 50,
-        RHYTHM_PATTERNS: [
-            {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 80,
-            },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
-            },
-        ]
-
-    },
+    # FOR WHEN KICK_SNARE_PERMUTATION_MODE IN CONFIG IS FALSE:
+    # {
+    #     VOLUMES: [LOUD],
+    #     BPMS: [FAST],
+    #     MUSIC_PATTERN_PERCENT: 50,
+    #     RHYTHM_PATTERNS: [
+    #         {
+    #             RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
+    #             RHYTHM_PERCENT: 100,
+    #         },
+    #     ],
+    # },
 ]
 
 

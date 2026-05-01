@@ -40,6 +40,17 @@ DUALPAN_LEFTRIGHT = 2.0   # sentinel: two samples panned hard left + hard right 
 DUALPAN_DIAGONAL  = 3.0   # sentinel: two samples panned diagonal left + diagonal right simultaneously
 UNTOUCHED         = None  # sentinel: pass audio through without any panning or processing
 
+# Random panning: a namedtuple that specifies a symmetric magnitude range.
+# When used in POSSIBLE_PANNINGS, a random side (left or right) and a random
+# magnitude in [min_magnitude, max_magnitude] are chosen at deck-build time.
+# The same two bounds apply symmetrically to both sides — no separate L/R values needed.
+# Example: RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)
+#          → uniform draw from [-1.0, -0.1] ∪ [0.1, 1.0]
+from collections import namedtuple
+RandomPan = namedtuple('RandomPan', ['min_magnitude', 'max_magnitude'])
+RANDOM_PAN_MIN = 0.4   # closest-to-center edge of the random pan zone
+RANDOM_PAN_MAX = 1.0   # farthest-from-center edge of the random pan zone
+
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
 QUARTER_RHYTHM                                          = 'quarter'
 DOUBLE_RHYTHM                                          = 'double'
@@ -142,6 +153,6 @@ MAX_DRAW_RETRIES = 200
 # diverge.
 PERMUTATION_COMBOS_PER_SAMPLE: dict[str, int] = {
     KICKSNARE: 6,   # KICK_SNARE_MUSICAL_PATTERNS: 1 pattern × 6 rhythms
-    STAB:      6,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 2 patterns × 3+3 rhythms
+    STAB:      1,   # KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: 2 patterns × 3+3 rhythms
     ACAPPELLA: 2,   # ACAPPELLA_MUSICAL_PATTERNS: 2 patterns × 1+1 rhythms
 }
