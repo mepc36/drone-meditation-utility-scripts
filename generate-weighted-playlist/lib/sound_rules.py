@@ -14,6 +14,7 @@ from .constants import (
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
+    SAMPLE_ROLE, SampleRole,
     RandomPan,
     RANDOM_PAN_MIN,
     RANDOM_PAN_MAX
@@ -159,6 +160,36 @@ def variable_quarter_rhythm(panning, max_beats: int) -> list:
     if beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
         beats[-1] = _beat(QUARTER_NOTE, panning)
     return beats
+
+
+def with_roles(rhythm: list, roles: list) -> list:
+    """Annotate each beat in *rhythm* with a SampleRole drawn from *roles*.
+
+    Rules:
+    - len(rhythm) must equal len(roles).
+    - roles[0] must be SampleRole.SAME (the first beat is always the reference;
+      it cannot be 'new' relative to nothing).
+
+    Example:
+        with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER),
+                   [SampleRole.SAME, SampleRole.NEW, SampleRole.SAME])
+    """
+    if len(rhythm) != len(roles):
+        raise ValueError(
+            f"with_roles: rhythm has {len(rhythm)} beat(s) but roles has "
+            f"{len(roles)} entry/entries \u2014 they must be the same length."
+        )
+    if roles[0] is not SampleRole.SAME:
+        raise ValueError(
+            "with_roles: the first role must be SampleRole.SAME \u2014 the first "
+            "beat is the reference sample and cannot be SampleRole.NEW."
+        )
+    annotated = []
+    for beat, role in zip(rhythm, roles):
+        annotated_beat = dict(beat)
+        annotated_beat[SAMPLE_ROLE] = role
+        annotated.append(annotated_beat)
+    return annotated
 
 
 KICK_SNARE_MUSICAL_PATTERNS: list = [
