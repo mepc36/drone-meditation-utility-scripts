@@ -11,6 +11,7 @@ from .constants import (
     VOLUMES, BPMS, RHYTHM_PATTERNS, MUSICAL_PATTERNS, POSSIBLE_PANNINGS, MUSICAL_DURATION,
     RHYTHM_PATTERN, RHYTHM_PERCENT, SAMPLE_ROLE, SampleRole, MUSIC_PATTERN_PERCENT,
     RandomPan,
+    RANDOM_PAN_MIN_DIFF,
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 from .sound_rules import derive_panning_key, derive_type, panning_compat, panning_percents, rules_by_sound_type, KICK_SNARE_MUSICAL_PATTERNS, KICKSTAB_SNARESTAB_MUSICAL_PATTERNS, ACAPPELLA_MUSICAL_PATTERNS
@@ -130,6 +131,46 @@ def _resolve_rp(raw) -> list:
     return raw() if callable(raw) else raw
 
 
+def _sample_random_pan_with_distance(rp: RandomPan, prev_pan: float, min_diff: float) -> float:
+    """Sample uniformly from the RandomPan range, excluding values within min_diff of prev_pan.
+
+    Builds valid sub-intervals from the intersection of:
+        [-rp.max_magnitude, -rp.min_magnitude] ∪ [rp.min_magnitude, rp.max_magnitude]
+    with:
+        (-∞, prev_pan - min_diff] ∪ [prev_pan + min_diff, +∞)
+    then samples uniformly by weight across the valid intervals.
+
+    Falls back to the unconstrained RandomPan range if no valid interval exists
+    (should not occur with standard config values).
+    """
+    lobes = [
+        (-rp.max_magnitude, -rp.min_magnitude),
+        (rp.min_magnitude, rp.max_magnitude),
+    ]
+    below = prev_pan - min_diff
+    above = prev_pan + min_diff
+    valid: list[tuple[float, float]] = []
+    for lo, hi in lobes:
+        s, e = lo, min(hi, below)
+        if s <= e:
+            valid.append((s, e))
+        s, e = max(lo, above), hi
+        if s <= e:
+            valid.append((s, e))
+    if not valid:
+        side = random.choice([-1.0, 1.0])
+        return side * random.uniform(rp.min_magnitude, rp.max_magnitude)
+    lengths = [e - s for s, e in valid]
+    total = sum(lengths)
+    r = random.uniform(0.0, total)
+    cumulative = 0.0
+    for (s, e), length in zip(valid, lengths):
+        cumulative += length
+        if r <= cumulative:
+            return random.uniform(s, e)
+    return random.uniform(valid[-1][0], valid[-1][1])
+
+
 def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tuple]:
     """Split a raw (hashable) beat pattern into duration, panning, and role tuples.
 
@@ -162,10 +203,9 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
                     _shared_random_pan = side * magnitude
                 chosen = _shared_random_pan
             else:
-                # Beat 3+: each gets its own independent random position.
-                side = random.choice([-1.0, 1.0])
-                magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
-                chosen = side * magnitude
+                # Beat 3+: each gets its own random position, constrained to be
+                # at least RANDOM_PAN_MIN_DIFF from the immediately preceding panning.
+                chosen = _sample_random_pan_with_distance(chosen, pannings[-1], RANDOM_PAN_MIN_DIFF)
         pannings.append(chosen)
         roles.append(role)
         _beat_index += 1
