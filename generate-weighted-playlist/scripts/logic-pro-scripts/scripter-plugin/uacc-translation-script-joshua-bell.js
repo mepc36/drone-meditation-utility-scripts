@@ -32,6 +32,13 @@ var KS_LEGATO_SLUR_C_SHARP_2 = 49;
 
 var KEYSWITCH_VELOCITY = 100;
 
+// Filter incoming low notes from the MIDI region.
+// These are likely accidental/old keyswitches, not playable violin notes.
+var LOW_NOTE_FILTER_MAX_PITCH = 54;
+
+// Gives Kontakt/Joshua Bell a tiny moment to process the held keyswitch.
+var PLAYABLE_NOTE_DELAY_MS = 5;
+
 var currentArticulation = CC32_LEGATO_SLUR;
 var heldKeyswitchPitch = null;
 var heldKeyswitchChannel = null;
@@ -78,6 +85,10 @@ ARTICULATIONS[CC32_TRILL_MINOR_2ND] = {
   pitch: KS_TRILL_MINOR_2ND_D1
 };
 
+function isLowIncomingKeyswitchNote(event) {
+  return event.pitch <= LOW_NOTE_FILTER_MAX_PITCH;
+}
+
 function sendKeyswitchOn(pitch, channel) {
   var noteOn = new NoteOn();
   noteOn.pitch = pitch;
@@ -91,18 +102,22 @@ function sendKeyswitchOn(pitch, channel) {
   Trace("KEYSWITCH ON pitch=" + pitch + " channel=" + channel);
 }
 
+function sendKeyswitchOff(pitch, channel) {
+  var noteOff = new NoteOff();
+  noteOff.pitch = pitch;
+  noteOff.velocity = 0;
+  noteOff.channel = channel;
+  noteOff.send();
+
+  Trace("KEYSWITCH OFF pitch=" + pitch + " channel=" + channel);
+}
+
 function releaseHeldKeyswitch() {
   if (heldKeyswitchPitch === null) {
     return;
   }
 
-  var noteOff = new NoteOff();
-  noteOff.pitch = heldKeyswitchPitch;
-  noteOff.velocity = 0;
-  noteOff.channel = heldKeyswitchChannel;
-  noteOff.send();
-
-  Trace("KEYSWITCH OFF pitch=" + heldKeyswitchPitch + " channel=" + heldKeyswitchChannel);
+  sendKeyswitchOff(heldKeyswitchPitch, heldKeyswitchChannel);
 
   heldKeyswitchPitch = null;
   heldKeyswitchChannel = null;
@@ -155,8 +170,25 @@ function HandleMIDI(event) {
       " currentCC32=" + currentArticulation
     );
 
+    if (isLowIncomingKeyswitchNote(event)) {
+      Trace("FILTERED incoming low note pitch=" + event.pitch);
+      return;
+    }
+
     holdKeyswitchForArticulation(currentArticulation, event.channel);
-    event.send();
+
+    // Delay playable notes slightly so the held keyswitch is processed first.
+    event.sendAfterMilliseconds(PLAYABLE_NOTE_DELAY_MS);
+    return;
+  }
+
+  if (event instanceof NoteOff) {
+    if (isLowIncomingKeyswitchNote(event)) {
+      Trace("FILTERED incoming low note off pitch=" + event.pitch);
+      return;
+    }
+
+    event.sendAfterMilliseconds(PLAYABLE_NOTE_DELAY_MS);
     return;
   }
 
