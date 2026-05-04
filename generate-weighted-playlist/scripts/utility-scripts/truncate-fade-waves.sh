@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INPUT_DIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-strings-kontakt"
-OUTDIR="$INPUT_DIR/1-output"
+INPUT_DIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-strings-kontakt/audio-strings-kontakt"
+OUTDIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-strings-kontakt/audio-strings-kontakt-truncated-faded"
 
 # Easy-to-change vars
 TRUNCATE_MS=2500
 FADE_MS=200
-
-# Use "tri" first so you can clearly hear the fade.
-# Other good options later: qsin, hsin
 FADE_CURVE="tri"
 
 rm -rf "$OUTDIR"
@@ -34,6 +31,8 @@ find "$INPUT_DIR" -maxdepth 1 -type f -iname "*.wav" -print0 | while IFS= read -
     print start
   }')"
 
+  padded_dur="$(awk -v nd="$newdur" 'BEGIN { print nd + 0.05 }')"
+
   echo "Processing: $filename"
   echo "  original duration: $dur"
   echo "  new duration:      $newdur"
@@ -42,7 +41,7 @@ find "$INPUT_DIR" -maxdepth 1 -type f -iname "*.wav" -print0 | while IFS= read -
 
   ffmpeg -y -hide_banner -loglevel error \
     -i "$f" \
-    -af "atrim=0:$newdur,asetpts=PTS-STARTPTS,afade=t=out:st=$fadestart:d=$fade_seconds:curve=$FADE_CURVE" \
+    -af "atrim=0:$newdur,asetpts=PTS-STARTPTS,afade=t=out:st=$fadestart:d=$fade_seconds:curve=$FADE_CURVE,apad=pad_dur=0.05,atrim=0:$padded_dur" \
     "$OUTDIR/$filename"
 done
 
