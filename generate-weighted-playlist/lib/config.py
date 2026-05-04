@@ -26,6 +26,7 @@ CFG_PERMUTATION_TOLERANCE   = 'permutation_tolerance_pct'
 CFG_PERMUTATION_MAX_FILES   = 'permutation_max_files'
 CFG_KS_IGNORED_CAP          = 'kicksnare_ignored_cap'
 CFG_STRINGS_DUPLICATION_SUBGROUPS = 'num_times_strings_duplication_subgroups'
+CFG_DUPLICATE_KICKSNARE       = 'duplicate_kicksnare'
 
 # ── Sample-bias helpers ─────────────────────────────────────────────────────────
 _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
@@ -245,6 +246,13 @@ def load() -> dict:
     kicksnare_count = len(kicksnare_files)
     if kicksnare_count == 0:
         raise ValueError(f"No kick/snare files found in {INPUT_AUDIO_DIR}. Cannot determine sample count.")
+    duplicate_kicksnare = float(raw.get(CFG_DUPLICATE_KICKSNARE, 0))
+    if duplicate_kicksnare < 0.0:
+        raise ValueError(f"{CFG_DUPLICATE_KICKSNARE} must be >= 0, got {duplicate_kicksnare!r}")
+    if bool(perm_cfg.get(CFG_KICK_SNARE_PERMUTATION_MODE, False)) and duplicate_kicksnare > 0.0:
+        print(f"  [config] {CFG_DUPLICATE_KICKSNARE}={duplicate_kicksnare} ignored in permutation mode")
+        duplicate_kicksnare = 0.0
+    kicksnare_count = round(kicksnare_count * (1.0 + duplicate_kicksnare))
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
 
