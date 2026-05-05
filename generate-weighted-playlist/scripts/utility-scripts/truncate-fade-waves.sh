@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INPUT_DIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-strings-kontakt/audio-strings-kontakt"
-OUTDIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-strings-kontakt/audio-strings-kontakt-truncated-faded"
+INPUT_DIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-samples/strings-kontakt-samples/audio-strings-kontakt"
+OUTDIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-samples/strings-kontakt-samples/audio-strings-kontakt-truncated-faded"
 
 # Easy-to-change vars
 TRUNCATE_MS=2500
