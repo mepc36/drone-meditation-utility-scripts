@@ -176,18 +176,37 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
 
     Format: (type_str, rhythm_percent, (duration, (pannings,...), role), ...).
     A panning is randomly chosen from the candidate list for each beat.
+
+    Generalized Grouped Panning Rule (applied to RandomPan beats):
+      N = total beats in pattern
+      N <= 1 : single beat, no constraint
+      N == 2 : both beats independently randomized (no shared anchor)
+      N >= 3 : first N-2 beats share one position; remaining beats are each independent
+    Independent tail beats are each constrained to be at least RANDOM_PAN_MIN_DIFF
+    from the immediately preceding panning.
     """
     if raw_pattern == (UNTOUCHED,):
         return (UNTOUCHED,), (), ()
     durations: list = []
     pannings: list = []
     roles: list = []
-    # For RandomPan beats: beats 1 and 2 share the same resolved position so
-    # they feel like a pair, but beat 3 onwards each get an independent random
-    # position to add movement through the rhythm.
+
+    beats = raw_pattern[2:]  # skip type string at index 0 and percent at index 1
+    n = len(beats)
+
+    # Generalized Grouped Panning Rule for RandomPan beats:
+    #   N <= 1: no constraint needed
+    #   N == 2: fully independent — each beat gets its own randomized position (anchor_size = 0)
+    #   N >= 3: first N-2 beats share one position; remaining beats are each independent (anchor_size = N-2)
+    if n <= 1:
+        anchor_size = n
+    elif n == 2:
+        anchor_size = 0
+    else:
+        anchor_size = n - 2
+
     _shared_random_pan: float | None = None
-    _beat_index = 0
-    for b in raw_pattern[2:]:  # skip type string at index 0 and percent at index 1
+    for _beat_index, b in enumerate(beats):
         if not (isinstance(b, tuple) and len(b) in (2, 3) and isinstance(b[1], tuple)):
             raise TypeError(f"Hashed beat must be a (duration, (pannings,...)[, role]) tuple, got {b!r}")
         duration, pan_options = b[0], b[1]
@@ -195,20 +214,24 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
         durations.append(float(duration))
         chosen = random.choice(pan_options) if pan_options else ''
         if isinstance(chosen, RandomPan):
-            if _beat_index < 2:
-                # Beats 1 & 2: resolve once and share the same position.
+            if _beat_index < anchor_size:
+                # Anchor group: all beats in this range resolve to the same position.
                 if _shared_random_pan is None:
                     side = random.choice([-1.0, 1.0])
                     magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
                     _shared_random_pan = side * magnitude
                 chosen = _shared_random_pan
-            else:
-                # Beat 3+: each gets its own random position, constrained to be
-                # at least RANDOM_PAN_MIN_DIFF from the immediately preceding panning.
+            elif pannings:
+                # Tail beat: independently randomized, constrained to be at least
+                # RANDOM_PAN_MIN_DIFF from the immediately preceding panning.
                 chosen = _sample_random_pan_with_distance(chosen, pannings[-1], RANDOM_PAN_MIN_DIFF)
+            else:
+                # First tail beat with no preceding panning (N=2): free random draw.
+                side = random.choice([-1.0, 1.0])
+                magnitude = random.uniform(chosen.min_magnitude, chosen.max_magnitude)
+                chosen = side * magnitude
         pannings.append(chosen)
         roles.append(role)
-        _beat_index += 1
     return tuple(durations), tuple(pannings), tuple(roles)
 
 
