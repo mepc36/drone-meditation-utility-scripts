@@ -5,8 +5,8 @@ INPUT_DIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate
 OUTDIR="/Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/audio-samples/strings-kontakt-samples/audio-strings-kontakt-truncated-faded"
 
 # Easy-to-change vars
-TRUNCATE_MS=2500
-FADE_MS=200
+TRUNCATE_MS=2000
+FADE_MS=100
 FADE_CURVE="tri"
 
 rm -rf "$OUTDIR"

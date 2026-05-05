@@ -50,7 +50,7 @@ from collections import namedtuple
 RandomPan = namedtuple('RandomPan', ['min_magnitude', 'max_magnitude'])
 RANDOM_PAN_MIN = 0.6   # closest-to-center edge of the random pan zone
 RANDOM_PAN_MAX = 1.0   # farthest-from-center edge of the random pan zone
-RANDOM_PAN_MIN_DIFF = 0.15  # tail beats must be at least this far from the preceding panning
+RANDOM_PAN_MIN_DIFF = 0.25  # tail beats must be at least this far from the preceding panning
 
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
 QUARTER_RHYTHM                                          = 'quarter'
