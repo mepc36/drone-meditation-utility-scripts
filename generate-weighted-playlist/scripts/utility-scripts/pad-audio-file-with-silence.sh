@@ -14,7 +14,7 @@ base="${filename%.wav}"
 
 IFS='_' read -r part1 part2 part3 <<< "$base"
 
-OUTFILE="$dir/${part1}_${part2}padded_${part3}.wav"
+OUTFILE="$dir/${part1}_${part2}padded-_${part3}.wav"
 
 ffmpeg -hide_banner -y \
   -i "$INPUT_FILE" \

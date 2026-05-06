@@ -9,11 +9,34 @@ TRUNCATE_MS=2000
 FADE_MS=100
 FADE_CURVE="tri"
 
+# Add exact filenames to copy unchanged
+IGNORE_FILES=(
+  "kaleidoscope-quartet_-motivic-inversion-padded_strings"
+)
+
+should_ignore() {
+  local filename="$1"
+
+  for ignored in "${IGNORE_FILES[@]}"; do
+    if [[ "$filename" == "$ignored" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 rm -rf "$OUTDIR"
 mkdir -p "$OUTDIR"
 
 find "$INPUT_DIR" -maxdepth 1 -type f -iname "*.wav" -print0 | while IFS= read -r -d '' f; do
   filename="$(basename "$f")"
+
+  if should_ignore "$filename"; then
+    echo "Copying ignored file unchanged: $filename"
+    cp -f "$f" "$OUTDIR/$filename"
+    continue
+  fi
 
   dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$f")"
 
