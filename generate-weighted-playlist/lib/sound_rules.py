@@ -1,3 +1,4 @@
+import random
 from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
@@ -6,11 +7,17 @@ from .constants import (
     SOUND_GROUP_TYPES,
     PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
     RHYTHM_PATTERN_SEQUENCES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
     RHYTHM_PATTERN, RHYTHM_PERCENT,
     MUSIC_PATTERN_PERCENT,
+    SAMPLE_ROLE, SampleRole,
+    RandomPan,
+    RANDOM_PAN_MIN,
+    RANDOM_PAN_MAX
 )
 from .runtime_constants import LOUD, QUIET, SLOW, FAST
 
@@ -20,23 +27,38 @@ _RHYTHM_BY_SEQUENCE: dict[tuple, str] = {
     seq: name for name, seq in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
+_BEAT_NAMES: dict[float, str] = {
+    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
+    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
+    EIGHTH:            BEAT_NAME_EIGHTH,
+    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
+}
+
 
 def derive_type(pattern: list) -> str:
     seq = tuple(beat[MUSICAL_DURATION] for beat in pattern)
     name = _RHYTHM_BY_SEQUENCE.get(seq)
     if name is not None:
         return name
-    raise ValueError(
-        f"Cannot derive rhythm type from duration sequence {seq!r}. "
-        f"Known patterns: {list(_RHYTHM_BY_SEQUENCE)}"
-    )
+    # Dynamic patterns (e.g. from variable_quarter_rhythm) have arbitrary sequences.
+    # Synthesize a name from beat names so they can be used as cache keys.
+    return '-'.join(_BEAT_NAMES.get(d, str(d)) for d in seq)
 
 
 def derive_panning_key(entry: dict):
     rp = entry[RHYTHM_PATTERNS]
     if rp and rp[0] is UNTOUCHED:
         return UNTOUCHED
-    return rp[0][RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+    _rp0_raw = rp[0][RHYTHM_PATTERN]
+    _rp0_beats = _rp0_raw() if callable(_rp0_raw) else _rp0_raw
+    first_pan = _rp0_beats[0][POSSIBLE_PANNINGS][0]
+    # RandomPan patterns participate in the center quota and match HARD_CENTER
+    # slots for both permutation and non-permutation mode. The concrete random
+    # value is resolved later in _extract_rhythm_and_pannings.
+    if isinstance(first_pan, RandomPan):
+        return HARD_CENTER
+    return first_pan
 
 
 
@@ -66,6 +88,10 @@ def sixteenth_rhythm(panning) -> list:
 
 def sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning) for _ in range(4)] + [_beat(QUARTER_NOTE, panning)]
+
+
+def sixteenth_sixteenth_sixteenth_sixteenth_rhythm(panning) -> list:
+    return [_beat(SIXTEENTH, panning) for _ in range(4)]
 
 
 def eighth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
@@ -116,6 +142,56 @@ def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
     return [_beat(QUARTER_NOTE, panning) for _ in range(4)]
 
 
+def variable_quarter_rhythm(panning, max_beats: int) -> list:
+    """Build a rhythm with a random beat count in [1, max_beats].
+    Each beat is independently either a quarter note or a rest,
+    with three constraints: the first beat is always a note,
+    no two consecutive rests are allowed, and the last beat is always a note."""
+    if max_beats < 1:
+        raise ValueError(f"max_beats must be 1 or greater, got {max_beats}")
+    n = random.randint(1, max_beats)
+    beats = []
+    for i in range(n):
+        # if i == 0 or beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
+        duration = QUARTER_NOTE
+        # else:
+            # duration = random.choice([QUARTER_NOTE, QUARTER_NOTE_REST])
+        beats.append(_beat(duration, panning))
+    if beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
+        beats[-1] = _beat(QUARTER_NOTE, panning)
+    return beats
+
+
+def with_roles(rhythm: list, roles: list) -> list:
+    """Annotate each beat in *rhythm* with a SampleRole drawn from *roles*.
+
+    Rules:
+    - len(rhythm) must equal len(roles).
+    - roles[0] must be SampleRole.SAME (the first beat is always the reference;
+      it cannot be 'new' relative to nothing).
+
+    Example:
+        with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER),
+                   [SampleRole.SAME, SampleRole.NEW, SampleRole.SAME])
+    """
+    if len(rhythm) != len(roles):
+        raise ValueError(
+            f"with_roles: rhythm has {len(rhythm)} beat(s) but roles has "
+            f"{len(roles)} entry/entries \u2014 they must be the same length."
+        )
+    if roles[0] is not SampleRole.SAME:
+        raise ValueError(
+            "with_roles: the first role must be SampleRole.SAME \u2014 the first "
+            "beat is the reference sample and cannot be SampleRole.NEW."
+        )
+    annotated = []
+    for beat, role in zip(rhythm, roles):
+        annotated_beat = dict(beat)
+        annotated_beat[SAMPLE_ROLE] = role
+        annotated.append(annotated_beat)
+    return annotated
+
+
 KICK_SNARE_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [QUIET],
@@ -124,27 +200,27 @@ KICK_SNARE_MUSICAL_PATTERNS: list = [
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 75,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 50,
             },
             {
                 RHYTHM_PATTERN: quarter_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 26,
             },
             {
                 RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 6,
+            },
+            {
+                RHYTHM_PATTERN: sixteenth_dottedeighth_rhythm(HARD_CENTER),
+                RHYTHM_PERCENT: 6,
             },
             {
                 RHYTHM_PATTERN: sixteenth_dottedeighth_quarter_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PERCENT: 6,
             },
             {
-                RHYTHM_PATTERN: sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(HARD_CENTER),
-                RHYTHM_PERCENT: 5,
+                RHYTHM_PATTERN: with_roles(quarter_quarter_quarter_rhythm(HARD_CENTER), [SampleRole.SAME, SampleRole.NEW, SampleRole.SAME]),
+                RHYTHM_PERCENT: 6,
             },
         ],
     }
@@ -154,22 +230,39 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
     {
         VOLUMES: [LOUD],
         BPMS: [FAST],
-        MUSIC_PATTERN_PERCENT: 50,
+        MUSIC_PATTERN_PERCENT: 17,
         RHYTHM_PATTERNS: [
             {
                 RHYTHM_PATTERN: quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 80,
+                RHYTHM_PERCENT: 100,
+            }
+        ]
+    },
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 17,
+        RHYTHM_PATTERNS: [
+            {
+                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
+                RHYTHM_PERCENT: 100,
+            }
+        ]
+    },
+    {
+        VOLUMES: [LOUD],
+        BPMS: [FAST],
+        MUSIC_PATTERN_PERCENT: 16,
+        RHYTHM_PATTERNS: [
+            {
+                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 50,
             },
             {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_LEFT),
-                RHYTHM_PERCENT: 10,
+                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(RandomPan(RANDOM_PAN_MIN, RANDOM_PAN_MAX)),
+                RHYTHM_PERCENT: 50,
             },
         ]
-
     },
     {
         VOLUMES: [LOUD],
@@ -177,19 +270,10 @@ KICKSTAB_SNARESTAB_MUSICAL_PATTERNS: list = [
         MUSIC_PATTERN_PERCENT: 50,
         RHYTHM_PATTERNS: [
             {
-                RHYTHM_PATTERN: quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 80,
+                RHYTHM_PATTERN: quarter_rhythm(DUALPAN_LEFTRIGHT),
+                RHYTHM_PERCENT: 100,
             },
-            {
-                RHYTHM_PATTERN: quarter_eighth_eighth_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
-            },
-            {
-                RHYTHM_PATTERN: sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(HARD_RIGHT),
-                RHYTHM_PERCENT: 10,
-            },
-        ]
-
+        ],
     },
 ]
 
@@ -248,12 +332,12 @@ _SOUND_TYPE_RULES: list[dict] = [
     },
     {
         MUSICAL_GROUPING: KICKSTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [SNARESTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
         MUSICAL_GROUPING: SNARESTAB,
-        DUALPAN_PARTNERS: [],
+        DUALPAN_PARTNERS: [KICKSTAB],
         MUSICAL_PATTERNS: KICKSTAB_SNARESTAB_MUSICAL_PATTERNS,
     },
     {
@@ -304,9 +388,10 @@ for _rule in _SOUND_TYPE_RULES:
                 f"{_total_pct}, must be 100."
             )
         for _entry in _rp:
-            derive_type(_entry[RHYTHM_PATTERN])  # raises ValueError on invalid shape
+            _rp_raw = _entry[RHYTHM_PATTERN]() if callable(_entry[RHYTHM_PATTERN]) else _entry[RHYTHM_PATTERN]
+            derive_type(_rp_raw)  # raises ValueError on invalid shape
         _first_pannings = {
-            _entry[RHYTHM_PATTERN][0][POSSIBLE_PANNINGS][0]
+            ((_entry[RHYTHM_PATTERN]() if callable(_entry[RHYTHM_PATTERN]) else _entry[RHYTHM_PATTERN])[0][POSSIBLE_PANNINGS][0])
             for _entry in _rp
         }
         if len(_first_pannings) > 1:
@@ -324,6 +409,10 @@ for _rule in _SOUND_TYPE_RULES:
     if DUALPAN_PARTNERS not in _rule:
         raise ValueError(
             f"SOUND_TYPE_RULES entry '{_name}' is missing '{DUALPAN_PARTNERS}'. Use [] if no dualpan."
+        )
+    if not _rule[DUALPAN_PARTNERS] and any(derive_panning_key(e) in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) for e in _rule[MUSICAL_PATTERNS]):
+        raise ValueError(
+            f"SOUND_TYPE_RULES entry '{_name}' uses dualpan panning but dualpan_partners is empty."
         )
     if _rule[DUALPAN_PARTNERS] and not any(derive_panning_key(e) in (DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL) for e in _rule[MUSICAL_PATTERNS]):
         raise ValueError(

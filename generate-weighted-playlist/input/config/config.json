@@ -1,28 +1,18 @@
 {
   "bpms": "40:120",
-  "samples_to_silence_percents": "80:20",
+  "samples_to_silence_percents": "85:15",
   "loud_quiet_values": "0:-32",
   "silence_lengths_millisec": "1760",
   "silence_lengths_percents": "100",
-  "kicksnare_stab_acappella_percents": "35:45:20",
+  "kicksnare_stab_acappella_percents": "30:60:10",
   "strings_volume_adjustment_db": 0,
   "acappella_volume_adjustment_db": 0,
-  "kick_snare_permutation_mode": true,
-  "permutation_tolerance_pct": 6.2,
-  "permutation_max_files": 20000,
-  "kicksnare_ignored_cap": 0,
-  "num_times_strings_duplication_subgroups": {
-    "cello-ostinato-kontakt": 0,
-    "climax-kontakt": 0,
-    "dance-kontakt": 0,
-    "exposition-kontakt": 0,
-    "lilting-semitone-kontakt": 0,
-    "motivic-inversion-kontakt": 0,
-    "polyrhythms-kontakt": 0,
-    "rite-of-spring-chord-kontakt": 0,
-    "silent-start-kontakt": 0,
-    "stratified-meters-kontakt": 0,
-    "wave-like-imitation-ending-kontakt": 0,
-    "wave-like-imitation-start-kontakt": 0
-  }
+  "num_time_duplicate_kicksnares": 0,
+  "permutation_mode": {
+    "kick_snare_permutation_mode": false,
+    "permutation_tolerance_pct": 8.4,
+    "permutation_max_files": 20000,
+    "kicksnare_ignored_cap": 0
+  },
+  "num_times_duplicate_strings": 0
 }

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+cd /Users/martinconnor/Desktop/x-drone-meditation-xvii/7-python/generate-weighted-playlist/output/rhythmicized-audio && ls | awk -F'_' '{total++; if($1=="silence") s++; else if($3=="acappella") a++; else if($3=="kick" || $3=="snare") ks++; else if($3=="kickstab" || $3=="snarestab") kss++} END {printf "acappella: %d (%.0f%%)\n", a, a/total*100; printf "kick/snare: %d (%.0f%%)\n", ks, ks/total*100; printf "kickstab/snarestab: %d (%.0f%%)\n", kss, kss/total*100; printf "silence: %d (%.0f%%)\n", s, s/total*100}'
