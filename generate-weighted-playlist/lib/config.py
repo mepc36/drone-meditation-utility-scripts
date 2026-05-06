@@ -25,8 +25,8 @@ CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
 CFG_PERMUTATION_TOLERANCE   = 'permutation_tolerance_pct'
 CFG_PERMUTATION_MAX_FILES   = 'permutation_max_files'
 CFG_KS_IGNORED_CAP          = 'kicksnare_ignored_cap'
-CFG_STRINGS_DUPLICATION_SUBGROUPS = 'num_times_strings_duplication_subgroups'
-CFG_DUPLICATE_KICKSNARE       = 'duplicate_kicksnare'
+CFG_DUPLICATE_STRINGS   = 'num_times_duplicate_strings'
+CFG_DUPLICATE_KICKSNARE = 'num_time_duplicate_kicksnares'
 
 # ── Sample-bias helpers ─────────────────────────────────────────────────────────
 _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
@@ -256,51 +256,12 @@ def load() -> dict:
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
 
-    strings_duplication_subgroups = raw.get(CFG_STRINGS_DUPLICATION_SUBGROUPS, {})
-    if not isinstance(strings_duplication_subgroups, dict):
-        raise ValueError(
-            f"{CFG_STRINGS_DUPLICATION_SUBGROUPS} must be a JSON object mapping descriptor → count, "
-            f"got {strings_duplication_subgroups!r}"
-        )
-    for key, val in strings_duplication_subgroups.items():
-        if not isinstance(val, int) or val < 0:
-            raise ValueError(
-                f"{CFG_STRINGS_DUPLICATION_SUBGROUPS}: value for {key!r} must be 0 or a positive integer "
-                f"(0 = no duplication, 1 = duplicate once = 2× total), got {val!r}"
-            )
-    known_descriptors = {f.stem.split('_')[1] for f in strings_files}
+    duplicate_strings = float(raw.get(CFG_DUPLICATE_STRINGS, 0))
+    if duplicate_strings < 0.0:
+        raise ValueError(f"{CFG_DUPLICATE_STRINGS} must be >= 0, got {duplicate_strings!r}")
+    strings_count = round(strings_count * (1.0 + duplicate_strings))
 
-    # Remove any keys not found in input/audio
-    stale_descriptors = set(strings_duplication_subgroups) - known_descriptors
-    if stale_descriptors:
-        for desc in stale_descriptors:
-            del strings_duplication_subgroups[desc]
-        print(
-            f"  [config] Removed {len(stale_descriptors)} stale strings descriptor(s) from config.json "
-            f"not found in input/audio: {sorted(stale_descriptors)}"
-        )
-
-    # Auto-add any descriptors found in input but missing from the config (default 0)
-    missing_descriptors = known_descriptors - set(strings_duplication_subgroups)
-    if missing_descriptors:
-        for desc in sorted(missing_descriptors):
-            strings_duplication_subgroups[desc] = 0
-        print(
-            f"  [config] Added {len(missing_descriptors)} missing strings descriptor(s) to config.json "
-            f"with default value 0: {sorted(missing_descriptors)}"
-        )
-
-    if stale_descriptors or missing_descriptors:
-        raw[CFG_STRINGS_DUPLICATION_SUBGROUPS] = dict(sorted(strings_duplication_subgroups.items()))
-        with open(CONFIG_PATH, 'w') as _cfg_f:
-            json.dump(raw, _cfg_f, indent=2)
-            _cfg_f.write('\n')
-        strings_duplication_subgroups = raw[CFG_STRINGS_DUPLICATION_SUBGROUPS]
-
-    num_strings_slots = sum(
-        1 + strings_duplication_subgroups.get(f.stem.split('_')[1], 0)
-        for f in strings_files
-    )
+    num_strings_slots = strings_count
 
     if CFG_PERMUTATION_TOLERANCE not in perm_cfg:
         raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} is required in config.json under {CFG_PERMUTATION_MODE}")
@@ -395,7 +356,7 @@ def load() -> dict:
         "permutation_tolerance_pct": permutation_tolerance,
         "permutation_max_files": permutation_max_files,
         "kicksnare_ignored_cap": ks_ignored_cap,
-        "strings_duplication_subgroups": strings_duplication_subgroups,
+        "duplicate_strings": duplicate_strings,
 
         "raw": raw,
     }

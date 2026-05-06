@@ -394,23 +394,12 @@ def main() -> None:
     clear_output_directory(output_dir)
     clear_output_directory(rhythmicized_output_dir)
 
-    # Expand strings sample list according to per-subgroup duplication counts.
-    # The descriptor is the 2nd underscore-separated element of the filename stem.
-    # e.g. "kaleidoscope_exposition-kontakt_strings" → descriptor "exposition-kontakt"
-    _dup_subgroups = conf['strings_duplication_subgroups']
-    _all_string_descs = [name.split('_')[1] for name in samples_by_type.get(STRINGS, [])]
-    _unenumerated = [d for d in _all_string_descs if d not in _dup_subgroups]
-    if _unenumerated:
-        print("\n  NOTE: The following strings subgroups are not listed in")
-        print("  num_times_strings_duplication_subgroups and will not be duplicated:")
-        for _d in sorted(set(_unenumerated)):
-            _count = _unenumerated.count(_d)
-            print(f"    - {_d} ({_count} file{'s' if _count != 1 else ''})")
-    if _dup_subgroups:
+    # Expand strings sample list according to the global duplication count.
+    _duplicate_strings = conf['duplicate_strings']
+    if _duplicate_strings > 0:
         _expanded_strings: list[str] = []
         for name in samples_by_type.get(STRINGS, []):
-            desc = name.split('_')[1]
-            _expanded_strings.extend([name] * (1 + _dup_subgroups.get(desc, 0)))
+            _expanded_strings.extend([name] * (1 + round(_duplicate_strings)))
         samples_by_type = {**samples_by_type, STRINGS: _expanded_strings}
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
@@ -418,7 +407,7 @@ def main() -> None:
     if num_strings_samples > conf['num_audio_samples']:
         raise ValueError(
             f"{num_strings_samples} strings slots exceeds total audio slots {conf['num_audio_samples']}. "
-            f"Reduce num_times_strings_duplication_subgroups counts or the number of strings input files."
+            f"Reduce num_times_duplicate_strings or the number of strings input files."
         )
     # Anchor to kicksnare: every KS file appears exactly once.
     # Other groups scaled so total beats heard match the configured ratio.
