@@ -177,13 +177,14 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
     Format: (type_str, rhythm_percent, (duration, (pannings,...), role), ...).
     A panning is randomly chosen from the candidate list for each beat.
 
-    Generalized Grouped Panning Rule (applied to RandomPan beats):
+    Grouped Panning Rule (applied to RandomPan beats):
       N = total beats in pattern
       N <= 1 : single beat, no constraint
       N == 2 : both beats independently randomized (no shared anchor)
-      N >= 3 : first N-2 beats share one position; remaining beats are each independent
-    Independent tail beats are each constrained to be at least RANDOM_PAN_MIN_DIFF
-    from the immediately preceding panning.
+      N == 3 : first 2 beats share one random position; 3rd is independently
+               randomized but must be at least RANDOM_PAN_MIN_DIFF from beat 2
+      N >= 4 : first N-2 beats share one position; remaining beats are each
+               independently constrained by RANDOM_PAN_MIN_DIFF from the preceding beat
     """
     if raw_pattern == (UNTOUCHED,):
         return (UNTOUCHED,), (), ()
@@ -194,14 +195,17 @@ def _extract_rhythm_and_pannings(raw_pattern: tuple) -> tuple[tuple, tuple, tupl
     beats = raw_pattern[2:]  # skip type string at index 0 and percent at index 1
     n = len(beats)
 
-    # Generalized Grouped Panning Rule for RandomPan beats:
+    # Grouped Panning Rule for RandomPan beats:
     #   N <= 1: no constraint needed
     #   N == 2: fully independent — each beat gets its own randomized position (anchor_size = 0)
-    #   N >= 3: first N-2 beats share one position; remaining beats are each independent (anchor_size = N-2)
+    #   N == 3: first 2 beats share one position; 3rd is independently constrained by RANDOM_PAN_MIN_DIFF
+    #   N >= 4: first N-2 beats share one position; remaining beats are each independent (anchor_size = N-2)
     if n <= 1:
         anchor_size = n
     elif n == 2:
         anchor_size = 0
+    elif n == 3:
+        anchor_size = 2
     else:
         anchor_size = n - 2
 
