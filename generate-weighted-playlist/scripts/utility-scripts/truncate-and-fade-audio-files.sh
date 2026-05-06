@@ -11,7 +11,7 @@ FADE_CURVE="tri"
 
 # Add exact filenames to copy unchanged
 IGNORE_FILES=(
-  "kaleidoscope-quartet_-motivic-inversion-padded_strings"
+"kaleidoscope-quartet_-motivic-inversion-padded-_strings.wav"
 )
 
 should_ignore() {
