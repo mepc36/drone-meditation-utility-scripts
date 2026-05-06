@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from .constants import SOUND_GROUP_NAMES, KICKSNARE, STAB, ACAPPELLA, PERMUTATION_COMBOS_PER_SAMPLE
+from .constants import SOUND_GROUP_NAMES, KICKSNARE, STAB, ACAPPELLA
 
 
 CONFIG_PATH = Path("./input/config/config.json")
@@ -20,11 +20,6 @@ CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
 CFG_STRINGS_VOL_ADJUSTMENT = 'strings_volume_adjustment_db'
 CFG_ACAPPELLA_VOL_ADJUSTMENT = 'acappella_volume_adjustment_db'
 CFG_SAMPLE_BIAS             = 'sample_bias'
-CFG_PERMUTATION_MODE        = 'permutation_mode'
-CFG_KICK_SNARE_PERMUTATION_MODE = 'kick_snare_permutation_mode'
-CFG_PERMUTATION_TOLERANCE   = 'permutation_tolerance_pct'
-CFG_PERMUTATION_MAX_FILES   = 'permutation_max_files'
-CFG_KS_IGNORED_CAP          = 'kicksnare_ignored_cap'
 CFG_DUPLICATE_STRINGS   = 'num_times_duplicate_strings'
 CFG_DUPLICATE_KICKSNARE = 'num_time_duplicate_kicksnares'
 
@@ -35,32 +30,6 @@ _VALID_BIAS_GROUPS = set(SOUND_GROUP_NAMES)
 NUM_SOUND_GROUP_PERCENTS = 3
 NUM_VOLUME_VALUES        = 2
 
-
-def _compute_balanced_permutation_total(
-    raw_counts: dict[str, int],
-    group_percents: list[int],
-    tolerance: float,
-    max_files: int,
-    ks_ignored_cap: int = 0,
-) -> int:
-    """Return estimated total slot count using the beat-aware trimming planner.
-
-    Delegates to plan_permutation_trimming for an accurate estimate; falls back
-    to a simple sum if the planner raises (e.g. no KS samples on disk yet).
-    """
-    # Lazy import to avoid circular dependency
-    try:
-        from .deck_builder import plan_permutation_trimming
-        from .sample_queue import load_samples_grouped_by_type
-        samples_by_type = load_samples_grouped_by_type(INPUT_AUDIO_DIR)
-        _, m_stab, m_acap, diag = plan_permutation_trimming(
-            samples_by_type, group_percents, max_files=max_files,
-            tolerance=tolerance, ks_ignored_cap=ks_ignored_cap,
-        )
-        return diag['total_files']
-    except Exception:
-        # Fallback: sum raw permutation slot counts as a rough estimate
-        return sum(raw_counts.values())
 
 
 def parse_colon_ints(raw: str) -> list[int]:
@@ -221,10 +190,6 @@ def load() -> dict:
     if CFG_BPMS not in raw:
         raise ValueError(f"'{CFG_BPMS}' is required in config.json")
 
-    if CFG_PERMUTATION_MODE not in raw:
-        raise ValueError(f"'{CFG_PERMUTATION_MODE}' is required in config.json")
-    perm_cfg = raw[CFG_PERMUTATION_MODE]
-
     bpm_values = sorted(parse_colon_floats(raw[CFG_BPMS]))  # slow→fast
 
     silence_ratio = parse_colon_ints(raw.get(CFG_SILENCE_RATIO, "100:0"))
@@ -249,9 +214,6 @@ def load() -> dict:
     duplicate_kicksnare = float(raw.get(CFG_DUPLICATE_KICKSNARE, 0))
     if duplicate_kicksnare < 0.0:
         raise ValueError(f"{CFG_DUPLICATE_KICKSNARE} must be >= 0, got {duplicate_kicksnare!r}")
-    if bool(perm_cfg.get(CFG_KICK_SNARE_PERMUTATION_MODE, False)) and duplicate_kicksnare > 0.0:
-        print(f"  [config] {CFG_DUPLICATE_KICKSNARE}={duplicate_kicksnare} ignored in permutation mode")
-        duplicate_kicksnare = 0.0
     kicksnare_count = round(kicksnare_count * (1.0 + duplicate_kicksnare))
     strings_files = list(INPUT_AUDIO_DIR.glob("*_strings.wav"))
     strings_count = len(strings_files)
@@ -263,42 +225,7 @@ def load() -> dict:
 
     num_strings_slots = strings_count
 
-    if CFG_PERMUTATION_TOLERANCE not in perm_cfg:
-        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} is required in config.json under {CFG_PERMUTATION_MODE}")
-    if CFG_PERMUTATION_MAX_FILES not in perm_cfg:
-        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} is required in config.json under {CFG_PERMUTATION_MODE}")
-    if CFG_KS_IGNORED_CAP not in perm_cfg:
-        raise ValueError(f"{CFG_KS_IGNORED_CAP} is required in config.json under {CFG_PERMUTATION_MODE}")
-    permutation_tolerance = float(perm_cfg[CFG_PERMUTATION_TOLERANCE])
-    permutation_max_files = int(perm_cfg[CFG_PERMUTATION_MAX_FILES])
-    ks_ignored_cap        = int(perm_cfg[CFG_KS_IGNORED_CAP])
-    if permutation_tolerance <= 0:
-        raise ValueError(f"{CFG_PERMUTATION_TOLERANCE} must be a positive number, got {permutation_tolerance}")
-    if permutation_max_files <= 0:
-        raise ValueError(f"{CFG_PERMUTATION_MAX_FILES} must be a positive integer, got {permutation_max_files}")
-    if ks_ignored_cap < 0:
-        raise ValueError(f"{CFG_KS_IGNORED_CAP} must be 0 or a positive integer, got {ks_ignored_cap}")
-
-    kick_snare_permutation_mode = bool(perm_cfg.get(CFG_KICK_SNARE_PERMUTATION_MODE, False))
-    if kick_snare_permutation_mode:
-        stab_count = len(
-            list(INPUT_AUDIO_DIR.glob("*_kickstab.wav")) +
-            list(INPUT_AUDIO_DIR.glob("*_snarestab.wav"))
-        )
-        acap_count = len(list(INPUT_AUDIO_DIR.glob("*_acappella.wav")))
-        raw_perm_counts = {
-            KICKSNARE: kicksnare_count * PERMUTATION_COMBOS_PER_SAMPLE[KICKSNARE],
-            STAB:      stab_count      * PERMUTATION_COMBOS_PER_SAMPLE[STAB],
-            ACAPPELLA: acap_count      * PERMUTATION_COMBOS_PER_SAMPLE[ACAPPELLA],
-        }
-        permutation_non_strings_samples = _compute_balanced_permutation_total(
-            raw_perm_counts, sound_group_percents,
-            tolerance=permutation_tolerance, max_files=permutation_max_files,
-            ks_ignored_cap=ks_ignored_cap,
-        )
-        num_audio_samples = permutation_non_strings_samples + num_strings_slots
-    else:
-        num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
+    num_audio_samples = round(kicksnare_count * 100 / kicksnare_pct)
 
     if silence_percent == 0:
         num_silence_files = 0
@@ -352,10 +279,6 @@ def load() -> dict:
 
         "sample_bias": sample_bias,
 
-        "kick_snare_permutation_mode": kick_snare_permutation_mode,
-        "permutation_tolerance_pct": permutation_tolerance,
-        "permutation_max_files": permutation_max_files,
-        "kicksnare_ignored_cap": ks_ignored_cap,
         "duplicate_strings": duplicate_strings,
 
         "raw": raw,
