@@ -395,11 +395,21 @@ def main() -> None:
     clear_output_directory(rhythmicized_output_dir)
 
     # Expand strings sample list according to the global duplication count.
+    # Fractional values are supported: the integer part is the base number of extra
+    # copies every sample gets, and the fractional part determines the fraction of
+    # samples randomly selected (without replacement) to receive one additional copy.
+    # E.g. 100 files with 0.5 → 50 randomly chosen files appear twice, rest once (150 total).
     _duplicate_strings = conf['duplicate_strings']
     if _duplicate_strings > 0:
+        _strings_list = list(samples_by_type.get(STRINGS, []))
+        _whole = int(_duplicate_strings)
+        _frac = _duplicate_strings - _whole
+        _extra_count = round(len(_strings_list) * _frac)
+        _extra_set = set(random.sample(_strings_list, _extra_count)) if _extra_count > 0 else set()
         _expanded_strings: list[str] = []
-        for name in samples_by_type.get(STRINGS, []):
-            _expanded_strings.extend([name] * (1 + round(_duplicate_strings)))
+        for name in _strings_list:
+            copies = 1 + _whole + (1 if name in _extra_set else 0)
+            _expanded_strings.extend([name] * copies)
         samples_by_type = {**samples_by_type, STRINGS: _expanded_strings}
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
