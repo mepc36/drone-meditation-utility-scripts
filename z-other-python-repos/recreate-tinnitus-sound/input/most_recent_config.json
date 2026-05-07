@@ -1,0 +1,14 @@
+{
+  "pan_side": "c",
+  "noise_center_frequency_hz": 100.0,
+  "noise_bandwidth_hz": 200.0,
+  "noise_spectral_slope": 1.0,
+  "noise_level_db": -10.0,
+  "tone_waveform_id": 1,
+  "tone_frequency_hz": 8165.0,
+  "tone_level_db": -45.0,
+  "modulation_period_s": 8.0,
+  "modulation_depth_0_to_1": 0.65,
+  "modulation_shape_id": 1,
+  "duration_seconds": 120.0
+}
