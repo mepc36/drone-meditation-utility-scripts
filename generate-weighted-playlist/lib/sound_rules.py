@@ -5,7 +5,6 @@ from .constants import (
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
     KICKSNARE, STAB,
     SOUND_GROUP_TYPES,
-    PERMUTATION_COMBOS_PER_SAMPLE,
     QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
     BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
     BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
@@ -54,8 +53,7 @@ def derive_panning_key(entry: dict):
     _rp0_beats = _rp0_raw() if callable(_rp0_raw) else _rp0_raw
     first_pan = _rp0_beats[0][POSSIBLE_PANNINGS][0]
     # RandomPan patterns participate in the center quota and match HARD_CENTER
-    # slots for both permutation and non-permutation mode. The concrete random
-    # value is resolved later in _extract_rhythm_and_pannings.
+    # slots. The concrete random value is resolved later in _extract_rhythm_and_pannings.
     if isinstance(first_pan, RandomPan):
         return HARD_CENTER
     return first_pan
@@ -303,20 +301,6 @@ ACAPPELLA_MUSICAL_PATTERNS: list = [
     },
 ]
 
-# Startup check: PERMUTATION_COMBOS_PER_SAMPLE in constants.py must stay in
-# sync with the actual rhythm counts in each musical pattern list.
-_actual_combos: dict[str, int] = {
-    KICKSNARE:  sum(len(mp[RHYTHM_PATTERNS]) for mp in KICK_SNARE_MUSICAL_PATTERNS),
-    STAB:       sum(len(mp[RHYTHM_PATTERNS]) for mp in KICKSTAB_SNARESTAB_MUSICAL_PATTERNS),
-    ACAPPELLA:  sum(len(mp[RHYTHM_PATTERNS]) for mp in ACAPPELLA_MUSICAL_PATTERNS),
-}
-for _group, _expected in PERMUTATION_COMBOS_PER_SAMPLE.items():
-    if _actual_combos.get(_group) != _expected:
-        raise ValueError(
-            f"PERMUTATION_COMBOS_PER_SAMPLE['{_group}'] is {_expected} in constants.py "
-            f"but the actual rhythm count is {_actual_combos.get(_group)}. "
-            f"Update PERMUTATION_COMBOS_PER_SAMPLE in constants.py to match."
-        )
 
 
 _SOUND_TYPE_RULES: list[dict] = [
