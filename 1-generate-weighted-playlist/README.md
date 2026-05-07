@@ -228,6 +228,13 @@ All settings live in `./input/config/config.json`. Required fields are marked **
   // Default: "0:-26"
   "loud_quiet_values": "0:-28",
 
+  // [optional] Strings-to-non-strings ratio, in the order strings:nonstrings.
+  // Controls how many strings slots are generated relative to the total non-strings (kick+snare+stab+acappella) count.
+  // Fractional values are supported: the integer part fills all strings files that many times;
+  // the remainder randomly selects that fraction of strings files for one extra copy (no file selected twice).
+  // If omitted, strings slots equal the number of strings input files (no duplication).
+  "strings_nonstrings_pcts": "10:90",
+
 }
 ```
 
@@ -241,6 +248,7 @@ All settings live in `./input/config/config.json`. Required fields are marked **
 | `silence_lengths_millisec` | No | string | `"2000"` | Colon-separated millisecond values for silence durations. |
 | `silence_lengths_percents` | No | string | `"100"` | Colon-separated percent weights for each silence length. Must sum to 100. |
 | `loud_quiet_values` | No | string | `"0:-26"` | Exactly two colon-separated dB values (loud:quiet). |
+| `strings_nonstrings_pcts` | No | string | — | Two colon-separated values (strings:nonstrings). Derives strings slot count from the non-strings total. Supports fractional ratios via partial random duplication of strings files. |
 
 ## Assumptions
 
@@ -252,6 +260,7 @@ The following assumptions are made about the config and the environment. Violati
 - `silence_lengths_millisec` and `silence_lengths_percents` always contain the same number of colon-separated values.
 - `loud_quiet_values` always has exactly 2 values. Fewer or more will raise an error.
 - `kicksnare_stab_acappella_percents` always has exactly 3 values in declaration order: kicksnare, stab, acappella.
+- When `strings_nonstrings_pcts` is set, the strings slot count is derived after beat-anchoring; the raw strings file count only determines available source files. If no strings files exist, the ratio has no effect.
 
 ## Generation Rules
 

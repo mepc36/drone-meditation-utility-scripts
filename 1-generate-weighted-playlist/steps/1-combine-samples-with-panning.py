@@ -264,7 +264,7 @@ def main() -> None:
 
     num_pass_through = sum(len(v) for k, v in samples_by_type.items() if passes_through_unmodified(k))
     num_strings_samples = num_pass_through
-    if num_strings_samples > conf['num_audio_samples']:
+    if conf.get('strings_nonstrings_pcts') is None and num_strings_samples > conf['num_audio_samples']:
         raise ValueError(
             f"{num_strings_samples} strings slots exceeds total audio slots {conf['num_audio_samples']}. "
             f"Reduce the number of strings input files."
@@ -285,6 +285,22 @@ def main() -> None:
           + ", ".join(f"{g}={beat_multipliers[g]:.2f}" for g in SOUND_GROUP_NAMES))
     print(f"  \nFile-count targets: "
           + "".join(f"\n   - {g}={group_targets[g]}" for g in SOUND_GROUP_NAMES))
+    # Expand strings pool to match strings_nonstrings_pcts ratio if configured.
+    snp = conf.get('strings_nonstrings_pcts')
+    if snp is not None:
+        strings_pct, nonstrings_pct = snp
+        total_non_strings = sum(group_targets.values())
+        raw_strings = list(samples_by_type.get(STRINGS, []))
+        n_files = len(raw_strings)
+        if n_files > 0:
+            target_total = total_non_strings * strings_pct / nonstrings_pct
+            full_copies = int(target_total / n_files)
+            extra_count = round(target_total - full_copies * n_files)
+            pool = raw_strings * full_copies
+            if extra_count > 0:
+                pool += random.sample(raw_strings, min(extra_count, n_files))
+            samples_by_type[STRINGS] = pool
+            num_strings_samples = len(pool)
     # Recompute silence count based on beat-anchored total.
     _audio_total = sum(group_targets.values()) + num_strings_samples
     conf['num_silence_files'] = (

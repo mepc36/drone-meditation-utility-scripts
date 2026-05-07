@@ -8,12 +8,13 @@ OUTPUT_AUDIO_DIR = Path("./output/audio")
 OUTPUT_RHYTHMICIZED_AUDIO_DIR = Path("./output/rhythmicized-audio")
 
 # ── Config JSON key names ──────────────────────────────────────────────────────
-CFG_BPMS                 = 'bpms'
-CFG_SILENCE_RATIO        = 'samples_to_silence_percents'
-CFG_SILENCE_LENGTHS_MS   = 'silence_lengths_millisec'
-CFG_SILENCE_LEN_PCTS     = 'silence_lengths_percents'
-CFG_LOUD_QUIET_VALUES    = 'loud_quiet_values'
-CFG_SOUND_GROUP_PERCENTS = 'kicksnare_stab_acappella_percents'
+CFG_BPMS                    = 'bpms'
+CFG_SILENCE_RATIO           = 'samples_to_silence_percents'
+CFG_SILENCE_LENGTHS_MS      = 'silence_lengths_millisec'
+CFG_SILENCE_LEN_PCTS        = 'silence_lengths_percents'
+CFG_LOUD_QUIET_VALUES       = 'loud_quiet_values'
+CFG_SOUND_GROUP_PERCENTS    = 'kicksnare_stab_acappella_percents'
+CFG_STRINGS_NONSTRINGS_PCTS = 'strings_nonstrings_pcts'
 # ── Config validation counts ───────────────────────────────────────────────────
 NUM_SOUND_GROUP_PERCENTS = 3
 NUM_VOLUME_VALUES        = 2
@@ -84,6 +85,15 @@ def load() -> dict:
         raise ValueError(f"{CFG_LOUD_QUIET_VALUES} must have exactly {NUM_VOLUME_VALUES} values (loud:quiet)")
     volume_levels_db = sorted(volume_levels_db, reverse=True)  # loud→quiet (high dB first)
 
+    strings_nonstrings_pcts = None
+    if CFG_STRINGS_NONSTRINGS_PCTS in raw:
+        snp = parse_colon_floats(raw[CFG_STRINGS_NONSTRINGS_PCTS])
+        if len(snp) != 2:
+            raise ValueError(f"{CFG_STRINGS_NONSTRINGS_PCTS} must have exactly 2 values (strings:nonstrings)")
+        if snp[1] == 0:
+            raise ValueError(f"nonstrings percent in {CFG_STRINGS_NONSTRINGS_PCTS} cannot be 0")
+        strings_nonstrings_pcts = snp
+
     return {
         "bpm_values": bpm_values,
         "beat_lengths_seconds": [60.0 / bpm for bpm in bpm_values],
@@ -104,6 +114,7 @@ def load() -> dict:
         "quietest_volume_index": volume_levels_db.index(min(volume_levels_db)),
 
         "sound_group_percents": sound_group_percents,
+        "strings_nonstrings_pcts": strings_nonstrings_pcts,
 
         "raw": raw,
     }
