@@ -1,0 +1,9 @@
+{
+  "bpms": "40:120",
+  "loud_quiet_values": "0:-32",
+  "silence_lengths_millisec": "1760",
+  "silence_lengths_percents": "100",
+  "samples_to_silence_percents": "85:15",
+  "kicksnare_stab_acappella_percents": "30:60:10",
+  "strings_nonstrings_pcts": "10:90"
+}
