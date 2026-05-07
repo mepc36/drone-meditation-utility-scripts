@@ -1,6 +1,5 @@
 # Rhythmic durations (in quarter notes)
 QUARTER_NOTE   = 1
-QUARTER_NOTE_REST = 0
 EIGHTH         = 0.5
 SIXTEENTH      = 0.25
 DOTTED_EIGHTH  = 0.75
@@ -55,24 +54,11 @@ RANDOM_PAN_MIN_DIFF = 0.25  # tail beats must be at least this far from the prec
 # ── Rhythm pattern type identifiers ──────────────────────────────────────────
 QUARTER_RHYTHM                                          = 'quarter'
 DOUBLE_RHYTHM                                          = 'double'
-QUARTER_REST_RHYTHM                                    = 'quarter_rest'
-QUARTER_REST_QUARTER_RHYTHM                            = 'quarter_rest_quarter'
 TRIPLE_RHYTHM                                          = 'triple'
-QUARTER_QUARTER_REST_RHYTHM                            = 'quarter_quarter_rest'
-EIGHTH_EIGHTH_RHYTHM                                   = 'eighth_eighth'
-EIGHTH_EIGHTH_QUARTER_RHYTHM                           = 'eighth_eighth_quarter'
 QUARTER_EIGHTH_EIGHTH_RHYTHM                           = 'quarter_eighth_eighth'
-SIXTEENTH_RHYTHM                                       = 'sixteenth'
 SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM = 'sixteenth_sixteenth_sixteenth_sixteenth_quarter'
 SIXTEENTH_DOTTEDEIGHTH_RHYTHM                          = 'sixteenth_dottedeighth'
-EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM              = 'eighth_sixteenth_sixteenth_quarter'
 SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM                 = 'sixteenth_dottedeighth_quarter'
-SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM             = 'sixteenth_eighth_sixteenth_quarter'
-SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM  = 'sixteenth_dottedeighth_sixteenth_dottedeighth'
-EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM                     = 'eighth_eighth_eighth_eighth'
-EIGHTH_EIGHTH_EIGHTH_RHYTHM                            = 'eighth_eighth_eighth'
-EIGHTH_RHYTHM                                          = 'eighth'
-QUADRUPLE_RHYTHM                                       = 'quadruple'
 
 # Maps each rhythm pattern name to its canonical beat sequence (tuple of duration values).
 # Used by analyze_ratios to auto-build the filename suffix → pattern name mapping.
@@ -80,24 +66,11 @@ QUADRUPLE_RHYTHM                                       = 'quadruple'
 RHYTHM_PATTERN_SEQUENCES: dict[str, tuple] = {
     QUARTER_RHYTHM:                                      (QUARTER_NOTE,),
     DOUBLE_RHYTHM:                                       (QUARTER_NOTE, QUARTER_NOTE),
-    QUARTER_REST_RHYTHM:                                 (QUARTER_NOTE, QUARTER_NOTE_REST),
-    QUARTER_REST_QUARTER_RHYTHM:                         (QUARTER_NOTE, QUARTER_NOTE_REST, QUARTER_NOTE),
     TRIPLE_RHYTHM:                                       (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
-    QUARTER_QUARTER_REST_RHYTHM:                         (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE_REST),
-    EIGHTH_EIGHTH_RHYTHM:                                (EIGHTH, EIGHTH),
-    EIGHTH_EIGHTH_QUARTER_RHYTHM:                        (EIGHTH, EIGHTH, QUARTER_NOTE),
     QUARTER_EIGHTH_EIGHTH_RHYTHM:                        (QUARTER_NOTE, EIGHTH, EIGHTH),
-    SIXTEENTH_RHYTHM:                                    (SIXTEENTH,),
     SIXTEENTH_SIXTEENTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM: (SIXTEENTH, SIXTEENTH, SIXTEENTH, SIXTEENTH, QUARTER_NOTE),
     SIXTEENTH_DOTTEDEIGHTH_RHYTHM:                       (SIXTEENTH, DOTTED_EIGHTH),
-    EIGHTH_SIXTEENTH_SIXTEENTH_QUARTER_RHYTHM:           (EIGHTH, SIXTEENTH, SIXTEENTH, QUARTER_NOTE),
     SIXTEENTH_DOTTEDEIGHTH_QUARTER_RHYTHM:               (SIXTEENTH, DOTTED_EIGHTH, QUARTER_NOTE),
-    SIXTEENTH_EIGHTH_SIXTEENTH_QUARTER_RHYTHM:           (SIXTEENTH, EIGHTH, SIXTEENTH, QUARTER_NOTE),
-    SIXTEENTH_DOTTEDEIGHTH_SIXTEENTH_DOTTEDEIGHTH_RHYTHM: (SIXTEENTH, DOTTED_EIGHTH, SIXTEENTH, DOTTED_EIGHTH),
-    EIGHTH_EIGHTH_EIGHTH_EIGHTH_RHYTHM:                    (EIGHTH, EIGHTH, EIGHTH, EIGHTH),
-    EIGHTH_EIGHTH_EIGHTH_RHYTHM:                           (EIGHTH, EIGHTH, EIGHTH),
-    EIGHTH_RHYTHM:                                         (EIGHTH,),
-    QUADRUPLE_RHYTHM:                                      (QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE),
 }
 
 # ── Sample role labels for with_roles() ─────────────────────────────────────
@@ -138,11 +111,17 @@ PANNING_DUALPAN       = 'dualpan'
 PANNING_LEFT_OR_RIGHT = 'leftorright'
 
 # ── Beat name strings for output filenames ────────────────────────────────────
-BEAT_NAME_QUARTER_NOTE_REST = 'quarternoterest'
-BEAT_NAME_QUARTER_NOTE      = 'quarter'
-BEAT_NAME_EIGHTH            = 'eighth'
-BEAT_NAME_SIXTEENTH         = 'sixteenth'
-BEAT_NAME_DOTTED_EIGHTH     = 'dottedeighth'
+BEAT_NAME_QUARTER_NOTE  = 'quarter'
+BEAT_NAME_EIGHTH        = 'eighth'
+BEAT_NAME_SIXTEENTH     = 'sixteenth'
+BEAT_NAME_DOTTED_EIGHTH = 'dottedeighth'
+
+BEAT_NAMES: dict[float, str] = {
+    QUARTER_NOTE:    BEAT_NAME_QUARTER_NOTE,
+    EIGHTH:          BEAT_NAME_EIGHTH,
+    SIXTEENTH:       BEAT_NAME_SIXTEENTH,
+    DOTTED_EIGHTH:   BEAT_NAME_DOTTED_EIGHTH,
+}
 
 # ── Operational limits ────────────────────────────────────────────────────────
 MAX_DRAW_RETRIES = 200

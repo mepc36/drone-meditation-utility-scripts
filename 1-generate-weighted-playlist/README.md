@@ -84,7 +84,7 @@ This executes the full workflow:
 python3 steps/1-combine-samples-with-panning.py
 
 # 2. Build M3U playlist and play via mpv
-python3 steps/2-import-duplicate-padded-samples-into-itunes-playlist.py
+python3 steps/2-build-playlist-and-play.py
 
 # 3. Clean up output files (optional)
 python3 steps/3-clean-up-itunes-playlist-tracks-and-files.py
@@ -108,7 +108,7 @@ Creates unique stereo combinations of audio samples with randomized panning patt
   - Groups samples by sound type for coherent dualpan pairings
   - Random sample selection with shuffled-queue refill (approx. one occurrence per cycle)
 
-### 2-import-duplicate-padded-samples-into-itunes-playlist.py
+### 2-build-playlist-and-play.py
 
 Builds an M3U playlist from the rhythmicized audio output and plays it via mpv on shuffle.
 
@@ -162,7 +162,7 @@ generate-weighted-playlist/
 │   └── sound_rules.py            # Hardcoded per-group rhythm/panning/volume rules
 ├── steps/
 │   ├── 1-combine-samples-with-panning.py   # Main generation step
-│   ├── 2-import-duplicate-padded-samples-into-itunes-playlist.py
+│   ├── 2-build-playlist-and-play.py
 │   └── 3-clean-up-itunes-playlist-tracks-and-files.py
 ├── output/
 │   ├── audio/                    # Step 1 output (processed stereo files)
@@ -228,47 +228,6 @@ All settings live in `./input/config/config.json`. Required fields are marked **
   // Default: "0:-26"
   "loud_quiet_values": "0:-28",
 
-  // [optional] Extra volume reduction in dB applied to all strings samples on top of
-  // their assigned loud/quiet level. Must be a non-negative integer.
-  // Default: 0
-  "strings_volume_reduction": 3,
-
-  // [optional] Extra volume reduction in dB applied to all acappella samples on top of
-  // their assigned loud/quiet level. Must be a non-negative integer.
-  // Default: 0
-  "acappella_volume_reduction": 17,
-
-  // [optional] Fine-grained control over how frequently specific samples or subsets are drawn.
-  // When omitted or is_sample_bias_enabled is false, all samples in each group are drawn uniformly.
-  "sample_bias": {
-
-    // Set to false to disable the entire bias system without deleting the config.
-    "is_sample_bias_enabled": true,
-
-    // One key per sound group to bias. Valid keys: "kicksnare", "stab", "acappella".
-    // Each value is a list of bucket entries whose biased_pool_pct / unbiased_pool_pct values
-    // must sum to exactly 100.
-    "kicksnare": [
-
-      // Bucket type A — named sample boost:
-      // This percentage of the group's slots always draws from the named file.
-      { "biased_sample": "my-kick.wav", "biased_pool_pct": 20 },
-
-      // Bucket type B — random draw from the full group pool:
-      // "include_all": true allows any sample in the group.
-      { "is_random": true, "biased_pool_pct": 15, "include_all": true },
-
-      // Bucket type B variant — restrict the sub-pool to an explicit list:
-      { "is_random": true, "biased_pool_pct": 15, "include": ["kick-a.wav", "kick-b.wav"] },
-
-      // Bucket type B variant — exclude specific samples from the sub-pool:
-      { "is_random": true, "biased_pool_pct": 15, "exclude": ["kick-c.wav"] },
-
-      // Bucket type C — unbiased remainder:
-      // Draws uniformly from the full group pool. At most one per group.
-      { "unbiased_pool_pct": 35 }
-    ]
-  }
 }
 ```
 
@@ -282,9 +241,6 @@ All settings live in `./input/config/config.json`. Required fields are marked **
 | `silence_lengths_millisec` | No | string | `"2000"` | Colon-separated millisecond values for silence durations. |
 | `silence_lengths_percents` | No | string | `"100"` | Colon-separated percent weights for each silence length. Must sum to 100. |
 | `loud_quiet_values` | No | string | `"0:-26"` | Exactly two colon-separated dB values (loud:quiet). |
-| `strings_volume_reduction` | No | integer | `0` | Extra dB cut applied to strings samples (non-negative). |
-| `acappella_volume_reduction` | No | integer | `0` | Extra dB cut applied to acappella samples (non-negative). |
-| `sample_bias` | No | object | none | Sample draw-weighting config. Omit to draw all samples uniformly. |
 
 ## Assumptions
 
@@ -296,16 +252,6 @@ The following assumptions are made about the config and the environment. Violati
 - `silence_lengths_millisec` and `silence_lengths_percents` always contain the same number of colon-separated values.
 - `loud_quiet_values` always has exactly 2 values. Fewer or more will raise an error.
 - `kicksnare_stab_acappella_percents` always has exactly 3 values in declaration order: kicksnare, stab, acappella.
-- `strings_volume_reduction` and `acappella_volume_reduction` are non-negative integers. Fractional or negative values will raise an error.
-- All keys inside `sample_bias` (other than `is_sample_bias_enabled`) must exactly match a valid sound group name: `kicksnare`, `stab`, or `acappella`. Unknown keys raise an error.
-- A sound group configured in `sample_bias` must have a non-zero percent in `kicksnare_stab_acappella_percents`. A group with 0% raises an error.
-- All bucket `biased_pool_pct` and `unbiased_pool_pct` values within a single bias group sum to exactly 100.
-- Each bias group list contains at most one `unbiased_pool_pct` entry.
-- `include` and `exclude` are mutually exclusive within a single `is_random` bucket. Specifying both raises an error.
-- `include_all` and `exclude` are mutually exclusive within a single `is_random` bucket. Specifying both raises an error.
-- An `is_random` bucket with `include` (and `include_all` not set) must provide a non-empty list. An empty list raises an error.
-- `strings_volume_reduction` and `acappella_volume_reduction` are applied additively on top of the sample's assigned loud/quiet dB level. They are not an absolute target level.
-- Each `biased_pool_pct` value, when applied to the group's calculated slot count, yields at least one slot. Very small percentages combined with few kicksnare input files may raise an error.
 
 ## Generation Rules
 
@@ -365,8 +311,8 @@ All tail beats must land at least `RANDOM_PAN_MIN_DIFF` (0.25) away from the imm
 - **Clip ceiling**: after all gain is applied, audio is capped at 0.95 to prevent clipping.
 - **Hard-pan gain**: hard-panned signals receive a ×√2 (+3 dB) boost to compensate for the power lost by removing the other channel, matching the perceived loudness of a center-panned signal.
 - **Panning law**: constant-power panning (cosine/sine of the pan angle).
-- **Strings**: converted to stereo-center, no RMS normalization, no trim-to-beat-length. Passed through as-is after the optional `strings_volume_adjustment_db` cut.
-- **Acappella**: no RMS normalization (source level is preserved). The `acappella_volume_adjustment_db` cut is applied additively on top of the loud/quiet level.
+- **Strings**: converted to stereo-center, no RMS normalization, no trim-to-beat-length. Passed through as-is.
+- **Acappella**: no RMS normalization (source level is preserved). The loud/quiet dB level is applied directly.
 
 ## Todos
 

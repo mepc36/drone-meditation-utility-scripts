@@ -3,11 +3,11 @@ from .constants import (
     HARD_CENTER, HARD_LEFT, HARD_RIGHT,
     DUALPAN_LEFTRIGHT, DUALPAN_DIAGONAL, UNTOUCHED,
     KICK, SNARE, KICKSTAB, SNARESTAB, ACAPPELLA, STRINGS,
-    KICKSNARE, STAB,
     SOUND_GROUP_TYPES,
-    QUARTER_NOTE, QUARTER_NOTE_REST, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
-    BEAT_NAME_QUARTER_NOTE, BEAT_NAME_QUARTER_NOTE_REST,
+    QUARTER_NOTE, EIGHTH, SIXTEENTH, DOTTED_EIGHTH,
+    BEAT_NAME_QUARTER_NOTE,
     BEAT_NAME_EIGHTH, BEAT_NAME_SIXTEENTH, BEAT_NAME_DOTTED_EIGHTH,
+    BEAT_NAMES,
     RHYTHM_PATTERN_SEQUENCES,
     MUSICAL_DURATION, POSSIBLE_PANNINGS, RHYTHM_PATTERNS, VOLUMES, BPMS,
     MUSICAL_GROUPING, DUALPAN_PARTNERS, MUSICAL_PATTERNS,
@@ -26,15 +26,6 @@ _RHYTHM_BY_SEQUENCE: dict[tuple, str] = {
     seq: name for name, seq in RHYTHM_PATTERN_SEQUENCES.items()
 }
 
-_BEAT_NAMES: dict[float, str] = {
-    QUARTER_NOTE_REST: BEAT_NAME_QUARTER_NOTE_REST,
-    QUARTER_NOTE:      BEAT_NAME_QUARTER_NOTE,
-    EIGHTH:            BEAT_NAME_EIGHTH,
-    SIXTEENTH:         BEAT_NAME_SIXTEENTH,
-    DOTTED_EIGHTH:     BEAT_NAME_DOTTED_EIGHTH,
-}
-
-
 def derive_type(pattern: list) -> str:
     seq = tuple(beat[MUSICAL_DURATION] for beat in pattern)
     name = _RHYTHM_BY_SEQUENCE.get(seq)
@@ -42,7 +33,7 @@ def derive_type(pattern: list) -> str:
         return name
     # Dynamic patterns (e.g. from variable_quarter_rhythm) have arbitrary sequences.
     # Synthesize a name from beat names so they can be used as cache keys.
-    return '-'.join(_BEAT_NAMES.get(d, str(d)) for d in seq)
+    return '-'.join(BEAT_NAMES.get(d, str(d)) for d in seq)
 
 
 def derive_panning_key(entry: dict):
@@ -72,92 +63,24 @@ def quarter_quarter_rhythm(panning) -> list:
     return [_beat(QUARTER_NOTE, panning), _beat(QUARTER_NOTE, panning)]
 
 
-def eighth_eighth_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning), _beat(EIGHTH, panning)]
-
-
 def quarter_eighth_eighth_rhythm(panning) -> list:
     return [_beat(QUARTER_NOTE, panning), _beat(EIGHTH, panning), _beat(EIGHTH, panning)]
-
-
-def sixteenth_rhythm(panning) -> list:
-    return [_beat(SIXTEENTH, panning)]
 
 
 def sixteenth_sixteenth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning) for _ in range(4)] + [_beat(QUARTER_NOTE, panning)]
 
 
-def sixteenth_sixteenth_sixteenth_sixteenth_rhythm(panning) -> list:
-    return [_beat(SIXTEENTH, panning) for _ in range(4)]
-
-
-def eighth_sixteenth_sixteenth_quarter_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
-
-
 def sixteenth_dottedeighth_quarter_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning), _beat(QUARTER_NOTE, panning)]
-
-
-def sixteenth_eighth_sixteenth_quarter_rhythm(panning) -> list:
-    return [_beat(SIXTEENTH, panning), _beat(EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(QUARTER_NOTE, panning)]
-
-
-def sixteenth_dottedeighth_sixteenth_dottedeighth_rhythm(panning) -> list:
-    return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning), _beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning)]
 
 
 def sixteenth_dottedeighth_rhythm(panning) -> list:
     return [_beat(SIXTEENTH, panning), _beat(DOTTED_EIGHTH, panning)]
 
 
-def eighth_eighth_eighth_eighth_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning) for _ in range(4)]
-
-
-def eighth_eighth_eighth_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning) for _ in range(3)]
-
-
-def eighth_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning)]
-
-
-def eighth_eighth_quarter_rhythm(panning) -> list:
-    return [_beat(EIGHTH, panning), _beat(EIGHTH, panning), _beat(QUARTER_NOTE, panning)]
-
-
-def quarter_rest_quarter_rhythm(panning) -> list:
-    return [_beat(QUARTER_NOTE, panning), _beat(QUARTER_NOTE_REST, panning), _beat(QUARTER_NOTE, panning)]
-
-
 def quarter_quarter_quarter_rhythm(panning) -> list:
     return [_beat(QUARTER_NOTE, panning) for _ in range(3)]
-
-
-def quarter_quarter_quarter_quarter_rhythm(panning) -> list:
-    return [_beat(QUARTER_NOTE, panning) for _ in range(4)]
-
-
-def variable_quarter_rhythm(panning, max_beats: int) -> list:
-    """Build a rhythm with a random beat count in [1, max_beats].
-    Each beat is independently either a quarter note or a rest,
-    with three constraints: the first beat is always a note,
-    no two consecutive rests are allowed, and the last beat is always a note."""
-    if max_beats < 1:
-        raise ValueError(f"max_beats must be 1 or greater, got {max_beats}")
-    n = random.randint(1, max_beats)
-    beats = []
-    for i in range(n):
-        # if i == 0 or beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
-        duration = QUARTER_NOTE
-        # else:
-            # duration = random.choice([QUARTER_NOTE, QUARTER_NOTE_REST])
-        beats.append(_beat(duration, panning))
-    if beats[-1][MUSICAL_DURATION] == QUARTER_NOTE_REST:
-        beats[-1] = _beat(QUARTER_NOTE, panning)
-    return beats
 
 
 def with_roles(rhythm: list, roles: list) -> list:
