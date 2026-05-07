@@ -63,7 +63,6 @@ deactivate
 ### Key Features
 
 - **Variable-length silences**: Configure multiple silence durations with weighted ratios for dynamic variety
-- **Padded centered samples**: Add extended silence padding to a percentage of centered samples for deeper meditation moments
 
 ### Run All Scripts (Recommended)
 
@@ -158,7 +157,7 @@ generate-weighted-playlist/
 │   ├── constants.py              # All shared constants
 │   ├── deck_builder.py           # Slot planning (panning/volume/BPM/rhythm allocation)
 │   ├── runtime_constants.py      # Config-derived LOUD/QUIET/SLOW/FAST values
-│   ├── sample_queue.py           # Shuffled sample draw queue and bias resolution
+    ├── sample_queue.py           # Shuffled sample draw queue
 │   └── sound_rules.py            # Hardcoded per-group rhythm/panning/volume rules
 ├── steps/
 │   ├── 1-combine-samples-with-panning.py   # Main generation step
